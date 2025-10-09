@@ -366,3 +366,168 @@ async def get_current_user_optional(
         return await get_current_user(token, db)
     except:
         return None
+    
+    
+# ==================== Branch-Level Dependencies ====================
+
+def require_role_and_permission(role_name: str, permission: str):
+    """
+    Require both specific role AND specific permission
+    
+    Args:
+        role_name: Required role name
+        permission: Required permission string
+        
+    Returns:
+        Dependency function
+    """
+    async def checker(
+        current_user: User = Depends(get_current_active_user)
+    ) -> User:
+        # Superuser passes all checks
+        if current_user.is_superuser:
+            return current_user
+        
+        # Check role
+        if not current_user.has_role(role_name):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This action requires role: {role_name}"
+            )
+        
+        # Check permission
+        if not current_user.has_permission(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This action requires permission: {permission}"
+            )
+        
+        return current_user
+    
+    return checker
+
+
+def require_branch_access(branch_id_param: str = "branch_id"):
+    """
+    Dependency factory for branch-level access control
+    
+    Args:
+        branch_id_param: Name of path/query parameter containing branch_id
+        
+    Returns:
+        Dependency function that checks branch access
+        
+    Example:
+        @router.get("/branches/{branch_id}/transactions", 
+                    dependencies=[Depends(require_branch_access())])
+        async def get_branch_transactions(branch_id: UUID):
+            ...
+    """
+    async def branch_checker(
+        request: Request,
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_db)
+    ) -> User:
+        from app.middleware.rbac import BranchAccessChecker
+        
+        # Superuser has access to all branches
+        if current_user.is_superuser:
+            return current_user
+        
+        # Get branch_id from request
+        branch_id = request.path_params.get(branch_id_param) or \
+                   request.query_params.get(branch_id_param)
+        
+        if not branch_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Branch ID not provided in {branch_id_param}"
+            )
+        
+        try:
+            branch_uuid = UUID(str(branch_id))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid branch ID format"
+            )
+        
+        # Check branch access
+        try:
+            await BranchAccessChecker.check_branch_access(
+                user=current_user,
+                branch_id=branch_uuid
+            )
+        except PermissionDeniedError as e:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
+            )
+        
+        return current_user
+    
+    return branch_checker
+
+
+def require_own_branch_or_permission(permission: str):
+    """
+    Allow access if user belongs to branch OR has specific permission
+    
+    Args:
+        permission: Permission that can override branch restriction
+        
+    Returns:
+        Dependency function
+        
+    Example:
+        @router.get(
+            "/branches/{branch_id}/report",
+            dependencies=[Depends(require_own_branch_or_permission("reports:view_all"))]
+        )
+    """
+    async def checker(
+        request: Request,
+        current_user: User = Depends(get_current_active_user)
+    ) -> User:
+        from app.middleware.rbac import BranchAccessChecker
+        
+        # Superuser always has access
+        if current_user.is_superuser:
+            return current_user
+        
+        # Check if user has override permission
+        if current_user.has_permission(permission):
+            return current_user
+        
+        # Otherwise, check branch access
+        branch_id = request.path_params.get("branch_id")
+        if branch_id:
+            try:
+                branch_uuid = UUID(str(branch_id))
+                await BranchAccessChecker.check_branch_access(
+                    user=current_user,
+                    branch_id=branch_uuid
+                )
+            except PermissionDeniedError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=str(e)
+                )
+        
+        return current_user
+    
+    return checker
+
+
+async def get_accessible_branch_ids(
+    current_user: User = Depends(get_current_active_user)
+) -> List[UUID]:
+    """
+    Get list of branch IDs the current user can access
+    Useful for filtering queries
+    
+    Returns:
+        List[UUID]: Accessible branch IDs (empty list for superuser = all branches)
+    """
+    from app.middleware.rbac import BranchAccessChecker
+    return await BranchAccessChecker.get_accessible_branches(current_user)

@@ -19,6 +19,7 @@ from app.db.base import AsyncSessionLocal
 from app.db.models.user import User
 from app.db.models.role import Role
 from app.schemas.role import DEFAULT_ROLES
+from app.core.permissions import get_role_permissions
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -162,3 +163,37 @@ if __name__ == "__main__":
         asyncio.run(reset_database())
     else:
         asyncio.run(seed_database())
+        
+        
+async def create_default_roles(db: AsyncSession) -> dict:
+    """Create default roles with updated permissions"""
+    roles_map = {}
+    
+    for role_name, role_data in DEFAULT_ROLES.items():
+        # Get permissions from permissions.py
+        permissions = get_role_permissions(role_name)
+        
+        result = await db.execute(
+            select(Role).where(Role.name == role_name)
+        )
+        existing_role = result.scalar_one_or_none()
+        
+        if existing_role:
+            # Update permissions
+            existing_role.permissions = permissions
+            roles_map[role_name] = existing_role
+        else:
+            # Create new role
+            new_role = Role(
+                name=role_data["name"],
+                display_name_ar=role_data["display_name_ar"],
+                description=role_data["description"],
+                permissions=permissions,  # From permissions.py
+                is_active=True
+            )
+            db.add(new_role)
+            await db.flush()
+            roles_map[role_name] = new_role
+    
+    await db.commit()
+    return roles_map
