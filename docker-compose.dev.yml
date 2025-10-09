@@ -81,6 +81,7 @@ services:
   # Redis Commander (Redis Management UI)
   redis-commander:
     image: rediscommander/redis-commander:latest
+    platform: linux/amd64  # ← أضف هذا السطر
     container_name: cems_redis_commander
     restart: unless-stopped
     environment:

@@ -3,7 +3,7 @@ CEMS Configuration Module
 Manages all application settings using Pydantic BaseSettings
 """
 
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import field_validator, PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     def assemble_db_connection(cls, v: Optional[str], info) -> str:
         """Construct database URL from components if not provided"""
-        if isinstance(v, str):
+        if isinstance(v, str) and v:
             return v
         
         values = info.data
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
             path=f"{values.get('POSTGRES_DB') or ''}",
         ))
     
-    # Redis Settings (for caching and token blacklist)
+    # Redis Settings
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
@@ -65,15 +65,36 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
     
-    # CORS Settings
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    # CORS Settings - دعم كل التنسيقات
+    BACKEND_CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000"]
     
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v):
-        """Parse CORS origins from string or list"""
+        """Parse CORS origins - supports multiple formats"""
+        if v is None:
+            return ["http://localhost:3000"]
+        
+        if isinstance(v, list):
+            return v
+        
         if isinstance(v, str):
-            return [i.strip() for i in v.split(",")]
-        return v
+            # Empty string
+            if not v or v.strip() == "":
+                return ["http://localhost:3000"]
+            
+            # JSON array format
+            if v.strip().startswith("["):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    pass
+            
+            # Comma-separated format
+            origins = [i.strip() for i in v.split(",") if i.strip()]
+            return origins if origins else ["http://localhost:3000"]
+        
+        return ["http://localhost:3000"]
     
     # Security Settings
     PASSWORD_MIN_LENGTH: int = 8
@@ -84,15 +105,40 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     
     # File Upload Settings
-    MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB
-    ALLOWED_DOCUMENT_TYPES: List[str] = [
+    MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024
+    ALLOWED_DOCUMENT_TYPES: Union[List[str], str] = [
         "application/pdf",
         "image/jpeg",
         "image/png"
     ]
     UPLOAD_DIR: str = "uploads"
     
-    # Email Settings (for notifications)
+    @field_validator("ALLOWED_DOCUMENT_TYPES", mode="before")
+    def parse_document_types(cls, v):
+        """Parse document types - supports multiple formats"""
+        if v is None:
+            return ["application/pdf", "image/jpeg", "image/png"]
+        
+        if isinstance(v, list):
+            return v
+        
+        if isinstance(v, str):
+            if not v or v.strip() == "":
+                return ["application/pdf", "image/jpeg", "image/png"]
+            
+            if v.strip().startswith("["):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    pass
+            
+            types = [i.strip() for i in v.split(",") if i.strip()]
+            return types if types else ["application/pdf", "image/jpeg", "image/png"]
+        
+        return ["application/pdf", "image/jpeg", "image/png"]
+    
+    # Email Settings
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: Optional[int] = 587
     SMTP_USER: Optional[str] = None
@@ -102,7 +148,7 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
-    LOG_FORMAT: str = "json"  # json or text
+    LOG_FORMAT: str = "json"
     
     # Transaction Settings
     TRANSACTION_NUMBER_PREFIX: str = "TRX"
@@ -112,8 +158,8 @@ class Settings(BaseSettings):
     
     # Business Rules
     DEFAULT_BASE_CURRENCY: str = "USD"
-    COMMISSION_RATE: float = 0.01  # 1%
-    LARGE_TRANSFER_THRESHOLD: float = 10000.0  # Requires approval
+    COMMISSION_RATE: float = 0.01
+    LARGE_TRANSFER_THRESHOLD: float = 10000.0
     
     # Model Config
     model_config = SettingsConfigDict(

@@ -1,53 +1,42 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database (Development)
   postgres:
     image: postgres:15-alpine
-    container_name: cems_postgres
+    container_name: cems_postgres_dev
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-cems_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cems_password}
       POSTGRES_DB: ${POSTGRES_DB:-cems_db}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_dev_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
-      - cems_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cems_user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - cems_dev_network
 
-  # Redis Cache
+  # Redis Cache (Development)
   redis:
     image: redis:7-alpine
-    container_name: cems_redis
+    container_name: cems_redis_dev
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - redis_data:/data
+      - redis_dev_data:/data
     ports:
       - "6379:6379"
     networks:
-      - cems_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - cems_dev_network
 
-  # FastAPI Application
+  # FastAPI Application (Development with hot reload)
   app:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
-    container_name: cems_app
+      target: development
+    container_name: cems_app_dev
     restart: unless-stopped
     env_file:
       - .env
@@ -56,47 +45,61 @@ services:
       POSTGRES_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      DEBUG: "True"
     volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+      - ./alembic:/app/alembic
       - ./uploads:/app/uploads
       - ./logs:/app/logs
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     networks:
-      - cems_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - cems_dev_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # Nginx Reverse Proxy (Optional)
-  nginx:
-    image: nginx:alpine
-    container_name: cems_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - app
-    networks:
-      - cems_network
+  # PGAdmin (Database Management UI) - مُعطَّل على Apple Silicon
+  # Uncomment if you need it and it's compatible with your system
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   platform: linux/amd64
+  #   container_name: cems_pgadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@cems.local
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #     PGADMIN_LISTEN_PORT: 5050
+  #   ports:
+  #     - "5050:5050"
+  #   depends_on:
+  #     - postgres
+  #   networks:
+  #     - cems_dev_network
+
+  # Redis Commander - مُعطَّل على Apple Silicon
+  # redis-commander:
+  #   image: rediscommander/redis-commander:latest
+  #   platform: linux/amd64
+  #   container_name: cems_redis_commander
+  #   restart: unless-stopped
+  #   environment:
+  #     REDIS_HOSTS: redis:redis:6379
+  #   ports:
+  #     - "8081:8081"
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - cems_dev_network
 
 volumes:
-  postgres_data:
+  postgres_dev_data:
     driver: local
-  redis_data:
+  redis_dev_data:
     driver: local
 
 networks:
-  cems_network:
+  cems_dev_network:
     driver: bridge
