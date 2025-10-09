@@ -68,7 +68,7 @@ services:
     container_name: cems_pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@cems.local
+      PGADMIN_DEFAULT_EMAIL: admin@cems.co
       PGADMIN_DEFAULT_PASSWORD: admin
       PGADMIN_LISTEN_PORT: 5050
     ports:

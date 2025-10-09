@@ -36,7 +36,7 @@ make setup
 # 5. Access the application
 # API: http://localhost:8000
 # Docs: http://localhost:8000/docs
-# PGAdmin: http://localhost:5050 (admin@cems.local / admin)
+# PGAdmin: http://localhost:5050 (admin@cems.co / admin)
 # Redis Commander: http://localhost:8081
 ```
 

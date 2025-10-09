@@ -80,7 +80,7 @@ async def create_superuser(db: AsyncSession, roles_map: dict) -> None:
     
     superuser = User(
         username="admin",
-        email="admin@cems.local",
+        email="admin@cems.co",
         hashed_password=pwd_context.hash("Admin@123"),  # Default password
         full_name="System Administrator",
         phone_number="+90 555 000 0000",
@@ -96,7 +96,7 @@ async def create_superuser(db: AsyncSession, roles_map: dict) -> None:
     await db.commit()
     
     print("  ✓ Created superuser 'admin'")
-    print("  📧 Email: admin@cems.local")
+    print("  📧 Email: admin@cems.co")
     print("  🔑 Password: Admin@123")
     print("  ⚠ IMPORTANT: Change this password immediately after first login!\n")
 
