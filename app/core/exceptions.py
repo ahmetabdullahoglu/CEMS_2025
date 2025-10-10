@@ -59,9 +59,24 @@ class AccountLockedError(AuthenticationError):
     def __init__(
         self,
         message: str = "Account is locked due to multiple failed login attempts",
+        lockout_duration: Optional[int] = None,
         **kwargs
     ):
-        super().__init__(message, **kwargs)
+        details = {"lockout_duration_minutes": lockout_duration} if lockout_duration else {}
+        super().__init__(message, details=details, **kwargs)
+
+
+class AuthorizationError(CEMSException):
+    """Raised when user lacks required permissions"""
+    
+    def __init__(
+        self,
+        message: str = "Access denied",
+        required_permission: Optional[str] = None,
+        **kwargs
+    ):
+        details = {"required_permission": required_permission} if required_permission else {}
+        super().__init__(message, status_code=403, details=details, **kwargs)
 
 
 class PermissionDeniedError(CEMSException):
@@ -77,10 +92,18 @@ class PermissionDeniedError(CEMSException):
         super().__init__(message, status_code=403, details=details, **kwargs)
 
 
+class InsufficientPermissionsError(AuthorizationError):
+    """Raised when user lacks specific permission"""
+    
+    def __init__(self, permission: str, **kwargs):
+        message = f"Insufficient permissions. Required: {permission}"
+        super().__init__(message, required_permission=permission, **kwargs)
+
+
 # ==================== Resource Errors ====================
 
 class ResourceNotFoundError(CEMSException):
-    """Raised when requested resource doesn't exist"""
+    """Raised when a requested resource is not found"""
     
     def __init__(
         self,
@@ -89,8 +112,15 @@ class ResourceNotFoundError(CEMSException):
         **kwargs
     ):
         message = f"{resource_type} with ID '{resource_id}' not found"
-        details = {"resource_type": resource_type, "resource_id": str(resource_id)}
+        details = {
+            "resource_type": resource_type,
+            "resource_id": str(resource_id)
+        }
         super().__init__(message, status_code=404, details=details, **kwargs)
+
+
+# Alias for backward compatibility
+NotFoundError = ResourceNotFoundError
 
 
 class ResourceAlreadyExistsError(CEMSException):
@@ -100,15 +130,43 @@ class ResourceAlreadyExistsError(CEMSException):
         self,
         resource_type: str,
         identifier: str,
+        value: Optional[Any] = None,
         **kwargs
     ):
-        message = f"{resource_type} with identifier '{identifier}' already exists"
-        details = {"resource_type": resource_type, "identifier": identifier}
+        if value is not None:
+            message = f"{resource_type} with {identifier} '{value}' already exists"
+            details = {
+                "resource_type": resource_type,
+                "identifier": identifier,
+                "value": str(value)
+            }
+        else:
+            message = f"{resource_type} with identifier '{identifier}' already exists"
+            details = {"resource_type": resource_type, "identifier": identifier}
         super().__init__(message, status_code=409, details=details, **kwargs)
 
 
 class ResourceInUseError(CEMSException):
     """Raised when trying to delete a resource that's in use"""
+    
+    def __init__(
+        self,
+        resource_type: str,
+        resource_id: Any,
+        reason: str,
+        **kwargs
+    ):
+        message = f"Cannot delete {resource_type} '{resource_id}': {reason}"
+        details = {
+            "resource_type": resource_type,
+            "resource_id": str(resource_id),
+            "reason": reason
+        }
+        super().__init__(message, status_code=409, details=details, **kwargs)
+
+
+class ResourceDeletionError(CEMSException):
+    """Raised when a resource cannot be deleted"""
     
     def __init__(
         self,
@@ -160,6 +218,19 @@ class InvalidAmountError(ValidationError):
 
 
 # ==================== Business Logic Errors ====================
+
+class BusinessRuleViolationError(CEMSException):
+    """Raised when a business rule is violated"""
+    
+    def __init__(
+        self,
+        message: str,
+        rule: Optional[str] = None,
+        **kwargs
+    ):
+        details = {"rule": rule} if rule else {}
+        super().__init__(message, status_code=400, details=details, **kwargs)
+
 
 class InsufficientBalanceError(CEMSException):
     """Raised when branch/vault has insufficient balance"""
@@ -255,7 +326,7 @@ class InvalidCurrencyError(CurrencyError):
         super().__init__(message, currency_code=currency_code, **kwargs)
 
 
-class MultipleBasceCurrencyError(CurrencyError):
+class MultipleBaseCurrencyError(CurrencyError):
     """Raised when trying to set multiple base currencies"""
     
     def __init__(self, **kwargs):
@@ -308,6 +379,95 @@ class DuplicateCustomerError(CustomerError):
         super().__init__(message, details=details, **kwargs)
 
 
+class CustomerVerificationError(CustomerError):
+    """Raised when customer verification fails"""
+    
+    def __init__(self, customer_id: str, reason: str, **kwargs):
+        message = f"Customer verification failed: {reason}"
+        details = {"reason": reason}
+        super().__init__(message, customer_id=customer_id, details=details, **kwargs)
+
+
+# ==================== Vault Errors ====================
+
+class VaultError(CEMSException):
+    """Base exception for vault-related errors"""
+    
+    def __init__(self, message: str, vault_id: Optional[str] = None, **kwargs):
+        details = {"vault_id": vault_id} if vault_id else {}
+        super().__init__(message, status_code=400, details=details, **kwargs)
+
+
+class VaultInsufficientBalanceError(VaultError):
+    """Raised when vault has insufficient balance"""
+    
+    def __init__(
+        self,
+        vault_name: str,
+        currency: str,
+        required: float,
+        available: float,
+        **kwargs
+    ):
+        message = (
+            f"Insufficient balance in vault '{vault_name}' for {currency}. "
+            f"Required: {required}, Available: {available}"
+        )
+        details = {
+            "vault": vault_name,
+            "currency": currency,
+            "required": required,
+            "available": available
+        }
+        super().__init__(message, details=details, **kwargs)
+
+
+# ==================== Document Errors ====================
+
+class DocumentError(CEMSException):
+    """Base exception for document-related errors"""
+    
+    def __init__(self, message: str, document_id: Optional[str] = None, **kwargs):
+        details = {"document_id": document_id} if document_id else {}
+        super().__init__(message, status_code=400, details=details, **kwargs)
+
+
+class DocumentUploadError(DocumentError):
+    """Raised when document upload fails"""
+    
+    def __init__(self, reason: str, **kwargs):
+        message = f"Document upload failed: {reason}"
+        details = {"reason": reason}
+        super().__init__(message, details=details, **kwargs)
+
+
+class InvalidDocumentTypeError(DocumentError):
+    """Raised when document type is not allowed"""
+    
+    def __init__(self, file_type: str, **kwargs):
+        message = f"Document type '{file_type}' is not allowed"
+        details = {"file_type": file_type}
+        super().__init__(message, details=details, **kwargs)
+
+
+# ==================== Report Errors ====================
+
+class ReportError(CEMSException):
+    """Base exception for report-related errors"""
+    
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, status_code=400, **kwargs)
+
+
+class ReportGenerationError(ReportError):
+    """Raised when report generation fails"""
+    
+    def __init__(self, report_type: str, reason: str, **kwargs):
+        message = f"Failed to generate {report_type} report: {reason}"
+        details = {"report_type": report_type, "reason": reason}
+        super().__init__(message, details=details, **kwargs)
+
+
 # ==================== System Errors ====================
 
 class DatabaseError(CEMSException):
@@ -317,21 +477,10 @@ class DatabaseError(CEMSException):
         super().__init__(message, status_code=500, **kwargs)
 
 
-class ConcurrencyError(DatabaseError):
-    """Raised when concurrent modification is detected"""
+class CacheError(CEMSException):
+    """Raised when cache operation fails"""
     
-    def __init__(
-        self,
-        message: str = "Resource was modified by another process",
-        **kwargs
-    ):
-        super().__init__(message, **kwargs)
-
-
-class ConfigurationError(CEMSException):
-    """Raised when system configuration is invalid"""
-    
-    def __init__(self, message: str, **kwargs):
+    def __init__(self, message: str = "Cache operation failed", **kwargs):
         super().__init__(message, status_code=500, **kwargs)
 
 
@@ -344,7 +493,7 @@ class ExternalServiceError(CEMSException):
         message: str = "External service error",
         **kwargs
     ):
-        details = {"service_name": service_name}
+        details = {"service": service_name}
         super().__init__(message, status_code=503, details=details, **kwargs)
 
 
@@ -359,5 +508,5 @@ class RateLimitExceededError(CEMSException):
         retry_after: Optional[int] = None,
         **kwargs
     ):
-        details = {"retry_after": retry_after} if retry_after else {}
+        details = {"retry_after_seconds": retry_after} if retry_after else {}
         super().__init__(message, status_code=429, details=details, **kwargs)
