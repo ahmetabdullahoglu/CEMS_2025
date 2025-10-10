@@ -6,7 +6,7 @@ Aggregates all API endpoints
 from fastapi import APIRouter
 
 # Import endpoint routers
-from app.api.v1.endpoints import auth
+from app.api.v1.endpoints import auth, currencies  # Add currencies
 
 # Future imports (will be implemented in next components)
 # from app.api.v1.endpoints import (
@@ -32,6 +32,12 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 # api_router.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
 # api_router.include_router(vault.router, prefix="/vault", tags=["Vault"])
 # api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
+# Add currency router
+api_router.include_router(
+    currencies.router, 
+    prefix="/currencies", 
+    tags=["Currencies"]
+)
 
 # Placeholder endpoint for testing
 @api_router.get("/ping", tags=["Test"])

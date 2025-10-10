@@ -5,9 +5,15 @@ Request and response models for Currency endpoints
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, condecimal
+
+
+# ==================== Type Aliases ====================
+# Pydantic v2 compatible decimal types
+ExchangeRateDecimal = Annotated[Decimal, condecimal(gt=0, max_digits=20, decimal_places=6)]
+MoneyDecimal = Annotated[Decimal, condecimal(ge=0, max_digits=20, decimal_places=6)]
 
 
 # ==================== Currency Schemas ====================
@@ -83,9 +89,9 @@ class ExchangeRateBase(BaseModel):
     """Base exchange rate schema"""
     from_currency_id: UUID
     to_currency_id: UUID
-    rate: Decimal = Field(..., gt=0, decimal_places=6, description="Exchange rate")
-    buy_rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6, description="Buy rate")
-    sell_rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6, description="Sell rate")
+    rate: ExchangeRateDecimal = Field(..., description="Exchange rate")
+    buy_rate: Optional[ExchangeRateDecimal] = Field(None, description="Buy rate")
+    sell_rate: Optional[ExchangeRateDecimal] = Field(None, description="Sell rate")
     effective_from: datetime = Field(default_factory=datetime.utcnow)
     notes: Optional[str] = Field(None, max_length=500)
     
@@ -105,9 +111,9 @@ class ExchangeRateCreate(ExchangeRateBase):
 
 class ExchangeRateUpdate(BaseModel):
     """Schema for updating exchange rate"""
-    rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6)
-    buy_rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6)
-    sell_rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6)
+    rate: Optional[ExchangeRateDecimal] = None
+    buy_rate: Optional[ExchangeRateDecimal] = None
+    sell_rate: Optional[ExchangeRateDecimal] = None
     effective_from: Optional[datetime] = None
     effective_to: Optional[datetime] = None
     notes: Optional[str] = Field(None, max_length=500)
@@ -153,12 +159,12 @@ class ExchangeRateHistoryResponse(BaseModel):
     exchange_rate_id: UUID
     from_currency_code: str
     to_currency_code: str
-    old_rate: Optional[Decimal]
-    old_buy_rate: Optional[Decimal]
-    old_sell_rate: Optional[Decimal]
-    new_rate: Decimal
-    new_buy_rate: Optional[Decimal]
-    new_sell_rate: Optional[Decimal]
+    old_rate: Optional[ExchangeRateDecimal]
+    old_buy_rate: Optional[ExchangeRateDecimal]
+    old_sell_rate: Optional[ExchangeRateDecimal]
+    new_rate: ExchangeRateDecimal
+    new_buy_rate: Optional[ExchangeRateDecimal]
+    new_sell_rate: Optional[ExchangeRateDecimal]
     change_type: str
     changed_by: UUID
     changed_at: datetime
@@ -192,7 +198,7 @@ class CurrencyPairRequest(BaseModel):
 
 class ExchangeCalculationRequest(CurrencyPairRequest):
     """Request for exchange calculation"""
-    amount: Decimal = Field(..., gt=0, description="Amount to exchange")
+    amount: MoneyDecimal = Field(..., description="Amount to exchange")
     use_buy_rate: bool = Field(default=False, description="Use buy rate if available")
     use_sell_rate: bool = Field(default=False, description="Use sell rate if available")
 
@@ -238,9 +244,9 @@ class SetRateRequest(BaseModel):
     """Request to set exchange rate"""
     from_currency: str = Field(..., min_length=3, max_length=3)
     to_currency: str = Field(..., min_length=3, max_length=3)
-    rate: Decimal = Field(..., gt=0, decimal_places=6)
-    buy_rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6)
-    sell_rate: Optional[Decimal] = Field(None, gt=0, decimal_places=6)
+    rate: ExchangeRateDecimal = Field(..., description="Exchange rate")
+    buy_rate: Optional[ExchangeRateDecimal] = Field(None, description="Buy rate")
+    sell_rate: Optional[ExchangeRateDecimal] = Field(None, description="Sell rate")
     notes: Optional[str] = Field(None, max_length=500)
     effective_from: datetime = Field(default_factory=datetime.utcnow)
 
