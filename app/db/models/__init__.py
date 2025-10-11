@@ -13,6 +13,10 @@ from app.db.models.currency import Currency, ExchangeRate, ExchangeRateHistory
 # ==================== Future Models (will be added in next phases) ====================
 # Phase 4: Branch Management
 # from app.db.models.branch import Branch, BranchBalance, BranchBalanceHistory
+from app.db.models.branch import (
+    Branch, BranchBalance, BranchBalanceHistory, BranchAlert,
+    RegionEnum, BalanceAlertType, AlertSeverity, BalanceChangeType
+)
 
 # Phase 5: Customer Management
 # from app.db.models.customer import Customer, CustomerDocument, CustomerNote
@@ -53,7 +57,14 @@ __all__ = [
     # "Branch",
     # "BranchBalance",
     # "BranchBalanceHistory",
-    
+    "Branch",
+    "BranchBalance", 
+    "BranchBalanceHistory",
+    "BranchAlert",
+    "RegionEnum",
+    "BalanceAlertType",
+    "AlertSeverity",
+    "BalanceChangeType",
     # Customer Management
     # "Customer",
     # "CustomerDocument",

@@ -74,7 +74,12 @@ from app.schemas.currency import (
 #     BranchBalanceResponse,
 #     BranchListResponse,
 # )
-
+from app.schemas.branch import (
+    BranchCreate, BranchUpdate, BranchResponse,
+    BranchWithBalances, BranchListResponse,
+    BranchBalanceResponse, SetThresholdsRequest,
+    ReconcileBalanceRequest, BranchStatistics
+)
 # Phase 5: Customer Management
 # from app.schemas.customer import (
 #     CustomerBase,
@@ -186,7 +191,11 @@ __all__ = [
     # "BranchWithBalances",
     # "BranchBalanceResponse",
     # "BranchListResponse",
-    
+    "BranchCreate",
+    "BranchUpdate",
+    "BranchResponse",
+    "BranchWithBalances",
+    "BranchBalanceResponse",
     # Customer Management
     # "CustomerBase",
     # "CustomerCreate",
