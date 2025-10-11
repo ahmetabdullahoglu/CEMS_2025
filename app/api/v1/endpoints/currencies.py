@@ -68,7 +68,7 @@ async def list_currencies(
     """
     try:
         service = CurrencyService(db)
-        currencies, total = service.list_currencies(include_inactive, skip, limit)
+        currencies, total = await service.list_currencies(include_inactive, skip, limit)
         
         return CurrencyListResponse(
             success=True,
@@ -111,7 +111,7 @@ async def get_currency(
     """
     try:
         service = CurrencyService(db)
-        return service.get_currency(currency_id)
+        return await service.get_currency(currency_id)
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -147,7 +147,7 @@ async def get_currency_by_code(
     """
     try:
         service = CurrencyService(db)
-        return service.get_currency_by_code(currency_code.upper())
+        return await service.get_currency_by_code(currency_code.upper())
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -179,7 +179,7 @@ async def get_currency_with_rates(
     """
     try:
         service = CurrencyService(db)
-        return service.get_currency_with_rates(currency_id, include_historical)
+        return await service.get_currency_with_rates(currency_id, include_historical)
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -216,7 +216,7 @@ async def create_currency(
     """
     try:
         service = CurrencyService(db)
-        return service.create_currency(currency_data, current_user)
+        return await service.create_currency(currency_data, current_user)
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -259,7 +259,7 @@ async def update_currency(
     """
     try:
         service = CurrencyService(db)
-        return service.update_currency(currency_id, update_data, current_user)
+        return await service.update_currency(currency_id, update_data, current_user)
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -291,7 +291,7 @@ async def activate_currency(
     """
     try:
         service = CurrencyService(db)
-        return service.activate_currency(currency_id, current_user)
+        return await service.activate_currency(currency_id, current_user)
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -322,7 +322,7 @@ async def deactivate_currency(
     """
     try:
         service = CurrencyService(db)
-        return service.deactivate_currency(currency_id, current_user)
+        return await service.deactivate_currency(currency_id, current_user)
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -367,7 +367,7 @@ async def set_exchange_rate(
     """
     try:
         service = CurrencyService(db)
-        return service.set_exchange_rate(rate_data, current_user)
+        return await service.set_exchange_rate(rate_data, current_user)
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -407,7 +407,7 @@ async def get_exchange_rate(
     """
     try:
         service = CurrencyService(db)
-        return service.get_latest_rate(from_code.upper(), to_code.upper())
+        return await service.get_latest_rate(from_code.upper(), to_code.upper())
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -443,7 +443,7 @@ async def get_rate_history(
     """
     try:
         service = CurrencyService(db)
-        rates = service.get_rate_history(
+        rates = await service.get_rate_history(
             from_code.upper(),
             to_code.upper(),
             start_date,
@@ -480,7 +480,7 @@ async def get_all_rates(
     """
     try:
         service = CurrencyService(db)
-        rates = service.get_all_current_rates()
+        rates = await service.get_all_current_rates()
         
         return ExchangeRateListResponse(
             success=True,
@@ -545,7 +545,7 @@ async def calculate_exchange(
     """
     try:
         service = CurrencyService(db)
-        return service.calculate_exchange(
+        return await service.calculate_exchange(
             amount,
             from_currency.upper(),
             to_currency.upper(),

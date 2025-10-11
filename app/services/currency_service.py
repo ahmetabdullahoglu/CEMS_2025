@@ -1,5 +1,5 @@
 """
-Currency Service
+Currency Service - Async Version
 Business logic for currency and exchange rate operations
 """
 
@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.currency_repo import CurrencyRepository
 from app.schemas.currency import (
@@ -33,30 +33,18 @@ logger = get_logger(__name__)
 class CurrencyService:
     """Service for currency operations"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = CurrencyRepository(db)
     
     # ==================== Currency Operations ====================
     
-    def create_currency(
+    async def create_currency(
         self,
         currency_data: CurrencyCreate,
         current_user: Dict[str, Any]
     ) -> CurrencyResponse:
-        """
-        Create new currency
-        
-        Args:
-            currency_data: Currency creation data
-            current_user: Current authenticated user
-            
-        Returns:
-            Created currency response
-            
-        Raises:
-            ValidationException: If validation fails
-        """
+        """Create new currency"""
         logger.info(
             f"Creating currency {currency_data.code} by user {current_user['id']}"
         )
@@ -69,7 +57,7 @@ class CurrencyService:
         
         # Check if base currency already exists
         if currency_data.is_base_currency:
-            existing_base = self.repo.get_base_currency()
+            existing_base = await self.repo.get_base_currency()
             if existing_base:
                 raise ValidationError(
                     f"Base currency already exists: {existing_base.code}. "
@@ -78,40 +66,30 @@ class CurrencyService:
         
         # Create currency
         currency_dict = currency_data.model_dump()
-        currency = self.repo.create_currency(currency_dict)
+        currency = await self.repo.create_currency(currency_dict)
         
         logger.info(f"Currency {currency.code} created successfully")
         return CurrencyResponse.model_validate(currency)
     
-    def update_currency(
+    async def update_currency(
         self,
         currency_id: UUID,
         update_data: CurrencyUpdate,
         current_user: Dict[str, Any]
     ) -> CurrencyResponse:
-        """
-        Update currency
-        
-        Args:
-            currency_id: Currency UUID
-            update_data: Update data
-            current_user: Current authenticated user
-            
-        Returns:
-            Updated currency response
-        """
+        """Update currency"""
         logger.info(
             f"Updating currency {currency_id} by user {current_user['id']}"
         )
         
-        currency = self.repo.get_currency_by_id(currency_id)
+        currency = await self.repo.get_currency_by_id(currency_id)
         if not currency:
             raise ResourceNotFoundError("Currency", currency_id)
         
         # Validate base currency change
         if update_data.is_base_currency is not None:
             if update_data.is_base_currency and not currency.is_base_currency:
-                existing_base = self.repo.get_base_currency()
+                existing_base = await self.repo.get_base_currency()
                 if existing_base and existing_base.id != currency_id:
                     raise ValidationError(
                         f"Base currency already exists: {existing_base.code}"
@@ -119,46 +97,37 @@ class CurrencyService:
         
         # Update currency
         update_dict = update_data.model_dump(exclude_unset=True)
-        updated_currency = self.repo.update_currency(currency_id, update_dict)
+        updated_currency = await self.repo.update_currency(currency_id, update_dict)
         
         logger.info(f"Currency {currency.code} updated successfully")
         return CurrencyResponse.model_validate(updated_currency)
     
-    def get_currency(self, currency_id: UUID) -> CurrencyResponse:
+    async def get_currency(self, currency_id: UUID) -> CurrencyResponse:
         """Get currency by ID"""
-        currency = self.repo.get_currency_by_id(currency_id)
+        currency = await self.repo.get_currency_by_id(currency_id)
         if not currency:
             raise ResourceNotFoundError("Currency", currency_id)
         return CurrencyResponse.model_validate(currency)
     
-    def get_currency_by_code(self, code: str) -> CurrencyResponse:
+    async def get_currency_by_code(self, code: str) -> CurrencyResponse:
         """Get currency by code"""
-        currency = self.repo.get_currency_by_code(code)
+        currency = await self.repo.get_currency_by_code(code)
         if not currency:
-            raise NotFoundError(f"Currency {code} not found")
+            raise ResourceNotFoundError("Currency", code)
         return CurrencyResponse.model_validate(currency)
     
-    def get_currency_with_rates(
+    async def get_currency_with_rates(
         self,
         currency_id: UUID,
         include_historical: bool = False
     ) -> CurrencyWithRates:
-        """
-        Get currency with all exchange rates
-        
-        Args:
-            currency_id: Currency UUID
-            include_historical: Include historical rates
-            
-        Returns:
-            Currency with rates
-        """
-        currency = self.repo.get_currency_by_id(currency_id)
+        """Get currency with all exchange rates"""
+        currency = await self.repo.get_currency_by_id(currency_id)
         if not currency:
-            raise NotFoundError(f"Currency {currency_id} not found")
+            raise ResourceNotFoundError("Currency", currency_id)
         
         # Get all rates for this currency
-        rates = self.repo.get_all_rates_for_currency(
+        rates = await self.repo.get_all_rates_for_currency(
             currency_id,
             include_historical
         )
@@ -170,27 +139,22 @@ class CurrencyService:
         
         return CurrencyWithRates(**currency_dict)
     
-    def list_currencies(
+    async def list_currencies(
         self,
         include_inactive: bool = False,
         skip: int = 0,
         limit: int = 100
     ) -> tuple[List[CurrencyResponse], int]:
-        """
-        List all currencies with pagination
-        
-        Returns:
-            Tuple of (currencies, total_count)
-        """
-        currencies = self.repo.get_all_currencies(include_inactive, skip, limit)
-        total = self.repo.count_currencies(include_inactive)
+        """List all currencies with pagination"""
+        currencies = await self.repo.get_all_currencies(include_inactive, skip, limit)
+        total = await self.repo.count_currencies(include_inactive)
         
         return (
             [CurrencyResponse.model_validate(c) for c in currencies],
             total
         )
     
-    def activate_currency(
+    async def activate_currency(
         self,
         currency_id: UUID,
         current_user: Dict[str, Any]
@@ -200,11 +164,11 @@ class CurrencyService:
             f"Activating currency {currency_id} by user {current_user['id']}"
         )
         
-        currency = self.repo.activate_currency(currency_id)
+        currency = await self.repo.activate_currency(currency_id)
         logger.info(f"Currency {currency.code} activated")
         return CurrencyResponse.model_validate(currency)
     
-    def deactivate_currency(
+    async def deactivate_currency(
         self,
         currency_id: UUID,
         current_user: Dict[str, Any]
@@ -214,46 +178,34 @@ class CurrencyService:
             f"Deactivating currency {currency_id} by user {current_user['id']}"
         )
         
-        currency = self.repo.get_currency_by_id(currency_id)
+        currency = await self.repo.get_currency_by_id(currency_id)
         if not currency:
-            raise NotFoundError(f"Currency {currency_id} not found")
+            raise ResourceNotFoundError("Currency", currency_id)
         
         if currency.is_base_currency:
             raise BusinessRuleViolationError(
                 "Cannot deactivate base currency"
             )
         
-        # TODO: Check if currency has active transactions
-        # This should be implemented when transaction module is ready
-        
-        currency = self.repo.deactivate_currency(currency_id)
+        currency = await self.repo.deactivate_currency(currency_id)
         logger.info(f"Currency {currency.code} deactivated")
         return CurrencyResponse.model_validate(currency)
     
     # ==================== Exchange Rate Operations ====================
     
-    def set_exchange_rate(
+    async def set_exchange_rate(
         self,
         rate_data: ExchangeRateCreate,
         current_user: Dict[str, Any]
     ) -> ExchangeRateResponse:
-        """
-        Set new exchange rate
-        
-        Args:
-            rate_data: Exchange rate data
-            current_user: Current authenticated user
-            
-        Returns:
-            Created exchange rate
-        """
+        """Set new exchange rate"""
         logger.info(
             f"Setting exchange rate by user {current_user['id']}"
         )
         
         # Validate currencies exist and are active
-        from_currency = self.repo.get_currency_by_id(rate_data.from_currency_id)
-        to_currency = self.repo.get_currency_by_id(rate_data.to_currency_id)
+        from_currency = await self.repo.get_currency_by_id(rate_data.from_currency_id)
+        to_currency = await self.repo.get_currency_by_id(rate_data.to_currency_id)
         
         if not from_currency or not to_currency:
             raise ResourceNotFoundError("Currency", "specified ID")
@@ -275,7 +227,7 @@ class CurrencyService:
             raise ValidationError("Sell rate must be greater than 0")
         
         # Get existing rate for history
-        existing_rate = self.repo.get_exchange_rate(
+        existing_rate = await self.repo.get_exchange_rate(
             rate_data.from_currency_id,
             rate_data.to_currency_id
         )
@@ -285,7 +237,7 @@ class CurrencyService:
         rate_dict['set_by'] = UUID(current_user['id'])
         
         # Create new rate
-        new_rate = self.repo.create_exchange_rate(rate_dict)
+        new_rate = await self.repo.create_exchange_rate(rate_dict)
         
         # Create history entry
         if existing_rate:
@@ -321,39 +273,30 @@ class CurrencyService:
                 'reason': rate_data.notes
             }
         
-        self.repo.create_rate_history(history_data)
+        await self.repo.create_rate_history(history_data)
         
         logger.info(
             f"Exchange rate set: {from_currency.code}/{to_currency.code} = {new_rate.rate}"
         )
         return ExchangeRateResponse.model_validate(new_rate)
     
-    def get_latest_rate(
+    async def get_latest_rate(
         self,
         from_currency_code: str,
         to_currency_code: str
     ) -> ExchangeRateResponse:
-        """
-        Get latest exchange rate between two currencies
-        
-        Args:
-            from_currency_code: Source currency code
-            to_currency_code: Target currency code
-            
-        Returns:
-            Latest exchange rate
-        """
-        from_currency = self.repo.get_currency_by_code(from_currency_code)
-        to_currency = self.repo.get_currency_by_code(to_currency_code)
+        """Get latest exchange rate between two currencies"""
+        from_currency = await self.repo.get_currency_by_code(from_currency_code)
+        to_currency = await self.repo.get_currency_by_code(to_currency_code)
         
         if not from_currency or not to_currency:
-            raise NotFoundError("Currency not found")
+            raise ResourceNotFoundError("Currency", from_currency_code if not from_currency else to_currency_code)
         
-        rate = self.repo.get_exchange_rate(from_currency.id, to_currency.id)
+        rate = await self.repo.get_exchange_rate(from_currency.id, to_currency.id)
         
         if not rate:
             # Try inverse rate
-            inverse_rate = self.repo.get_exchange_rate(to_currency.id, from_currency.id)
+            inverse_rate = await self.repo.get_exchange_rate(to_currency.id, from_currency.id)
             if inverse_rate:
                 # Create calculated rate from inverse
                 calculated_rate = ExchangeRate(
@@ -372,13 +315,14 @@ class CurrencyService:
                 )
                 return ExchangeRateResponse.model_validate(calculated_rate)
             
-            raise NotFoundError(
-                f"No exchange rate found for {from_currency_code}/{to_currency_code}"
+            raise ResourceNotFoundError(
+                "ExchangeRate",
+                f"{from_currency_code}/{to_currency_code}"
             )
         
         return ExchangeRateResponse.model_validate(rate)
     
-    def calculate_exchange(
+    async def calculate_exchange(
         self,
         amount: Decimal,
         from_currency_code: str,
@@ -386,19 +330,7 @@ class CurrencyService:
         use_buy_rate: bool = False,
         use_sell_rate: bool = False
     ) -> Dict[str, Any]:
-        """
-        Calculate exchange amount
-        
-        Args:
-            amount: Amount in source currency
-            from_currency_code: Source currency code
-            to_currency_code: Target currency code
-            use_buy_rate: Use buy rate if available
-            use_sell_rate: Use sell rate if available
-            
-        Returns:
-            Dictionary with calculation details
-        """
+        """Calculate exchange amount"""
         if amount <= 0:
             raise ValidationError("Amount must be greater than 0")
         
@@ -414,7 +346,7 @@ class CurrencyService:
             }
         
         # Get rate
-        rate_response = self.get_latest_rate(from_currency_code, to_currency_code)
+        rate_response = await self.get_latest_rate(from_currency_code, to_currency_code)
         
         # Determine which rate to use
         rate_used = rate_response.rate
@@ -443,32 +375,21 @@ class CurrencyService:
             'effective_from': rate_response.effective_from
         }
     
-    def get_rate_history(
+    async def get_rate_history(
         self,
         from_currency_code: str,
         to_currency_code: str,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[ExchangeRateResponse]:
-        """
-        Get exchange rate history
-        
-        Args:
-            from_currency_code: Source currency code
-            to_currency_code: Target currency code
-            start_date: Start date
-            end_date: End date
-            
-        Returns:
-            List of historical rates
-        """
-        from_currency = self.repo.get_currency_by_code(from_currency_code)
-        to_currency = self.repo.get_currency_by_code(to_currency_code)
+        """Get exchange rate history"""
+        from_currency = await self.repo.get_currency_by_code(from_currency_code)
+        to_currency = await self.repo.get_currency_by_code(to_currency_code)
         
         if not from_currency or not to_currency:
-            raise NotFoundError("Currency not found")
+            raise ResourceNotFoundError("Currency", from_currency_code if not from_currency else to_currency_code)
         
-        rates = self.repo.get_rate_history(
+        rates = await self.repo.get_rate_history(
             from_currency.id,
             to_currency.id,
             start_date,
@@ -477,14 +398,14 @@ class CurrencyService:
         
         return [ExchangeRateResponse.model_validate(rate) for rate in rates]
     
-    def get_all_current_rates(self) -> List[ExchangeRateResponse]:
+    async def get_all_current_rates(self) -> List[ExchangeRateResponse]:
         """Get all current exchange rates in the system"""
         # Get all active currencies
-        currencies = self.repo.get_all_currencies(include_inactive=False)
+        currencies = await self.repo.get_all_currencies(include_inactive=False)
         
         all_rates = []
         for currency in currencies:
-            rates = self.repo.get_all_rates_for_currency(
+            rates = await self.repo.get_all_rates_for_currency(
                 currency.id,
                 include_historical=False
             )
