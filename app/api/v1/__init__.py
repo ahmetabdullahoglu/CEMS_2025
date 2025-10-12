@@ -1,54 +1,86 @@
+# app/api/v1/__init__.py
 """
 API v1 Router
 Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
+from app.api.v1.endpoints import auth, currencies, branches
 
-# Import endpoint routers
-from app.api.v1.endpoints import auth, currencies,branches  # Add currencies
-
-# Future imports (will be implemented in next components)
-# from app.api.v1.endpoints import (
-#     users,
-#     currencies,
-#     branches,
-#     customers,
-#     transactions,
-#     vault,
-#     reports
-# )
-
+# Create main API router
 api_router = APIRouter()
 
-# Include endpoint routers
-api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+# ==================== Register All Routers ====================
 
-# Future routers (uncomment as implemented)
+# Authentication endpoints
+api_router.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["Authentication"]
+)
+
+# Currency endpoints
+api_router.include_router(
+    currencies.router,
+    prefix="/currencies",
+    tags=["Currencies"]
+)
+
+# Branch endpoints
+api_router.include_router(
+    branches.router,
+    prefix="/branches",
+    tags=["Branches"]
+)
+
+# Future routers (to be implemented)
+# from app.api.v1.endpoints import users, customers, transactions, vault, reports
+
 # api_router.include_router(users.router, prefix="/users", tags=["Users"])
-# api_router.include_router(currencies.router, prefix="/currencies", tags=["Currencies"])
-# api_router.include_router(branches.router, prefix="/branches", tags=["Branches"])
 # api_router.include_router(customers.router, prefix="/customers", tags=["Customers"])
 # api_router.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
 # api_router.include_router(vault.router, prefix="/vault", tags=["Vault"])
 # api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
-# Add currency router
-api_router.include_router(
-    currencies.router, 
-    prefix="/currencies", 
-    tags=["Currencies"]
-)
-# Register routers
-api_router.include_router(
-    branches.router,
-    prefix="/branches",
-    tags=["branches"]
-)
-# Placeholder endpoint for testing
-@api_router.get("/ping", tags=["Test"])
+
+
+# ==================== Health Check Endpoints ====================
+
+@api_router.get("/ping", tags=["Health"])
 async def ping():
-    """Test endpoint to verify API is working"""
+    """
+    Simple health check endpoint
+    
+    Returns:
+        dict: Success message
+    """
     return {
         "success": True,
-        "message": "pong"
+        "message": "pong",
+        "service": "CEMS API v1"
+    }
+
+
+@api_router.get("/health", tags=["Health"])
+async def health_check():
+    """
+    Detailed health check endpoint
+    
+    Returns:
+        dict: System health status
+    """
+    return {
+        "success": True,
+        "status": "healthy",
+        "service": "CEMS API",
+        "version": "1.0.0",
+        "endpoints": {
+            "auth": "active",
+            "currencies": "active",
+            "branches": "active",
+            "users": "pending",
+            "customers": "pending",
+            "transactions": "pending",
+            "vault": "pending",
+            "reports": "pending"
+        }
     }

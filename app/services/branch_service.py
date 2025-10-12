@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 class BranchService:
     """Service for branch operations"""
     
-    async def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = BranchRepository(db)
         self.balance_service = BalanceService(db)

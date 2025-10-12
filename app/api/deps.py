@@ -1,10 +1,13 @@
+# app/api/deps.py
 """
 FastAPI Dependencies
-Common dependencies for API endpoints (authentication, permissions, etc.)
+Common dependencies for API endpoints (authentication, permissions, roles, etc.)
+Merged from two versions with naming priority to the second version.
 """
 
-from typing import Optional, List
+from typing import AsyncGenerator, Optional, List
 from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,520 +17,342 @@ from app.db.base import get_db
 from app.db.models.user import User
 from app.core.security import decode_token
 from app.core.exceptions import (
-    AuthenticationError,
     InvalidTokenError,
     TokenExpiredError,
-    PermissionDeniedError,
 )
 
+# ==================== Database ====================
 
-# ==================== Security Scheme ====================
+async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Async DB session wrapper (from first version).
+    Use this if you prefer `get_async_db` as a dependency.
+    """
+    async for session in get_db():
+        yield session
 
-# HTTP Bearer token security
+# ==================== Security Schemes ====================
+
+# Strict HTTP Bearer (priority to second version behavior)
 security = HTTPBearer(
-    scheme_name="Bearer Token",
-    description="JWT token obtained from /auth/login endpoint"
+    scheme_name="Bearer",
+    description="JWT token from /auth/login endpoint",
+    auto_error=True,  # strict: raise 401 if missing
 )
 
+# Optional HTTP Bearer for endpoints that allow anonymous access
+security_optional = HTTPBearer(
+    scheme_name="BearerOptional",
+    description="Optional JWT token (no 401 if missing)",
+    auto_error=False,  # do not raise when Authorization header is absent
+)
 
-# ==================== Token Dependencies ====================
+# ==================== Token Extraction ====================
 
-async def get_token(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+async def get_token_from_header(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:
     """
-    Extract and validate JWT token from Authorization header
-    
-    Args:
-        credentials: HTTP Authorization credentials
-        
-    Returns:
-        str: JWT token
-        
-    Raises:
-        HTTPException: If token is missing or invalid
+    Extract JWT token from Authorization header (strict).
+    Expected: Authorization: Bearer <token>
     """
-    if not credentials:
+    if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization token is missing",
+            detail="Authorization token is required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
     return credentials.credentials
 
 
-# ==================== User Dependencies ====================
+async def get_token_from_header_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+) -> Optional[str]:
+    """
+    Extract JWT token from Authorization header (optional).
+    Returns None if header is missing/invalid instead of raising.
+    """
+    if not credentials or not credentials.credentials:
+        return None
+    return credentials.credentials
+
+# ==================== User Authentication ====================
 
 async def get_current_user(
-    token: str = Depends(get_token),
-    db: AsyncSession = Depends(get_db)
+    token: str = Depends(get_token_from_header),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Get current authenticated user from JWT token
-    
-    Args:
-        token: JWT access token
-        db: Database session
-        
-    Returns:
-        User: Current authenticated user
-        
-    Raises:
-        HTTPException: If token is invalid or user not found
+    Main authentication dependency (second version naming retained).
     """
     try:
-        # Decode token
         payload = decode_token(token)
-        
-        # Get user ID from token
-        user_id_str = payload.get("sub")
+
+        user_id_str: str = payload.get("sub")
         if not user_id_str:
-            raise InvalidTokenError("Token payload is invalid")
-        
-        # Convert to UUID
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing user ID",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         try:
             user_id = UUID(user_id_str)
         except ValueError:
-            raise InvalidTokenError("Invalid user ID in token")
-        
-        # TODO: Check if token is blacklisted (Redis)
-        # if await is_token_blacklisted(token):
-        #     raise InvalidTokenError("Token has been revoked")
-        
-        # Get user from database
-        result = await db.execute(
-            select(User).where(User.id == user_id)
-        )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: malformed user ID",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
-        
         if not user:
-            raise InvalidTokenError("User not found")
-        
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         return user
-        
+
     except TokenExpiredError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
-    except InvalidTokenError as e:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=f"Authentication failed: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-
 async def get_current_active_user(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
-    """
-    Get current active user (not disabled)
-    
-    Args:
-        current_user: Current authenticated user
-        
-    Returns:
-        User: Current active user
-        
-    Raises:
-        HTTPException: If user is inactive
-    """
+    """Ensure user is active (second version naming retained)."""
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is disabled"
+            detail="User account is disabled",
         )
-    
     return current_user
 
-
 async def get_current_superuser(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ) -> User:
-    """
-    Get current user and verify they are a superuser
-    
-    Args:
-        current_user: Current active user
-        
-    Returns:
-        User: Current superuser
-        
-    Raises:
-        HTTPException: If user is not a superuser
-    """
+    """Ensure user is superuser (second version naming retained)."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This action requires superuser privileges"
+            detail="Superuser privileges required",
         )
-    
     return current_user
 
-
-# ==================== Role-Based Dependencies ====================
-
-def require_role(*role_names: str):
-    """
-    Dependency factory for role-based access control
-    
-    Args:
-        *role_names: One or more role names (admin, manager, teller)
-        
-    Returns:
-        Dependency function that checks if user has required role
-        
-    Example:
-        @router.get("/admin-only", dependencies=[Depends(require_role("admin"))])
-        async def admin_endpoint():
-            return {"message": "Admin access granted"}
-    """
-    async def role_checker(
-        current_user: User = Depends(get_current_active_user)
-    ) -> User:
-        # Superuser passes all role checks
-        if current_user.is_superuser:
-            return current_user
-        
-        # Check if user has any of the required roles
-        for role_name in role_names:
-            if current_user.has_role(role_name):
-                return current_user
-        
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"This action requires one of these roles: {', '.join(role_names)}"
-        )
-    
-    return role_checker
-
-
-def require_any_role(role_names: List[str]):
-    """
-    Alternative syntax for require_role
-    
-    Args:
-        role_names: List of acceptable role names
-        
-    Returns:
-        Dependency function
-        
-    Example:
-        @router.get("/managers", dependencies=[Depends(require_any_role(["admin", "manager"]))])
-    """
-    return require_role(*role_names)
-
-
-# ==================== Permission-Based Dependencies ====================
-
-def require_permission(*permissions: str):
-    """
-    Dependency factory for permission-based access control
-    
-    Args:
-        *permissions: One or more permission strings (e.g., "user:create")
-        
-    Returns:
-        Dependency function that checks if user has required permissions
-        
-    Example:
-        @router.post(
-            "/users",
-            dependencies=[Depends(require_permission("user:create"))]
-        )
-        async def create_user():
-            return {"message": "User created"}
-    """
-    async def permission_checker(
-        current_user: User = Depends(get_current_active_user)
-    ) -> User:
-        # Superuser has all permissions
-        if current_user.is_superuser:
-            return current_user
-        
-        # Check if user has all required permissions
-        missing_permissions = []
-        for permission in permissions:
-            if not current_user.has_permission(permission):
-                missing_permissions.append(permission)
-        
-        if missing_permissions:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Missing required permissions: {', '.join(missing_permissions)}"
-            )
-        
-        return current_user
-    
-    return permission_checker
-
-
-def require_any_permission(permissions: List[str]):
-    """
-    Require user to have at least one of the specified permissions
-    
-    Args:
-        permissions: List of permission strings
-        
-    Returns:
-        Dependency function
-    """
-    async def permission_checker(
-        current_user: User = Depends(get_current_active_user)
-    ) -> User:
-        # Superuser has all permissions
-        if current_user.is_superuser:
-            return current_user
-        
-        # Check if user has at least one permission
-        for permission in permissions:
-            if current_user.has_permission(permission):
-                return current_user
-        
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"This action requires one of these permissions: {', '.join(permissions)}"
-        )
-    
-    return permission_checker
-
-
-# ==================== Combined Dependencies ====================
-
-def require_role_and_permission(role_name: str, permission: str):
-    """
-    Require both specific role AND specific permission
-    
-    Args:
-        role_name: Required role name
-        permission: Required permission string
-        
-    Returns:
-        Dependency function
-    """
-    async def checker(
-        current_user: User = Depends(get_current_active_user)
-    ) -> User:
-        # Superuser passes all checks
-        if current_user.is_superuser:
-            return current_user
-        
-        # Check role
-        if not current_user.has_role(role_name):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"This action requires role: {role_name}"
-            )
-        
-        # Check permission
-        if not current_user.has_permission(permission):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"This action requires permission: {permission}"
-            )
-        
-        return current_user
-    
-    return checker
-
-
-# ==================== Optional Authentication ====================
-
+# Optional auth (works with/without token)
 async def get_current_user_optional(
-    token: Optional[str] = Depends(get_token),
-    db: AsyncSession = Depends(get_db)
+    token: Optional[str] = Depends(get_token_from_header_optional),
+    db: AsyncSession = Depends(get_db),
 ) -> Optional[User]:
     """
-    Get current user if authenticated, None otherwise
-    Useful for endpoints that have different behavior for authenticated users
-    
-    Args:
-        token: Optional JWT token
-        db: Database session
-        
-    Returns:
-        User or None
+    Return current user if authenticated; otherwise None.
+    (Fixed to truly be optional using security_optional.)
     """
     if not token:
         return None
-    
     try:
-        return await get_current_user(token, db)
-    except:
+        return await get_current_user(token, db)  # reuse strict logic
+    except HTTPException:
         return None
-    
-    
-# ==================== Branch-Level Dependencies ====================
 
-def require_role_and_permission(role_name: str, permission: str):
+# ==================== Permission Checks ====================
+
+def require_permissions(required_permissions: List[str]):
     """
-    Require both specific role AND specific permission
-    
-    Args:
-        role_name: Required role name
-        permission: Required permission string
-        
-    Returns:
-        Dependency function
+    Require ALL specified permissions (second version naming retained).
     """
-    async def checker(
-        current_user: User = Depends(get_current_active_user)
+    async def check_permissions(
+        current_user: User = Depends(get_current_active_user),
     ) -> User:
-        # Superuser passes all checks
         if current_user.is_superuser:
             return current_user
-        
-        # Check role
-        if not current_user.has_role(role_name):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"This action requires role: {role_name}"
-            )
-        
-        # Check permission
+        for permission in required_permissions:
+            if not current_user.has_permission(permission):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Permission denied: {permission} required",
+                )
+        return current_user
+    return check_permissions
+
+def require_permission(permission: str):
+    """
+    Require a SINGLE permission (from first version).
+    """
+    async def checker(
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
+        if current_user.is_superuser:
+            return current_user
         if not current_user.has_permission(permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"This action requires permission: {permission}"
+                detail=f"Missing required permission: {permission}",
             )
-        
         return current_user
-    
     return checker
 
-
-def require_branch_access(branch_id_param: str = "branch_id"):
+def require_any_permission(permissions: List[str]):
     """
-    Dependency factory for branch-level access control
-    
-    Args:
-        branch_id_param: Name of path/query parameter containing branch_id
-        
-    Returns:
-        Dependency function that checks branch access
-        
-    Example:
-        @router.get("/branches/{branch_id}/transactions", 
-                    dependencies=[Depends(require_branch_access())])
-        async def get_branch_transactions(branch_id: UUID):
-            ...
-    """
-    async def branch_checker(
-        request: Request,
-        current_user: User = Depends(get_current_active_user),
-        db: AsyncSession = Depends(get_db)
-    ) -> User:
-        from app.middleware.rbac import BranchAccessChecker
-        
-        # Superuser has access to all branches
-        if current_user.is_superuser:
-            return current_user
-        
-        # Get branch_id from request
-        branch_id = request.path_params.get(branch_id_param) or \
-                   request.query_params.get(branch_id_param)
-        
-        if not branch_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Branch ID not provided in {branch_id_param}"
-            )
-        
-        try:
-            branch_uuid = UUID(str(branch_id))
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid branch ID format"
-            )
-        
-        # Check branch access
-        try:
-            await BranchAccessChecker.check_branch_access(
-                user=current_user,
-                branch_id=branch_uuid
-            )
-        except PermissionDeniedError as e:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=str(e)
-            )
-        
-        return current_user
-    
-    return branch_checker
-
-
-def require_own_branch_or_permission(permission: str):
-    """
-    Allow access if user belongs to branch OR has specific permission
-    
-    Args:
-        permission: Permission that can override branch restriction
-        
-    Returns:
-        Dependency function
-        
-    Example:
-        @router.get(
-            "/branches/{branch_id}/report",
-            dependencies=[Depends(require_own_branch_or_permission("reports:view_all"))]
-        )
+    Require at least ONE of the specified permissions (from first version).
     """
     async def checker(
-        request: Request,
-        current_user: User = Depends(get_current_active_user)
+        current_user: User = Depends(get_current_active_user),
     ) -> User:
-        from app.middleware.rbac import BranchAccessChecker
-        
-        # Superuser always has access
         if current_user.is_superuser:
             return current_user
-        
-        # Check if user has override permission
-        if current_user.has_permission(permission):
+        for permission in permissions:
+            if current_user.has_permission(permission):
+                return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"This action requires one of these permissions: {', '.join(permissions)}",
+        )
+    return checker
+
+# ==================== Role Checks ====================
+
+def require_any_role(required_roles: List[str]):
+    """
+    Require at least ONE of the specified roles (second version naming retained).
+    """
+    async def check_roles(
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
+        if current_user.is_superuser:
             return current_user
-        
-        # Otherwise, check branch access
-        branch_id = request.path_params.get("branch_id")
-        if branch_id:
-            try:
-                branch_uuid = UUID(str(branch_id))
-                await BranchAccessChecker.check_branch_access(
-                    user=current_user,
-                    branch_id=branch_uuid
-                )
-            except PermissionDeniedError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=str(e)
-                )
-        
+        user_roles = [role.name for role in getattr(current_user, "roles", [])]
+        if not any(role in user_roles for role in required_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: one of {required_roles} role required",
+            )
         return current_user
-    
+    return check_roles
+
+def require_all_roles(required_roles: List[str]):
+    """
+    Require ALL specified roles (second version naming retained).
+    """
+    async def check_roles(
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
+        if current_user.is_superuser:
+            return current_user
+        user_roles = [role.name for role in getattr(current_user, "roles", [])]
+        if not all(role in user_roles for role in required_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: all of {required_roles} roles required",
+            )
+        return current_user
+    return check_roles
+
+def require_role(role_name: str):
+    """
+    Require a SINGLE role (from first version).
+    """
+    async def role_checker(
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
+        if current_user.is_superuser:
+            return current_user
+        if not current_user.has_role(role_name):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Required role: {role_name}",
+            )
+        return current_user
+    return role_checker
+
+def require_role_and_permission(role_name: str, permission: str):
+    """
+    Require BOTH a specific role AND a specific permission (from first version).
+    """
+    async def checker(
+        current_user: User = Depends(get_current_active_user),
+    ) -> User:
+        if current_user.is_superuser:
+            return current_user
+        if not current_user.has_role(role_name):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Required role: {role_name}",
+            )
+        if not current_user.has_permission(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Required permission: {permission}",
+            )
+        return current_user
     return checker
 
 
-async def get_accessible_branch_ids(
-    current_user: User = Depends(get_current_active_user)
-) -> List[UUID]:
+def require_roles(role_names: List[str]):
     """
-    Get list of branch IDs the current user can access
-    Useful for filtering queries
-    
-    Returns:
-        List[UUID]: Accessible branch IDs (empty list for superuser = all branches)
+    Backwards-compatible alias.
+    Old behavior: require at least ONE of the specified roles.
     """
-    from app.middleware.rbac import BranchAccessChecker
-    return await BranchAccessChecker.get_accessible_branches(current_user)
+    return require_any_role(role_names)
+
+# ==================== Utility ====================
+
+async def verify_admin_or_owner(
+    item_owner_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Allow if superuser or owner (from first version).
+    """
+    if current_user.is_superuser or current_user.id == item_owner_id:
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized to access this resource",
+    )
+
+# ==================== Export All ====================
+__all__ = [
+    # DB
+    "get_async_db",
+    # Tokens
+    "get_token_from_header",
+    "get_token_from_header_optional",
+    # Auth
+    "get_current_user",
+    "get_current_active_user",
+    "get_current_superuser",
+    "get_current_user_optional",
+    # Permissions
+    "require_permission",
+    "require_permissions",
+    "require_any_permission",
+    # Roles
+    "require_role",
+    "require_any_role",
+    "require_all_roles",
+    "require_role_and_permission",
+    "require_roles",  # <-- أضف هذا
+    # Utils
+    "verify_admin_or_owner",
+]

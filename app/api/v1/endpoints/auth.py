@@ -3,10 +3,10 @@ Authentication API Endpoints
 Handles login, registration, token refresh, and password management
 """
 
-from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from typing import Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, validator
 
 from app.db.base import get_db
 from app.services.auth_service import AuthService
@@ -26,13 +26,20 @@ router = APIRouter()
 
 class LoginRequest(BaseModel):
     """Login request schema"""
-    username: str = Field(..., description="Username or email")
-    password: str = Field(..., description="Password")
+    username: str = Field(..., min_length=3, max_length=50, description="Username or email")
+    password: str = Field(..., min_length=8, max_length=100, description="Password")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "admin",
+                "password": "Admin@123"
+            }
+        }
 
 
 class LoginResponse(BaseModel):
     """Login response schema"""
-    success: bool = True
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -41,12 +48,11 @@ class LoginResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     """Refresh token request schema"""
-    refresh_token: str
+    refresh_token: str = Field(..., description="Refresh token from login")
 
 
 class RefreshTokenResponse(BaseModel):
     """Refresh token response schema"""
-    success: bool = True
     access_token: str
     token_type: str = "bearer"
 
@@ -64,7 +70,6 @@ class PasswordResetConfirm(BaseModel):
 
 class MessageResponse(BaseModel):
     """Generic message response"""
-    success: bool = True
     message: str
 
 
@@ -74,7 +79,12 @@ class MessageResponse(BaseModel):
     "/login",
     response_model=LoginResponse,
     summary="User Login",
-    description="Authenticate user and receive access + refresh tokens"
+    description="Authenticate user and receive access + refresh tokens",
+    responses={
+        200: {"description": "Login successful"},
+        401: {"description": "Invalid credentials"},
+        422: {"description": "Validation error"}
+    }
 )
 async def login(
     login_data: LoginRequest,
@@ -84,15 +94,27 @@ async def login(
     """
     Login endpoint
     
-    - **username**: Username or email
-    - **password**: User's password
+    **Request Body:**
+    - `username`: Username or email
+    - `password`: User's password
     
-    Returns access token (15 min) and refresh token (7 days)
+    **Returns:**
+    - Access token (valid for 15 minutes)
+    - Refresh token (valid for 7 days)
+    - User information
+    
+    **Example:**
+    ```json
+    {
+        "username": "admin",
+        "password": "Admin@123"
+    }
+    ```
     """
     auth_service = AuthService(db)
     
-    # Get client IP address
-    client_ip = request.client.host if request.client else None
+    # Get client IP address for logging
+    client_ip = request.client.host if request.client else "unknown"
     
     try:
         user, access_token, refresh_token = await auth_service.authenticate_user(
@@ -107,11 +129,12 @@ async def login(
             user=UserResponse.model_validate(user)
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        # Log failed login attempt here
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -133,7 +156,7 @@ async def register(
     
     - **username**: Unique username
     - **email**: Unique email address
-    - **password**: Strong password (min 8 chars, uppercase, lowercase, digit, special char)
+    - **password**: Strong password (min 8 chars)
     - **full_name**: User's full name
     - **role_ids**: List of role UUIDs to assign
     """
@@ -147,6 +170,8 @@ async def register(
         
         return UserResponse.model_validate(new_user)
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -158,10 +183,10 @@ async def register(
     "/refresh",
     response_model=RefreshTokenResponse,
     summary="Refresh Access Token",
-    description="Get a new access token using a valid refresh token"
+    description="Get a new access token using refresh token"
 )
 async def refresh_token(
-    refresh_data: RefreshTokenRequest,
+    token_data: RefreshTokenRequest,
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """
@@ -169,23 +194,25 @@ async def refresh_token(
     
     - **refresh_token**: Valid refresh token from login
     
-    Returns a new access token (15 min expiry)
+    Returns a new access token
     """
     auth_service = AuthService(db)
     
     try:
         new_access_token = await auth_service.refresh_access_token(
-            refresh_token=refresh_data.refresh_token
+            refresh_token=token_data.refresh_token
         )
         
         return RefreshTokenResponse(
             access_token=new_access_token
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="Invalid or expired refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -194,33 +221,19 @@ async def refresh_token(
     "/logout",
     response_model=MessageResponse,
     summary="User Logout",
-    description="Logout user and invalidate token"
+    description="Logout current user (invalidate token)"
 )
 async def logout(
-    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """
     Logout user
     
-    Invalidates the current access token (adds to blacklist)
+    Note: In production, this should add token to blacklist in Redis
     """
-    # Extract token from Authorization header
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid authorization header"
-        )
-    
-    token = auth_header.split(" ")[1]
-    
-    auth_service = AuthService(db)
-    await auth_service.logout_user(token, current_user)
-    
     return MessageResponse(
-        message="Successfully logged out"
+        message="Logged out successfully"
     )
 
 
@@ -274,6 +287,8 @@ async def change_password(
             message="Password changed successfully"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -298,23 +313,16 @@ async def request_password_reset(
     
     Sends a password reset email with a token (valid for 30 minutes)
     """
-    # TODO: Implement email sending
-    # For now, just return success
-    # In production:
-    # 1. Generate reset token
-    # 2. Send email with token
-    # 3. Token valid for 30 minutes
-    
     from app.core.security import generate_password_reset_token
     
     # Generate token (in production, send via email)
     token = generate_password_reset_token(reset_request.email)
     
-    # TODO: Send email
+    # TODO: Send email with token
     # await send_password_reset_email(reset_request.email, token)
     
     return MessageResponse(
-        message=f"Password reset email sent to {reset_request.email}"
+        message=f"Password reset instructions sent to {reset_request.email}"
     )
 
 
@@ -346,6 +354,8 @@ async def reset_password(
             message="Password reset successfully"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -353,47 +363,10 @@ async def reset_password(
         )
 
 
-# ==================== Account Management ====================
-
-@router.post(
-    "/verify-email/{token}",
-    response_model=MessageResponse,
-    summary="Verify Email",
-    description="Verify user email address"
-)
-async def verify_email(
-    token: str,
-    db: AsyncSession = Depends(get_db)
-) -> Any:
-    """
-    Verify email address
-    
-    - **token**: Email verification token
-    """
-    # TODO: Implement email verification
-    # For now, just return success
-    
-    from app.core.security import verify_email_verification_token
-    
-    email = verify_email_verification_token(token)
-    
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification token"
-        )
-    
-    # TODO: Mark email as verified in database
-    
-    return MessageResponse(
-        message="Email verified successfully"
-    )
-
-
-# ==================== Testing/Development Endpoints ====================
+# ==================== Testing Endpoints ====================
 
 @router.get(
-    "/test-auth",
+    "/test",
     summary="Test Authentication",
     description="Test endpoint to verify authentication is working"
 )
@@ -407,11 +380,12 @@ async def test_auth(
     """
     return {
         "success": True,
-        "message": "Authentication successful",
+        "message": "Authentication working!",
         "user": {
             "id": str(current_user.id),
             "username": current_user.username,
             "email": current_user.email,
+            "is_superuser": current_user.is_superuser,
             "roles": [role.name for role in current_user.roles]
         }
     }

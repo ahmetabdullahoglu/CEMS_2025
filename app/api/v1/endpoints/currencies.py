@@ -1,3 +1,4 @@
+# app/api/v1/endpoints/currencies.py
 """
 Currency API Endpoints
 RESTful API for currency and exchange rate operations
@@ -8,9 +9,14 @@ from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api import deps
+from app.api.deps import (
+    get_async_db,
+    get_current_user,
+    get_current_active_user,
+    require_roles
+)
 from app.services.currency_service import CurrencyService
 from app.schemas.currency import (
     CurrencyCreate,
@@ -22,6 +28,7 @@ from app.schemas.currency import (
     ExchangeRateResponse,
     ExchangeRateListResponse
 )
+from app.db.models.user import User
 from app.core.exceptions import (
     ResourceNotFoundError,
     ValidationError,
@@ -31,7 +38,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/currencies", tags=["Currencies"])
+router = APIRouter()
 
 
 # ==================== Currency Endpoints ====================
@@ -49,8 +56,8 @@ async def list_currencies(
     ),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=500, description="Max records to return"),
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get list of all currencies
@@ -91,8 +98,8 @@ async def list_currencies(
 )
 async def get_currency(
     currency_id: UUID,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get currency by ID
@@ -115,7 +122,7 @@ async def get_currency(
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=e.message
+            detail=str(e)
         )
     except Exception as e:
         logger.error(f"Error getting currency {currency_id}: {str(e)}")
@@ -133,11 +140,14 @@ async def get_currency(
 )
 async def get_currency_by_code(
     currency_code: str,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get currency by code (e.g., USD, EUR, TRY)
+    
+    **Permissions:**
+    - Any authenticated user
     
     **Parameters:**
     - **currency_code**: ISO 4217 currency code (3 letters)
@@ -148,10 +158,16 @@ async def get_currency_by_code(
     try:
         service = CurrencyService(db)
         return await service.get_currency_by_code(currency_code.upper())
-    except NotFoundError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error getting currency {currency_code}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve currency"
         )
 
 
@@ -159,31 +175,34 @@ async def get_currency_by_code(
     "/{currency_id}/with-rates",
     response_model=CurrencyWithRates,
     summary="Get currency with exchange rates",
-    description="Get currency with all current exchange rates"
+    description="Get currency with all its exchange rates"
 )
 async def get_currency_with_rates(
     currency_id: UUID,
     include_historical: bool = Query(False, description="Include historical rates"),
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get currency with all exchange rates
     
     **Parameters:**
     - **currency_id**: UUID of the currency
-    - **include_historical**: Include inactive/historical rates
-    
-    **Returns:**
-    - Currency with list of exchange rates
+    - **include_historical**: Include historical rates (default: false)
     """
     try:
         service = CurrencyService(db)
         return await service.get_currency_with_rates(currency_id, include_historical)
-    except NotFoundError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error getting currency with rates {currency_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve currency with rates"
         )
 
 
@@ -196,8 +215,8 @@ async def get_currency_with_rates(
 )
 async def create_currency(
     currency_data: CurrencyCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.require_role(["admin"]))
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin"]))
 ):
     """
     Create new currency
@@ -206,21 +225,25 @@ async def create_currency(
     - Admin only
     
     **Body:**
-    - Currency creation data (code, names, symbol, etc.)
+    - Currency data (code, name, symbol, etc.)
     
     **Returns:**
     - Created currency details
     
-    **Errors:**
-    - 400: Validation error (duplicate code, invalid base currency, etc.)
+    **Validation:**
+    - Currency code must be 3 uppercase letters (ISO 4217)
+    - Only one base currency allowed
     """
     try:
         service = CurrencyService(db)
-        return await service.create_currency(currency_data, current_user)
+        return await service.create_currency(
+            currency_data,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.message
+            detail=str(e)
         )
     except Exception as e:
         logger.error(f"Error creating currency: {str(e)}")
@@ -239,8 +262,8 @@ async def create_currency(
 async def update_currency(
     currency_id: UUID,
     update_data: CurrencyUpdate,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.require_role(["admin"]))
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin"]))
 ):
     """
     Update currency
@@ -248,19 +271,20 @@ async def update_currency(
     **Permissions:**
     - Admin only
     
-    **Parameters:**
-    - **currency_id**: UUID of currency to update
-    
     **Body:**
-    - Fields to update (partial update supported)
+    - Currency update data
     
     **Returns:**
     - Updated currency details
     """
     try:
         service = CurrencyService(db)
-        return await service.update_currency(currency_id, update_data, current_user)
-    except NotFoundError as e:
+        return await service.update_currency(
+            currency_id,
+            update_data,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
@@ -269,6 +293,12 @@ async def update_currency(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error updating currency {currency_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update currency"
         )
 
 
@@ -280,8 +310,8 @@ async def update_currency(
 )
 async def activate_currency(
     currency_id: UUID,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.require_role(["admin"]))
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin"]))
 ):
     """
     Activate currency
@@ -291,11 +321,20 @@ async def activate_currency(
     """
     try:
         service = CurrencyService(db)
-        return await service.activate_currency(currency_id, current_user)
-    except NotFoundError as e:
+        return await service.activate_currency(
+            currency_id,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error activating currency {currency_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to activate currency"
         )
 
 
@@ -307,8 +346,8 @@ async def activate_currency(
 )
 async def deactivate_currency(
     currency_id: UUID,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.require_role(["admin"]))
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin"]))
 ):
     """
     Deactivate currency
@@ -322,8 +361,11 @@ async def deactivate_currency(
     """
     try:
         service = CurrencyService(db)
-        return await service.deactivate_currency(currency_id, current_user)
-    except NotFoundError as e:
+        return await service.deactivate_currency(
+            currency_id,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
@@ -332,6 +374,12 @@ async def deactivate_currency(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error deactivating currency {currency_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to deactivate currency"
         )
 
 
@@ -346,8 +394,8 @@ async def deactivate_currency(
 )
 async def set_exchange_rate(
     rate_data: ExchangeRateCreate,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.require_role(["admin", "manager"]))
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin", "manager"]))
 ):
     """
     Set new exchange rate
@@ -362,13 +410,17 @@ async def set_exchange_rate(
     - Created exchange rate details
     
     **Notes:**
-    - Previous rate for same currency pair will be automatically deactivated
-    - History entry is created for audit trail
+    - Previous rate is automatically archived
+    - Rate must be positive
+    - Both currencies must be active
     """
     try:
         service = CurrencyService(db)
-        return await service.set_exchange_rate(rate_data, current_user)
-    except NotFoundError as e:
+        return await service.set_exchange_rate(
+            rate_data,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
@@ -378,76 +430,90 @@ async def set_exchange_rate(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except Exception as e:
+        logger.error(f"Error setting exchange rate: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to set exchange rate"
+        )
 
 
 @router.get(
-    "/rates/{from_code}/{to_code}",
+    "/rates/{from_currency}/{to_currency}",
     response_model=ExchangeRateResponse,
     summary="Get current exchange rate",
     description="Get current exchange rate between two currencies"
 )
 async def get_exchange_rate(
-    from_code: str,
-    to_code: str,
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    from_currency: str,
+    to_currency: str,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get current exchange rate
     
     **Parameters:**
-    - **from_code**: Source currency code (e.g., USD)
-    - **to_code**: Target currency code (e.g., EUR)
+    - **from_currency**: Source currency code (e.g., USD)
+    - **to_currency**: Target currency code (e.g., EUR)
     
     **Returns:**
     - Current exchange rate details
-    
-    **Notes:**
-    - If direct rate not found, inverse rate will be calculated
     """
     try:
         service = CurrencyService(db)
-        return await service.get_latest_rate(from_code.upper(), to_code.upper())
-    except NotFoundError as e:
+        return await service.get_latest_rate(
+            from_currency.upper(),
+            to_currency.upper()
+        )
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+    except Exception as e:
+        logger.error(
+            f"Error getting exchange rate {from_currency}/{to_currency}: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve exchange rate"
+        )
 
 
 @router.get(
-    "/rates/history/{from_code}/{to_code}",
+    "/rates/history/{from_currency}/{to_currency}",
     response_model=ExchangeRateListResponse,
     summary="Get exchange rate history",
     description="Get historical exchange rates between two currencies"
 )
-async def get_rate_history(
-    from_code: str,
-    to_code: str,
+async def get_exchange_rate_history(
+    from_currency: str,
+    to_currency: str,
     start_date: Optional[datetime] = Query(None, description="Start date"),
     end_date: Optional[datetime] = Query(None, description="End date"),
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    limit: int = Query(50, ge=1, le=1000, description="Max records"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get exchange rate history
     
     **Parameters:**
-    - **from_code**: Source currency code
-    - **to_code**: Target currency code
-    - **start_date**: Filter from this date (optional)
-    - **end_date**: Filter until this date (optional)
-    
-    **Returns:**
-    - List of historical exchange rates
+    - **from_currency**: Source currency code
+    - **to_currency**: Target currency code
+    - **start_date**: Filter from date (optional)
+    - **end_date**: Filter to date (optional)
+    - **limit**: Maximum number of records (default: 50, max: 1000)
     """
     try:
         service = CurrencyService(db)
         rates = await service.get_rate_history(
-            from_code.upper(),
-            to_code.upper(),
+            from_currency.upper(),
+            to_currency.upper(),
             start_date,
-            end_date
+            end_date,
+            limit
         )
         
         return ExchangeRateListResponse(
@@ -455,104 +521,61 @@ async def get_rate_history(
             data=rates,
             total=len(rates)
         )
-    except NotFoundError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
-
-
-@router.get(
-    "/rates/all",
-    response_model=ExchangeRateListResponse,
-    summary="Get all current rates",
-    description="Get all current exchange rates in the system"
-)
-async def get_all_rates(
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
-):
-    """
-    Get all current exchange rates
-    
-    **Returns:**
-    - List of all active exchange rates
-    """
-    try:
-        service = CurrencyService(db)
-        rates = await service.get_all_current_rates()
-        
-        return ExchangeRateListResponse(
-            success=True,
-            data=rates,
-            total=len(rates)
-        )
     except Exception as e:
-        logger.error(f"Error getting all rates: {str(e)}")
+        logger.error(
+            f"Error getting exchange rate history "
+            f"{from_currency}/{to_currency}: {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve exchange rates"
+            detail="Failed to retrieve exchange rate history"
         )
 
 
 @router.get(
     "/calculate",
-    summary="Calculate exchange amount",
-    description="Calculate converted amount based on current exchange rate"
+    summary="Calculate currency exchange",
+    description="Calculate exchange amount between currencies"
 )
 async def calculate_exchange(
-    amount: Decimal = Query(..., gt=0, description="Amount to convert"),
-    from_currency: str = Query(..., min_length=3, max_length=3, description="Source currency code"),
-    to_currency: str = Query(..., min_length=3, max_length=3, description="Target currency code"),
-    use_buy_rate: bool = Query(False, description="Use buy rate if available"),
-    use_sell_rate: bool = Query(False, description="Use sell rate if available"),
-    db: Session = Depends(deps.get_db),
-    current_user: dict = Depends(deps.get_current_user)
+    amount: Decimal = Query(..., description="Amount to exchange"),
+    from_currency: str = Query(..., description="Source currency code"),
+    to_currency: str = Query(..., description="Target currency code"),
+    apply_commission: bool = Query(False, description="Apply commission"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Calculate exchange amount
+    Calculate currency exchange
     
     **Parameters:**
-    - **amount**: Amount to convert (must be > 0)
+    - **amount**: Amount to exchange
     - **from_currency**: Source currency code
     - **to_currency**: Target currency code
-    - **use_buy_rate**: Use buy rate instead of standard rate
-    - **use_sell_rate**: Use sell rate instead of standard rate
+    - **apply_commission**: Apply commission rate (default: false)
     
     **Returns:**
-    - Calculation details including:
-      - Original amount and currency
-      - Exchange rate used
-      - Converted amount
-      - Rate type (standard/buy/sell)
-      - Rate effective date
-    
-    **Example:**
-    ```
-    GET /currencies/calculate?amount=100&from_currency=USD&to_currency=EUR
-    
-    Response:
-    {
-      "from_currency": "USD",
-      "to_currency": "EUR",
-      "amount": 100.00,
-      "rate": 0.85,
-      "result": 85.00,
-      "rate_type": "standard",
-      "effective_from": "2025-10-10T10:00:00"
-    }
-    ```
+    - Calculation details including final amount
     """
     try:
         service = CurrencyService(db)
-        return await service.calculate_exchange(
-            amount,
-            from_currency.upper(),
-            to_currency.upper(),
-            use_buy_rate,
-            use_sell_rate
+        result = await service.calculate_exchange(
+            amount=amount,
+            from_currency=from_currency.upper(),
+            to_currency=to_currency.upper(),
+            apply_commission=apply_commission
         )
-    except NotFoundError as e:
+        
+        return {
+            "success": True,
+            "calculation": result
+        }
+    except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
@@ -562,3 +585,21 @@ async def calculate_exchange(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except Exception as e:
+        logger.error(f"Error calculating exchange: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to calculate exchange"
+        )
+
+
+# ==================== Health Check ====================
+
+@router.get("/health/ping")
+async def currency_health_check():
+    """Health check endpoint for currency service"""
+    return {
+        "success": True,
+        "service": "currency",
+        "status": "healthy"
+    }

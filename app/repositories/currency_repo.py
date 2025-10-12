@@ -1,3 +1,4 @@
+# app/repositories/currency_repo.py
 """
 Currency Repository - Async Version
 Data access layer for currency operations
@@ -12,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models.currency import Currency, ExchangeRate, ExchangeRateHistory
-from app.core.exceptions import DatabaseError, ValidationError
+from app.core.exceptions import DatabaseOperationError, ValidationError  # ✅ FIXED
 
 
 class CurrencyRepository:
@@ -89,7 +90,7 @@ class CurrencyRepository:
             
         except IntegrityError as e:
             await self.db.rollback()
-            raise DatabaseError(f"Failed to create currency: {str(e)}")
+            raise DatabaseOperationError(f"Failed to create currency: {str(e)}")  # ✅ FIXED
     
     async def update_currency(self, currency_id: UUID, update_data: dict) -> Currency:
         """Update currency"""
@@ -118,7 +119,7 @@ class CurrencyRepository:
             
         except IntegrityError as e:
             await self.db.rollback()
-            raise DatabaseError(f"Failed to update currency: {str(e)}")
+            raise DatabaseOperationError(f"Failed to update currency: {str(e)}")  # ✅ FIXED
     
     async def activate_currency(self, currency_id: UUID) -> Currency:
         """Activate currency"""
@@ -166,13 +167,13 @@ class CurrencyRepository:
                 )
             )
         else:
-            now = datetime.utcnow()
+            # Get current rate (no effective_to or future effective_to)
             query = query.where(
                 and_(
-                    ExchangeRate.effective_from <= now,
+                    ExchangeRate.effective_from <= datetime.utcnow(),
                     or_(
                         ExchangeRate.effective_to.is_(None),
-                        ExchangeRate.effective_to > now
+                        ExchangeRate.effective_to > datetime.utcnow()
                     )
                 )
             )
@@ -180,10 +181,10 @@ class CurrencyRepository:
         query = query.options(
             selectinload(ExchangeRate.from_currency),
             selectinload(ExchangeRate.to_currency)
-        ).order_by(ExchangeRate.effective_from.desc())
+        )
         
         result = await self.db.execute(query)
-        return result.scalars().first()
+        return result.scalar_one_or_none()
     
     async def get_all_rates_for_currency(
         self,
@@ -199,14 +200,10 @@ class CurrencyRepository:
         )
         
         if not include_historical:
-            now = datetime.utcnow()
             query = query.where(
-                and_(
-                    ExchangeRate.effective_from <= now,
-                    or_(
-                        ExchangeRate.effective_to.is_(None),
-                        ExchangeRate.effective_to > now
-                    )
+                or_(
+                    ExchangeRate.effective_to.is_(None),
+                    ExchangeRate.effective_to > datetime.utcnow()
                 )
             )
         
@@ -259,7 +256,7 @@ class CurrencyRepository:
             
         except IntegrityError as e:
             await self.db.rollback()
-            raise DatabaseError(f"Failed to create exchange rate: {str(e)}")
+            raise DatabaseOperationError(f"Failed to create exchange rate: {str(e)}")  # ✅ FIXED
     
     async def update_exchange_rate(
         self,
@@ -275,47 +272,63 @@ class CurrencyRepository:
             if not rate:
                 raise ValidationError(f"Exchange rate {rate_id} not found")
             
+            # Update fields
             for key, value in update_data.items():
                 if hasattr(rate, key) and value is not None:
                     setattr(rate, key, value)
             
             await self.db.commit()
             await self.db.refresh(rate)
-            return rate
+            
+            # Reload with relationships
+            query = select(ExchangeRate).where(
+                ExchangeRate.id == rate.id
+            ).options(
+                selectinload(ExchangeRate.from_currency),
+                selectinload(ExchangeRate.to_currency)
+            )
+            result = await self.db.execute(query)
+            return result.scalar_one()
             
         except IntegrityError as e:
             await self.db.rollback()
-            raise DatabaseError(f"Failed to update exchange rate: {str(e)}")
+            raise DatabaseOperationError(f"Failed to update exchange rate: {str(e)}")  # ✅ FIXED
     
     async def get_rate_history(
         self,
         from_currency_id: UUID,
         to_currency_id: UUID,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
-    ) -> List[ExchangeRate]:
-        """Get historical exchange rates"""
-        query = select(ExchangeRate).where(
+        end_date: Optional[datetime] = None,
+        limit: int = 100
+    ) -> List[ExchangeRateHistory]:
+        """Get exchange rate history"""
+        # Get from_currency and to_currency codes
+        from_curr = await self.get_currency_by_id(from_currency_id)
+        to_curr = await self.get_currency_by_id(to_currency_id)
+        
+        if not from_curr or not to_curr:
+            return []
+        
+        query = select(ExchangeRateHistory).where(
             and_(
-                ExchangeRate.from_currency_id == from_currency_id,
-                ExchangeRate.to_currency_id == to_currency_id
+                ExchangeRateHistory.from_currency_code == from_curr.code,
+                ExchangeRateHistory.to_currency_code == to_curr.code
             )
         )
         
         if start_date:
-            query = query.where(ExchangeRate.effective_from >= start_date)
-        if end_date:
-            query = query.where(ExchangeRate.effective_from <= end_date)
+            query = query.where(ExchangeRateHistory.changed_at >= start_date)
         
-        query = query.options(
-            selectinload(ExchangeRate.from_currency),
-            selectinload(ExchangeRate.to_currency)
-        ).order_by(ExchangeRate.effective_from.desc())
+        if end_date:
+            query = query.where(ExchangeRateHistory.changed_at <= end_date)
+        
+        query = query.order_by(
+            ExchangeRateHistory.changed_at.desc()
+        ).limit(limit)
         
         result = await self.db.execute(query)
         return list(result.scalars().all())
-    
-    # ==================== Audit Operations ====================
     
     async def create_rate_history(self, history_data: dict) -> ExchangeRateHistory:
         """Create exchange rate history entry"""
@@ -325,6 +338,7 @@ class CurrencyRepository:
             await self.db.commit()
             await self.db.refresh(history)
             return history
+            
         except IntegrityError as e:
             await self.db.rollback()
-            raise DatabaseError(f"Failed to create rate history: {str(e)}")
+            raise DatabaseOperationError(f"Failed to create rate history: {str(e)}")  # ✅ FIXED

@@ -12,7 +12,8 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
-from app.core.exceptions import CEMSException
+from app.core.exceptions import CEMSException, handle_exception
+
 from app.api.v1 import api_router
 
 

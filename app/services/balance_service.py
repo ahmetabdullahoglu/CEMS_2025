@@ -36,7 +36,8 @@ class BalanceService:
     and should handle rollback on errors
     """
     
-    async def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
+
         self.db = db
         self.repo = BranchRepository(db)
     
@@ -112,7 +113,7 @@ class BalanceService:
             await self.db.flush()
             
             # Create history record
-            self._create_history_record(
+            await self._create_history_record(
                 branch_id=branch_id,
                 currency_id=currency_id,
                 change_type=change_type,
@@ -224,7 +225,7 @@ class BalanceService:
             Updated branch balance
         """
         try:
-            balance = self.repo.get_branch_balance(branch_id, currency_id)
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
             
             if not balance:
                 raise ValidationError(
@@ -243,7 +244,7 @@ class BalanceService:
             balance.reserved_balance -= amount
             balance.last_updated = datetime.utcnow()
             
-            self.db.flush()
+            await self.db.flush()
             
             logger.info(
                 f"Reserved balance released: Branch {branch_id}, "
@@ -287,7 +288,7 @@ class BalanceService:
             Updated branch balance
         """
         try:
-            balance = self.repo.get_branch_balance(branch_id, currency_id)
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
             
             if not balance:
                 raise ValidationError(
@@ -315,10 +316,10 @@ class BalanceService:
                     f"Balance would become negative: {balance.balance}"
                 )
             
-            self.db.flush()
+            await self.db.flush()
             
             # Create history record
-            self._create_history_record(
+            await self._create_history_record(
                 branch_id=branch_id,
                 currency_id=currency_id,
                 change_type=change_type,
@@ -368,7 +369,7 @@ class BalanceService:
             Reconciliation result with details
         """
         try:
-            balance = self.repo.get_branch_balance(branch_id, currency_id)
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
             
             if not balance:
                 raise ValidationError(
@@ -397,7 +398,7 @@ class BalanceService:
                 )
                 
                 # Update balance
-                self.update_balance(
+                await self.update_balance(
                     branch_id=branch_id,
                     currency_id=currency_id,
                     amount=difference,
@@ -414,7 +415,7 @@ class BalanceService:
             balance.last_reconciled_at = datetime.utcnow()
             balance.last_reconciled_by = performed_by
             
-            self.db.flush()
+            await self.db.flush()
             
             logger.info(
                 f"Balance reconciled: Branch {branch_id}, "
@@ -440,7 +441,7 @@ class BalanceService:
         Returns:
             Balance summary with all currencies
         """
-        balances = self.repo.get_all_branch_balances(branch_id)
+        balances = await self.repo.get_all_branch_balances(branch_id)
         
         summary = {
             'branch_id': str(branch_id),
@@ -501,7 +502,7 @@ class BalanceService:
             'notes': notes
         }
         
-        return self.repo.create_balance_history(history_data)
+        return await self.repo.create_balance_history(history_data)
     
     async def check_sufficient_balance(
         self,
@@ -520,7 +521,7 @@ class BalanceService:
         Returns:
             True if sufficient balance exists
         """
-        balance = self.repo.get_branch_balance(branch_id, currency_id)
+        balance = await self.repo.get_branch_balance(branch_id, currency_id)
         
         if not balance:
             return False
