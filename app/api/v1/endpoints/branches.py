@@ -1,6 +1,6 @@
 # app/api/v1/endpoints/branches.py
 """
-Branch API Endpoints
+Branch API Endpoints - FIXED VERSION
 REST API for branch management operations
 """
 
@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_async_db,
-    get_current_user,
     get_current_active_user,
     require_roles
 )
@@ -21,13 +20,10 @@ from app.schemas.branch import (
     BranchCreate, BranchUpdate, BranchResponse,
     BranchWithBalances, BranchListResponse,
     BranchBalanceResponse, BranchBalanceListResponse,
-    SetThresholdsRequest, BalanceHistoryFilter,
-    BranchBalanceHistoryResponse, BranchAlertResponse,
-    BranchAlertListResponse, ResolveAlertRequest,
-    ReconcileBalanceRequest, ReconcileBalanceResponse,
-    BranchStatistics, AssignManagerRequest
+    SetThresholdsRequest,
+    BranchStatistics
 )
-from app.db.models.branch import RegionEnum, AlertSeverity
+from app.db.models.branch import BranchBalance, RegionEnum
 from app.db.models.user import User
 from app.core.exceptions import (
     ResourceNotFoundError, ValidationError,
@@ -36,56 +32,60 @@ from app.core.exceptions import (
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
 router = APIRouter()
+
+
+# ==================== Helper Functions ====================
+
+def balance_to_response(balance: BranchBalance) -> dict:
+    """Convert BranchBalance model to response dict"""
+    return {
+        "id": balance.id,
+        "branch_id": balance.branch_id,
+        "currency_id": balance.currency_id,
+        "currency_code": balance.currency.code,
+        "currency_name": balance.currency.name_en,
+        "balance": balance.balance,
+        "reserved_balance": balance.reserved_balance,
+        "available_balance": balance.balance - balance.reserved_balance,
+        "minimum_threshold": balance.minimum_threshold,
+        "maximum_threshold": balance.maximum_threshold,
+        "last_updated": balance.updated_at,
+        "last_reconciled_at": balance.last_reconciled_at,
+    }
 
 
 # ==================== Branch CRUD Endpoints ====================
 
 @router.get("", response_model=BranchListResponse)
 async def list_branches(
-    region: Optional[RegionEnum] = Query(None, description="Filter by region"),
-    is_active: bool = Query(True, description="Filter by active status"),
-    include_balances: bool = Query(False, description="Include balance information"),
+    region: Optional[RegionEnum] = Query(None),
+    is_active: bool = Query(True),
+    include_balances: bool = Query(False),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    List all branches
-    
-    **Permissions:** Any authenticated user
-    
-    **Query Parameters:**
-    - region: Filter by specific region
-    - is_active: Show only active branches (default: true)
-    - include_balances: Include balance information in response
-    """
+    """List all branches"""
     try:
         service = BranchService(db)
-        branches = await service.get_all_branches(
-            region=region,
-            is_active=is_active
-        )
+        branches = await service.get_all_branches(region=region, is_active=is_active)
         
         if include_balances:
-            # Get balances for each branch
+            balance_service = BalanceService(db)
             branch_list = []
+            
             for branch in branches:
-                balance_service = BalanceService(db)
                 balances = await balance_service.get_branch_balances(branch.id)
+                balance_responses = [balance_to_response(b) for b in balances]
+                
                 branch_data = BranchWithBalances(
                     **BranchResponse.model_validate(branch).model_dump(),
-                    balances=balances
+                    balances=balance_responses
                 )
                 branch_list.append(branch_data)
             
-            # ✅ FIX: Use 'branches' field name, not 'data'
-            return BranchListResponse(
-                total=len(branch_list),
-                branches=branch_list
-            )
+            return BranchListResponse(total=len(branch_list), branches=branch_list)
         else:
-            # ✅ FIX: Use 'branches' field name, not 'data'
             return BranchListResponse(
                 total=len(branches),
                 branches=[BranchResponse.model_validate(b) for b in branches]
@@ -102,15 +102,11 @@ async def list_branches(
 @router.get("/{branch_id}", response_model=BranchWithBalances)
 async def get_branch(
     branch_id: UUID,
-    include_balances: bool = Query(True, description="Include balance information"),
+    include_balances: bool = Query(True),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Get branch by ID
-    
-    **Permissions:** Any authenticated user
-    """
+    """Get branch by ID"""
     try:
         service = BranchService(db)
         branch = await service.get_branch_by_id(branch_id)
@@ -118,16 +114,17 @@ async def get_branch(
         if not branch:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Branch {branch_id} not found"
+                detail=f"Branch not found"
             )
         
         if include_balances:
             balance_service = BalanceService(db)
             balances = await balance_service.get_branch_balances(branch_id)
+            balance_responses = [balance_to_response(b) for b in balances]
             
             return BranchWithBalances(
                 **BranchResponse.model_validate(branch).model_dump(),
-                balances=balances
+                balances=balance_responses
             )
         else:
             return BranchResponse.model_validate(branch)
@@ -142,36 +139,27 @@ async def get_branch(
         )
 
 
-@router.post(
-    "",
-    response_model=BranchResponse,
-    status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=BranchResponse, status_code=status.HTTP_201_CREATED)
 async def create_branch(
     branch_data: BranchCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_roles(["admin", "manager"]))
+    current_user: User = Depends(require_roles(["admin"]))
 ):
-    """
-    Create new branch
-    
-    **Permissions:** Admin or Manager only
-    """
+    """Create new branch (Admin only)"""
     try:
         service = BranchService(db)
         branch = await service.create_branch(
-            branch_data,
+            branch_data.model_dump(),
             current_user={"id": current_user.id, "username": current_user.username}
         )
         
-        logger.info(f"Branch {branch.code} created by user {current_user.username}")
+        logger.info(f"Branch {branch.code} created by {current_user.username}")
         return BranchResponse.model_validate(branch)
         
     except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BusinessRuleViolationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating branch: {str(e)}")
         raise HTTPException(
@@ -183,36 +171,29 @@ async def create_branch(
 @router.put("/{branch_id}", response_model=BranchResponse)
 async def update_branch(
     branch_id: UUID,
-    update_data: BranchUpdate,
+    branch_data: BranchUpdate,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_roles(["admin", "manager"]))
 ):
-    """
-    Update branch
-    
-    **Permissions:** Admin or Manager only
-    """
+    """Update branch (Admin/Manager only)"""
     try:
         service = BranchService(db)
         branch = await service.update_branch(
             branch_id,
-            update_data,
+            branch_data.model_dump(exclude_unset=True),
             current_user={"id": current_user.id, "username": current_user.username}
         )
         
-        logger.info(f"Branch {branch.code} updated by user {current_user.username}")
+        if not branch:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Branch not found")
+        
+        logger.info(f"Branch {branch_id} updated by {current_user.username}")
         return BranchResponse.model_validate(branch)
         
-    except ResourceNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+    except HTTPException:
+        raise
     except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Error updating branch {branch_id}: {str(e)}")
         raise HTTPException(
@@ -227,11 +208,7 @@ async def delete_branch(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_roles(["admin"]))
 ):
-    """
-    Delete branch (soft delete)
-    
-    **Permissions:** Admin only
-    """
+    """Delete branch - soft delete (Admin only)"""
     try:
         service = BranchService(db)
         await service.delete_branch(
@@ -239,19 +216,13 @@ async def delete_branch(
             current_user={"id": current_user.id, "username": current_user.username}
         )
         
-        logger.info(f"Branch {branch_id} deleted by user {current_user.username}")
+        logger.info(f"Branch {branch_id} deleted by {current_user.username}")
         return None
         
-    except ResourceNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Branch not found")
     except BusinessRuleViolationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Error deleting branch {branch_id}: {str(e)}")
         raise HTTPException(
@@ -268,19 +239,16 @@ async def get_branch_balances(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Get all currency balances for a branch
-    
-    **Permissions:** Any authenticated user
-    """
+    """Get all currency balances for a branch"""
     try:
         balance_service = BalanceService(db)
         balances = await balance_service.get_branch_balances(branch_id)
         
-        # ✅ FIX: Use 'balances' field name, not 'data'
+        balance_responses = [balance_to_response(b) for b in balances]
+        
         return BranchBalanceListResponse(
-            total=len(balances),
-            balances=balances
+            total=len(balance_responses),
+            balances=balance_responses
         )
         
     except Exception as e:
@@ -291,52 +259,37 @@ async def get_branch_balances(
         )
 
 
-@router.get(
-    "/{branch_id}/balances/{currency_id}",
-    response_model=BranchBalanceResponse
-)
+@router.get("/{branch_id}/balances/{currency_id}", response_model=BranchBalanceResponse)
 async def get_branch_currency_balance(
     branch_id: UUID,
     currency_id: UUID,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Get specific currency balance for a branch
-    
-    **Permissions:** Any authenticated user
-    """
+    """Get specific currency balance for a branch"""
     try:
         balance_service = BalanceService(db)
-        balance = await balance_service.get_branch_currency_balance(
-            branch_id,
-            currency_id
-        )
+        balance = await balance_service.get_branch_currency_balance(branch_id, currency_id)
         
         if not balance:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Balance not found for branch {branch_id} and currency {currency_id}"
+                detail="Balance not found"
             )
         
-        return BranchBalanceResponse.model_validate(balance)
+        return balance_to_response(balance)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(
-            f"Error getting balance for branch {branch_id}, currency {currency_id}: {str(e)}"
-        )
+        logger.error(f"Error getting balance: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve balance"
         )
 
 
-@router.put(
-    "/{branch_id}/balances/{currency_id}/thresholds",
-    response_model=BranchBalanceResponse
-)
+@router.put("/{branch_id}/balances/{currency_id}/thresholds", response_model=BranchBalanceResponse)
 async def set_balance_thresholds(
     branch_id: UUID,
     currency_id: UUID,
@@ -344,92 +297,30 @@ async def set_balance_thresholds(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(require_roles(["admin", "manager"]))
 ):
-    """
-    Set minimum and maximum balance thresholds
-    
-    **Permissions:** Admin or Manager only
-    """
+    """Set balance thresholds (Admin/Manager only)"""
     try:
         balance_service = BalanceService(db)
         balance = await balance_service.set_thresholds(
-            branch_id,
-            currency_id,
+            branch_id, currency_id,
             thresholds.minimum_threshold,
             thresholds.maximum_threshold,
             current_user={"id": current_user.id, "username": current_user.username}
         )
         
-        logger.info(
-            f"Thresholds updated for branch {branch_id}, currency {currency_id} "
-            f"by user {current_user.username}"
-        )
-        return BranchBalanceResponse.model_validate(balance)
+        logger.info(f"Thresholds updated for branch {branch_id}, currency {currency_id}")
+        return balance_to_response(balance)
         
-    except ResourceNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
     except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        logger.error(
-            f"Error setting thresholds for branch {branch_id}, currency {currency_id}: {str(e)}"
-        )
+        logger.error(f"Error setting thresholds: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to set thresholds"
         )
 
 
-# ==================== Branch Management Endpoints ====================
-
-@router.post("/{branch_id}/manager", response_model=BranchResponse)
-async def assign_manager(
-    branch_id: UUID,
-    assignment: AssignManagerRequest,
-    db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(require_roles(["admin"]))
-):
-    """
-    Assign manager to branch
-    
-    **Permissions:** Admin only
-    """
-    try:
-        service = BranchService(db)
-        branch = await service.assign_manager(
-            branch_id,
-            assignment.user_id,
-            current_user={"id": current_user.id, "username": current_user.username}
-        )
-        
-        logger.info(
-            f"Manager {assignment.user_id} assigned to branch {branch_id} "
-            f"by user {current_user.username}"
-        )
-        return BranchResponse.model_validate(branch)
-        
-    except ResourceNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Error assigning manager to branch {branch_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to assign manager"
-        )
-
+# ==================== Statistics Endpoint ====================
 
 @router.get("/{branch_id}/statistics", response_model=BranchStatistics)
 async def get_branch_statistics(
@@ -437,22 +328,52 @@ async def get_branch_statistics(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Get branch statistics and summary
-    
-    **Permissions:** Any authenticated user
-    """
+    """Get branch statistics with balances summary"""
     try:
+        # Get branch
         service = BranchService(db)
-        stats = await service.get_branch_statistics(branch_id)
+        branch = await service.get_branch_by_id(branch_id)
         
-        if not stats:
+        if not branch:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Branch {branch_id} not found"
+                detail="Branch not found"
             )
         
-        return stats
+        # Get balances
+        balance_service = BalanceService(db)
+        balances = await balance_service.get_branch_balances(branch_id)
+        
+        # Transform to summary format
+        balance_summaries = []
+        for balance in balances:
+            balance_summaries.append({
+                "currency_code": balance.currency.code,
+                "currency_name": balance.currency.name_en,
+                "balance": balance.balance,
+                "reserved": balance.reserved_balance,
+                "available": balance.balance - balance.reserved_balance,
+                "minimum_threshold": balance.minimum_threshold,
+                "maximum_threshold": balance.maximum_threshold,
+                "is_below_minimum": balance.minimum_threshold and balance.balance < balance.minimum_threshold,
+                "is_above_maximum": balance.maximum_threshold and balance.balance > balance.maximum_threshold,
+                "last_updated": balance.updated_at,
+                "last_reconciled": balance.last_reconciled_at,
+            })
+        
+        # Count active alerts (simplified - you can enhance this)
+        active_alerts = sum(1 for b in balance_summaries if b["is_below_minimum"] or b["is_above_maximum"])
+        
+        return BranchStatistics(
+            branch_id=branch.id,
+            branch_code=branch.code,
+            branch_name=branch.name_en,
+            region=branch.region.value,
+            is_main_branch=branch.is_main_branch,
+            total_currencies=len(balances),
+            balances=balance_summaries,
+            active_alerts=active_alerts
+        )
         
     except HTTPException:
         raise

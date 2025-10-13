@@ -229,6 +229,53 @@ class BranchService:
         """Get all branches with filtering"""
         return await self.repo.get_all_branches(region, is_active, include_balances)
     
+    # أضف هذه الدالة في app/services/branch_service.py
+# بعد دالة get_all_branches
+
+    async def get_branch_by_id(
+        self,
+        branch_id: UUID,
+        include_balances: bool = False
+    ) -> Optional[Branch]:
+        """
+        Get branch by ID
+        
+        Args:
+            branch_id: Branch UUID
+            include_balances: Include balance information
+            
+        Returns:
+            Branch object or None
+        """
+        try:
+            branch = await self.repo.get_branch_by_id(
+                branch_id,
+                include_balances=include_balances
+            )
+            return branch
+        except Exception as e:
+            logger.error(f"Error getting branch {branch_id}: {str(e)}")
+            raise
+
+    async def get_branch_by_code(
+        self,
+        code: str
+    ) -> Optional[Branch]:
+        """
+        Get branch by code
+        
+        Args:
+            code: Branch code (e.g., BR001)
+            
+        Returns:
+            Branch object or None
+        """
+        try:
+            branch = await self.repo.get_branch_by_code(code)
+            return branch
+        except Exception as e:
+            logger.error(f"Error getting branch by code {code}: {str(e)}")
+            raise
     async def get_user_branches(self, user_id: UUID) -> List[Branch]:
         """Get branches assigned to a user"""
         return await self.repo.get_user_branches(user_id)
