@@ -63,10 +63,10 @@ class BranchRepository:
         if filters:
             stmt = stmt.where(and_(*filters))
         
-        # Include relationships if requested
+        # ✅ FIX: Include currency relationship when loading balances
         if include_balances:
             stmt = stmt.options(
-                selectinload(Branch.balances),
+                selectinload(Branch.balances).selectinload(BranchBalance.currency),  # ← هذا السطر!
                 selectinload(Branch.manager)
             )
         

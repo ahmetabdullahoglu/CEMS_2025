@@ -674,3 +674,115 @@ class BalanceService:
         except Exception as e:
             logger.error(f"Error getting balance history: {str(e)}")
             raise DatabaseOperationError(f"Failed to retrieve balance history: {str(e)}")
+    
+    async def get_balance_summary(
+        self,
+        branch_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Get comprehensive balance summary for a branch
+        
+        Args:
+            branch_id: Branch UUID
+            
+        Returns:
+            Balance summary with statistics
+        """
+        try:
+            balances = await self.repo.get_all_branch_balances(branch_id)
+            
+            summary = {
+                'branch_id': str(branch_id),
+                'total_currencies': len(balances),
+                'balances': [],
+                'total_balance_usd_equivalent': 0,  # Can be calculated later
+                'alerts': {
+                    'below_minimum': 0,
+                    'above_maximum': 0
+                }
+            }
+            
+            for balance in balances:
+                balance_info = {
+                    'currency_code': balance.currency.code,
+                    'currency_name': balance.currency.name_en,
+                    'balance': float(balance.balance),
+                    'reserved': float(balance.reserved_balance),
+                    'available': float(balance.balance - balance.reserved_balance),
+                    'minimum_threshold': float(balance.minimum_threshold) if balance.minimum_threshold else None,
+                    'maximum_threshold': float(balance.maximum_threshold) if balance.maximum_threshold else None,
+                    'last_updated': balance.updated_at.isoformat(),
+                    'last_reconciled': balance.last_reconciled_at.isoformat() if balance.last_reconciled_at else None
+                }
+                
+                # Check alerts
+                if balance.minimum_threshold and balance.balance < balance.minimum_threshold:
+                    balance_info['is_below_minimum'] = True
+                    summary['alerts']['below_minimum'] += 1
+                else:
+                    balance_info['is_below_minimum'] = False
+                
+                if balance.maximum_threshold and balance.balance > balance.maximum_threshold:
+                    balance_info['is_above_maximum'] = True
+                    summary['alerts']['above_maximum'] += 1
+                else:
+                    balance_info['is_above_maximum'] = False
+                
+                summary['balances'].append(balance_info)
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Error getting balance summary for branch {branch_id}: {str(e)}")
+            raise DatabaseOperationError(f"Failed to retrieve balance summary: {str(e)}")
+    
+    async def get_branch_balance_details(
+        self,
+        branch_id: UUID,
+        currency_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Get detailed balance information for specific currency
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+            
+        Returns:
+            Detailed balance information
+        """
+        try:
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
+            
+            if not balance:
+                raise ValidationError(
+                    f"Balance not found for branch {branch_id} and currency {currency_id}"
+                )
+            
+            return {
+                'branch_id': str(branch_id),
+                'currency_id': str(currency_id),
+                'currency_code': balance.currency.code,
+                'currency_name': balance.currency.name_en,
+                'currency_symbol': balance.currency.symbol,
+                'balance': float(balance.balance),
+                'reserved_balance': float(balance.reserved_balance),
+                'available_balance': float(balance.balance - balance.reserved_balance),
+                'minimum_threshold': float(balance.minimum_threshold) if balance.minimum_threshold else None,
+                'maximum_threshold': float(balance.maximum_threshold) if balance.maximum_threshold else None,
+                'is_below_minimum': (
+                    balance.minimum_threshold is not None and 
+                    balance.balance < balance.minimum_threshold
+                ),
+                'is_above_maximum': (
+                    balance.maximum_threshold is not None and 
+                    balance.balance > balance.maximum_threshold
+                ),
+                'last_updated': balance.updated_at.isoformat(),
+                'last_reconciled_at': balance.last_reconciled_at.isoformat() if balance.last_reconciled_at else None,
+                'last_reconciled_by': str(balance.last_reconciled_by) if balance.last_reconciled_by else None
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting balance details: {str(e)}")
+            raise DatabaseOperationError(f"Failed to retrieve balance details: {str(e)}")

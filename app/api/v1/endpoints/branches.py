@@ -65,12 +65,28 @@ async def list_branches(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List all branches"""
+    """
+    List all branches
+    
+    **Permissions:** Any authenticated user
+    
+    **Query Parameters:**
+    - region: Filter by specific region
+    - is_active: Show only active branches (default: true)
+    - include_balances: Include balance information in response
+    """
     try:
         service = BranchService(db)
-        branches = await service.get_all_branches(region=region, is_active=is_active)
+        
+        # ✅ FIX: Pass include_balances to service
+        branches = await service.get_all_branches(
+            region=region,
+            is_active=is_active,
+            include_balances=include_balances  # ← هذا السطر كان ناقص!
+        )
         
         if include_balances:
+            # Transform branches with balances
             balance_service = BalanceService(db)
             branch_list = []
             

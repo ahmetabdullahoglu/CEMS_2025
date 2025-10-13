@@ -6,10 +6,8 @@ Business logic for branch administrative operations
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 from app.repositories.branch_repo import BranchRepository
 from app.services.balance_service import BalanceService
@@ -43,31 +41,13 @@ class BranchService:
         branch_data: Dict[str, Any],
         current_user: Dict[str, Any]
     ) -> Branch:
-        """
-        Create new branch
-        
-        Args:
-            branch_data: Branch creation data
-            current_user: Current authenticated user
-            
-        Returns:
-            Created branch
-            
-        Raises:
-            ValidationError: If validation fails
-            BusinessRuleViolationError: If business rules violated
-        """
-        logger.info(
-            f"Creating branch {branch_data.get('code')} "
-            f"by user {current_user['id']}"
-        )
+        """Create new branch"""
+        logger.info(f"Creating branch {branch_data.get('code')} by user {current_user['id']}")
         
         # Validate branch code format
         code = branch_data.get('code', '')
         if not code.startswith('BR') or not code[2:].isdigit():
-            raise ValidationError(
-                "Branch code must start with 'BR' followed by digits (e.g., BR001)"
-            )
+            raise ValidationError("Branch code must start with 'BR' followed by digits (e.g., BR001)")
         
         # Check if code already exists
         existing = await self.repo.get_branch_by_code(code)
@@ -79,16 +59,13 @@ class BranchService:
             main_branch = await self.repo.get_main_branch()
             if main_branch:
                 raise BusinessRuleViolationError(
-                    f"Main branch already exists: {main_branch.code}. "
-                    "Only one main branch is allowed."
+                    f"Main branch already exists: {main_branch.code}. Only one main branch is allowed."
                 )
         
         try:
-            # Add audit fields
             branch_data['created_by'] = current_user['id']
             branch_data['updated_by'] = current_user['id']
             
-            # Create branch
             branch = await self.repo.create_branch(branch_data)
             await self.db.commit()
             
@@ -106,20 +83,8 @@ class BranchService:
         update_data: Dict[str, Any],
         current_user: Dict[str, Any]
     ) -> Branch:
-        """
-        Update branch
-        
-        Args:
-            branch_id: Branch UUID
-            update_data: Update data
-            current_user: Current authenticated user
-            
-        Returns:
-            Updated branch
-        """
-        logger.info(
-            f"Updating branch {branch_id} by user {current_user['id']}"
-        )
+        """Update branch"""
+        logger.info(f"Updating branch {branch_id} by user {current_user['id']}")
         
         branch = await self.repo.get_branch_by_id(branch_id)
         if not branch:
@@ -129,15 +94,10 @@ class BranchService:
         if update_data.get('is_main_branch', False) and not branch.is_main_branch:
             main_branch = await self.repo.get_main_branch()
             if main_branch and main_branch.id != branch_id:
-                raise BusinessRuleViolationError(
-                    f"Main branch already exists: {main_branch.code}"
-                )
+                raise BusinessRuleViolationError(f"Main branch already exists: {main_branch.code}")
         
         try:
-            # Add audit field
             update_data['updated_by'] = current_user['id']
-            
-            # Update branch
             updated_branch = await self.repo.update_branch(branch_id, update_data)
             await self.db.commit()
             
@@ -154,40 +114,22 @@ class BranchService:
         branch_id: UUID,
         current_user: Dict[str, Any]
     ) -> bool:
-        """
-        Soft delete branch
-        
-        Args:
-            branch_id: Branch UUID
-            current_user: Current authenticated user
-            
-        Returns:
-            True if successful
-            
-        Raises:
-            BusinessRuleViolationError: If branch cannot be deleted
-        """
-        logger.info(
-            f"Deleting branch {branch_id} by user {current_user['id']}"
-        )
+        """Soft delete branch"""
+        logger.info(f"Deleting branch {branch_id} by user {current_user['id']}")
         
         branch = await self.repo.get_branch_by_id(branch_id, include_balances=True)
         if not branch:
             raise ResourceNotFoundError("Branch", branch_id)
         
-        # Check if main branch
         if branch.is_main_branch:
-            raise BusinessRuleViolationError(
-                "Cannot delete main branch"
-            )
+            raise BusinessRuleViolationError("Cannot delete main branch")
         
-        # Check if branch has balances (optional: you may want to allow this)
+        # Check if branch has balances
         if branch.balances:
             total_balance = sum(b.balance for b in branch.balances)
             if total_balance > 0:
                 raise BusinessRuleViolationError(
-                    f"Cannot delete branch with non-zero balances. "
-                    f"Total balance: {total_balance}"
+                    f"Cannot delete branch with non-zero balances. Total balance: {total_balance}"
                 )
         
         try:
@@ -202,22 +144,20 @@ class BranchService:
             logger.error(f"Failed to delete branch: {str(e)}")
             raise DatabaseOperationError(f"Branch deletion failed: {str(e)}")
     
-    async def get_branch(
+    # ==================== Branch Retrieval ====================
+    
+    async def get_branch_by_id(
         self,
         branch_id: UUID,
         include_balances: bool = False
-    ) -> Branch:
+    ) -> Optional[Branch]:
         """Get branch by ID"""
         branch = await self.repo.get_branch_by_id(branch_id, include_balances)
-        if not branch:
-            raise ResourceNotFoundError("Branch", branch_id)
         return branch
     
-    async def get_branch_by_code(self, code: str) -> Branch:
+    async def get_branch_by_code(self, code: str) -> Optional[Branch]:
         """Get branch by code"""
         branch = await self.repo.get_branch_by_code(code)
-        if not branch:
-            raise ResourceNotFoundError("Branch", code)
         return branch
     
     async def get_all_branches(
@@ -229,53 +169,6 @@ class BranchService:
         """Get all branches with filtering"""
         return await self.repo.get_all_branches(region, is_active, include_balances)
     
-    # أضف هذه الدالة في app/services/branch_service.py
-# بعد دالة get_all_branches
-
-    async def get_branch_by_id(
-        self,
-        branch_id: UUID,
-        include_balances: bool = False
-    ) -> Optional[Branch]:
-        """
-        Get branch by ID
-        
-        Args:
-            branch_id: Branch UUID
-            include_balances: Include balance information
-            
-        Returns:
-            Branch object or None
-        """
-        try:
-            branch = await self.repo.get_branch_by_id(
-                branch_id,
-                include_balances=include_balances
-            )
-            return branch
-        except Exception as e:
-            logger.error(f"Error getting branch {branch_id}: {str(e)}")
-            raise
-
-    async def get_branch_by_code(
-        self,
-        code: str
-    ) -> Optional[Branch]:
-        """
-        Get branch by code
-        
-        Args:
-            code: Branch code (e.g., BR001)
-            
-        Returns:
-            Branch object or None
-        """
-        try:
-            branch = await self.repo.get_branch_by_code(code)
-            return branch
-        except Exception as e:
-            logger.error(f"Error getting branch by code {code}: {str(e)}")
-            raise
     async def get_user_branches(self, user_id: UUID) -> List[Branch]:
         """Get branches assigned to a user"""
         return await self.repo.get_user_branches(user_id)
@@ -288,32 +181,15 @@ class BranchService:
         user_id: UUID,
         current_user: Dict[str, Any]
     ) -> Branch:
-        """
-        Assign manager to branch
-        
-        Args:
-            branch_id: Branch UUID
-            user_id: User UUID to assign as manager
-            current_user: Current authenticated user
-            
-        Returns:
-            Updated branch
-        """
-        logger.info(
-            f"Assigning user {user_id} as manager of branch {branch_id} "
-            f"by user {current_user['id']}"
-        )
+        """Assign manager to branch"""
+        logger.info(f"Assigning user {user_id} as manager of branch {branch_id}")
         
         branch = await self.repo.get_branch_by_id(branch_id)
         if not branch:
             raise ResourceNotFoundError("Branch", branch_id)
         
         try:
-            update_data = {
-                'manager_id': user_id,
-                'updated_by': current_user['id']
-            }
-            
+            update_data = {'manager_id': user_id, 'updated_by': current_user['id']}
             updated_branch = await self.repo.update_branch(branch_id, update_data)
             await self.db.commit()
             
@@ -332,16 +208,7 @@ class BranchService:
         branch_id: UUID,
         currency_id: UUID
     ) -> Dict[str, Any]:
-        """
-        Get branch balance for specific currency
-        
-        Args:
-            branch_id: Branch UUID
-            currency_id: Currency UUID
-            
-        Returns:
-            Balance information
-        """
+        """Get branch balance for specific currency"""
         balance = await self.repo.get_branch_balance(branch_id, currency_id)
         if not balance:
             raise ResourceNotFoundError(
@@ -355,16 +222,46 @@ class BranchService:
             'currency_name': balance.currency.name_en,
             'balance': float(balance.balance),
             'reserved_balance': float(balance.reserved_balance),
-            'available_balance': float(balance.available_balance),
+            'available_balance': float(balance.balance - balance.reserved_balance),
             'minimum_threshold': float(balance.minimum_threshold) if balance.minimum_threshold else None,
             'maximum_threshold': float(balance.maximum_threshold) if balance.maximum_threshold else None,
-            'last_updated': balance.last_updated.isoformat(),
+            'last_updated': balance.updated_at.isoformat(),
             'last_reconciled_at': balance.last_reconciled_at.isoformat() if balance.last_reconciled_at else None
         }
-    
-    async def get_all_balances(self, branch_id: UUID) -> Dict[str, Any]:
-        """Get all balances for a branch"""
-        return self.balance_service.get_balance_summary(branch_id)
+    async def get_all_balances(self, branch_id: UUID) -> List[Dict[str, Any]]:
+        """
+        Get all balances for a branch with summary
+        
+        Args:
+            branch_id: Branch UUID
+            
+        Returns:
+            List of balance summaries
+        """
+        balances = await self.repo.get_all_branch_balances(branch_id)
+        
+        return [
+            {
+                'currency_code': balance.currency.code,
+                'currency_name': balance.currency.name_en,
+                'balance': float(balance.balance),
+                'reserved': float(balance.reserved_balance),
+                'available': float(balance.balance - balance.reserved_balance),
+                'minimum_threshold': float(balance.minimum_threshold) if balance.minimum_threshold else None,
+                'maximum_threshold': float(balance.maximum_threshold) if balance.maximum_threshold else None,
+                'is_below_minimum': (
+                    balance.minimum_threshold is not None and 
+                    balance.balance < balance.minimum_threshold
+                ),
+                'is_above_maximum': (
+                    balance.maximum_threshold is not None and 
+                    balance.balance > balance.maximum_threshold
+                ),
+                'last_updated': balance.updated_at.isoformat(),
+                'last_reconciled': balance.last_reconciled_at.isoformat() if balance.last_reconciled_at else None
+            }
+            for balance in balances
+        ]
     
     async def set_balance_thresholds(
         self,
@@ -374,25 +271,10 @@ class BranchService:
         maximum_threshold: Optional[float],
         current_user: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Set balance thresholds for alerts
+        """Set balance thresholds for alerts"""
+        logger.info(f"Setting thresholds for branch {branch_id}, currency {currency_id}")
         
-        Args:
-            branch_id: Branch UUID
-            currency_id: Currency UUID
-            minimum_threshold: Minimum balance threshold
-            maximum_threshold: Maximum balance threshold
-            current_user: Current authenticated user
-            
-        Returns:
-            Updated balance information
-        """
-        logger.info(
-            f"Setting thresholds for branch {branch_id}, currency {currency_id} "
-            f"by user {current_user['id']}"
-        )
-        
-        balance = self.repo.get_branch_balance(branch_id, currency_id)
+        balance = await self.repo.get_branch_balance(branch_id, currency_id)
         if not balance:
             raise ResourceNotFoundError(
                 "BranchBalance",
@@ -402,15 +284,10 @@ class BranchService:
         # Validate thresholds
         if minimum_threshold and minimum_threshold < 0:
             raise ValidationError("Minimum threshold cannot be negative")
-        
         if maximum_threshold and maximum_threshold < 0:
             raise ValidationError("Maximum threshold cannot be negative")
-        
-        if (minimum_threshold and maximum_threshold and 
-            minimum_threshold >= maximum_threshold):
-            raise ValidationError(
-                "Minimum threshold must be less than maximum threshold"
-            )
+        if (minimum_threshold and maximum_threshold and minimum_threshold >= maximum_threshold):
+            raise ValidationError("Minimum threshold must be less than maximum threshold")
         
         try:
             balance.minimum_threshold = minimum_threshold
@@ -428,51 +305,13 @@ class BranchService:
     
     # ==================== Alert Management ====================
     
-    async def check_balance_alerts(self, branch_id: UUID) -> List[Dict[str, Any]]:
-        """
-        Check for balance alerts
-        
-        Args:
-            branch_id: Branch UUID
-            
-        Returns:
-            List of active alerts
-        """
-        alerts = await self.repo.get_branch_alerts(
-            branch_id,
-            is_resolved=False
-        )
-        
-        return [
-            {
-                'id': str(alert.id),
-                'alert_type': alert.alert_type.value,
-                'severity': alert.severity.value,
-                'title': alert.title,
-                'message': alert.message,
-                'triggered_at': alert.triggered_at.isoformat(),
-                'currency_code': alert.currency.code if alert.currency else None
-            }
-            for alert in alerts
-        ]
-    
     async def get_alerts(
         self,
         branch_id: UUID,
         is_resolved: Optional[bool] = None,
         severity: Optional[AlertSeverity] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Get branch alerts with filtering
-        
-        Args:
-            branch_id: Branch UUID
-            is_resolved: Filter by resolution status
-            severity: Filter by severity
-            
-        Returns:
-            List of alerts
-        """
+        """Get branch alerts with filtering"""
         alerts = await self.repo.get_branch_alerts(branch_id, is_resolved, severity)
         
         return [
@@ -499,31 +338,14 @@ class BranchService:
         resolution_notes: str,
         current_user: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Resolve an alert
-        
-        Args:
-            alert_id: Alert UUID
-            resolution_notes: Notes about resolution
-            current_user: Current authenticated user
-            
-        Returns:
-            Resolved alert information
-        """
-        logger.info(
-            f"Resolving alert {alert_id} by user {current_user['id']}"
-        )
+        """Resolve an alert"""
+        logger.info(f"Resolving alert {alert_id} by user {current_user['id']}")
         
         try:
-            alert = await self.repo.resolve_alert(
-                alert_id,
-                current_user['id'],
-                resolution_notes
-            )
+            alert = await self.repo.resolve_alert(alert_id, current_user['id'], resolution_notes)
             await self.db.commit()
             
             logger.info(f"Alert {alert_id} resolved successfully")
-            
             return {
                 'id': str(alert.id),
                 'is_resolved': True,
@@ -540,22 +362,13 @@ class BranchService:
     # ==================== Statistics & Reports ====================
     
     async def get_branch_statistics(self, branch_id: UUID) -> Dict[str, Any]:
-        """
-        Get comprehensive branch statistics
-        
-        Args:
-            branch_id: Branch UUID
-            
-        Returns:
-            Branch statistics
-        """
+        """Get comprehensive branch statistics"""
         branch = await self.repo.get_branch_by_id(branch_id, include_balances=True)
         if not branch:
             raise ResourceNotFoundError("Branch", branch_id)
         
         stats = await self.repo.get_branch_statistics(branch_id)
         
-        # Add branch details
         stats['branch'] = {
             'code': branch.code,
             'name_en': branch.name_en,
@@ -575,25 +388,9 @@ class BranchService:
         end_date: Optional[datetime] = None,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
-        """
-        Get balance history with filtering
-        
-        Args:
-            branch_id: Branch UUID
-            currency_id: Currency UUID (optional)
-            start_date: Start date filter
-            end_date: End date filter
-            limit: Maximum records
-            
-        Returns:
-            List of balance history records
-        """
+        """Get balance history with filtering"""
         history = await self.repo.get_balance_history(
-            branch_id,
-            currency_id,
-            start_date,
-            end_date,
-            limit
+            branch_id, currency_id, start_date, end_date, limit
         )
         
         return [
