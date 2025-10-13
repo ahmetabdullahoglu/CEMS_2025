@@ -95,7 +95,12 @@ class Branch(BaseModel, UserTrackingMixin):
     
     # Location Details
     region = Column(
-        Enum(RegionEnum),
+        Enum(
+            RegionEnum,
+            values_callable=lambda obj: [e.value for e in obj],  # استخدم القيمة وليس الاسم
+            name="regionenum",
+            create_type=False  # الـ type موجود في قاعدة البيانات
+        ),
         nullable=False,
         index=True,
         comment="Geographic region of the branch"

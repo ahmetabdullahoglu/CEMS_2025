@@ -528,3 +528,149 @@ class BalanceService:
         
         available = balance.balance - balance.reserved_balance
         return available >= required_amount
+    
+    # أضف هذه الدوال في app/services/balance_service.py
+    # بعد دالة check_sufficient_balance
+
+    async def get_branch_balances(
+        self,
+        branch_id: UUID
+    ) -> list[BranchBalance]:
+        """
+        Get all currency balances for a branch
+        
+        Args:
+            branch_id: Branch UUID
+            
+        Returns:
+            List of BranchBalance objects
+        """
+        try:
+            balances = await self.repo.get_all_branch_balances(branch_id)
+            return balances
+        except Exception as e:
+            logger.error(f"Error getting balances for branch {branch_id}: {str(e)}")
+            raise DatabaseOperationError(f"Failed to retrieve branch balances: {str(e)}")
+    
+    async def get_branch_currency_balance(
+        self,
+        branch_id: UUID,
+        currency_id: UUID
+    ) -> Optional[BranchBalance]:
+        """
+        Get specific currency balance for a branch
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+            
+        Returns:
+            BranchBalance object or None
+        """
+        try:
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
+            return balance
+        except Exception as e:
+            logger.error(
+                f"Error getting balance for branch {branch_id}, currency {currency_id}: {str(e)}"
+            )
+            raise DatabaseOperationError(f"Failed to retrieve balance: {str(e)}")
+    
+    async def set_thresholds(
+        self,
+        branch_id: UUID,
+        currency_id: UUID,
+        minimum_threshold: Optional[Decimal],
+        maximum_threshold: Optional[Decimal],
+        current_user: Optional[Dict[str, Any]] = None
+    ) -> BranchBalance:
+        """
+        Set balance thresholds for alerts
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+            minimum_threshold: Minimum balance threshold
+            maximum_threshold: Maximum balance threshold
+            current_user: User who is setting thresholds
+            
+        Returns:
+            Updated BranchBalance object
+        """
+        # Validate thresholds
+        if minimum_threshold is not None and minimum_threshold < 0:
+            raise ValidationError("Minimum threshold cannot be negative")
+        
+        if maximum_threshold is not None and maximum_threshold < 0:
+            raise ValidationError("Maximum threshold cannot be negative")
+        
+        if (minimum_threshold is not None and 
+            maximum_threshold is not None and 
+            minimum_threshold >= maximum_threshold):
+            raise ValidationError("Minimum threshold must be less than maximum threshold")
+        
+        try:
+            # Get existing balance
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
+            
+            if not balance:
+                raise ValidationError(
+                    f"Balance not found for branch {branch_id} and currency {currency_id}"
+                )
+            
+            # Update thresholds
+            update_data = {}
+            if minimum_threshold is not None:
+                update_data['minimum_threshold'] = minimum_threshold
+            if maximum_threshold is not None:
+                update_data['maximum_threshold'] = maximum_threshold
+            
+            updated_balance = await self.repo.update_branch_balance(
+                balance.id,
+                update_data
+            )
+            
+            logger.info(
+                f"Thresholds updated for branch {branch_id}, currency {currency_id} "
+                f"by user {current_user.get('username') if current_user else 'system'}"
+            )
+            
+            return updated_balance
+            
+        except Exception as e:
+            logger.error(f"Error setting thresholds: {str(e)}")
+            raise DatabaseOperationError(f"Failed to set thresholds: {str(e)}")
+    
+    async def get_balance_history(
+        self,
+        branch_id: UUID,
+        currency_id: Optional[UUID] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        limit: int = 100
+    ) -> list[BranchBalanceHistory]:
+        """
+        Get balance change history
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Optional currency filter
+            start_date: Optional start date
+            end_date: Optional end date
+            limit: Maximum number of records
+            
+        Returns:
+            List of BranchBalanceHistory records
+        """
+        try:
+            history = await self.repo.get_balance_history(
+                branch_id=branch_id,
+                currency_id=currency_id,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit
+            )
+            return history
+        except Exception as e:
+            logger.error(f"Error getting balance history: {str(e)}")
+            raise DatabaseOperationError(f"Failed to retrieve balance history: {str(e)}")
