@@ -6,6 +6,7 @@ REST API for branch management operations with better error handling
 
 from typing import List, Optional, Union
 from uuid import UUID
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,10 +22,24 @@ from app.schemas.branch import (
     BranchWithBalances, BranchListResponse,
     BranchBalanceResponse, BranchBalanceListResponse,
     SetThresholdsRequest,
-    BranchStatistics
+    BranchStatistics,
+    UserAssignmentRequest,  # ← يجب إضافة
+    ReconcileBalanceRequest,  # موجود باسم آخر
+    ReconcileBalanceResponse,  # موجود باسم آخر
+    BranchAlertResponse,  # موجود
+    ResolveAlertRequest,  # موجود
+    BranchBalanceHistoryResponse,  # موجود
+    BalanceHistoryResponse, 
+    ResolveAlertRequest,
+    ReconciliationResponse,
+    ReconciliationRequest
 )
+
+# من user schemas
+from app.schemas.user import UserResponse  # موجود
 from app.db.models.branch import BranchBalance, RegionEnum
 from app.db.models.user import User
+from app.schemas.user import UserResponse
 from app.core.exceptions import (
     ResourceNotFoundError, ValidationError,
     BusinessRuleViolationError
@@ -458,6 +473,380 @@ async def get_branch_currency_balance(
             detail="Failed to retrieve balance"
         )
 
+# ==================== User Assignment Endpoints ====================
+
+@router.get("/{branch_id}/users", response_model=List[UserResponse])
+async def get_branch_users(
+    branch_id: UUID,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get all users assigned to a branch
+    
+    **Permissions:** Any authenticated user
+    """
+    try:
+        service = BranchService(db)
+        
+        # Get branch to verify it exists
+        branch = await service.get_branch_by_id(branch_id)
+        if not branch:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Branch not found"
+            )
+        
+        # Get users
+        from app.repositories.user_repo import UserRepository
+        user_repo = UserRepository(db)
+        users = await user_repo.get_branch_users(branch_id)
+        
+        return users
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting branch users: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve branch users"
+        )
+
+
+@router.post("/{branch_id}/users", status_code=status.HTTP_201_CREATED)
+async def assign_users_to_branch(
+    branch_id: UUID,
+    request: UserAssignmentRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin", "manager"]))
+):
+    """
+    Assign multiple users to a branch
+    
+    **Permissions:** Admin or Manager only
+    """
+    try:
+        service = BranchService(db)
+        await service.assign_users_to_branch(
+            branch_id,
+            request.user_ids,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
+        
+        logger.info(
+            f"{len(request.user_ids)} users assigned to branch {branch_id} "
+            f"by {current_user.username}"
+        )
+        
+        return {"message": f"{len(request.user_ids)} users assigned successfully"}
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Branch not found")
+    except Exception as e:
+        logger.error(f"Error assigning users: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to assign users"
+        )
+
+
+@router.delete("/{branch_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_user_from_branch(
+    branch_id: UUID,
+    user_id: UUID,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin", "manager"]))
+):
+    """
+    Remove user from branch
+    
+    **Permissions:** Admin or Manager only
+    """
+    try:
+        service = BranchService(db)
+        await service.remove_user_from_branch(
+            branch_id,
+            user_id,
+            current_user={"id": current_user.id, "username": current_user.username}
+        )
+        
+        logger.info(
+            f"User {user_id} removed from branch {branch_id} "
+            f"by {current_user.username}"
+        )
+        
+        return None
+        
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Branch not found")
+    except Exception as e:
+        logger.error(f"Error removing user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove user"
+        )
+
+
+# ==================== Alert Endpoints ====================
+
+@router.get("/{branch_id}/alerts", response_model=List[BranchAlertResponse])
+async def get_branch_alerts(
+    branch_id: UUID,
+    is_resolved: bool = Query(False, description="Show resolved alerts"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get branch alerts
+    
+    **Permissions:** Any authenticated user
+    
+    **Query Parameters:**
+    - is_resolved: Filter by resolution status (default: False - show unresolved)
+    """
+    try:
+        service = BranchService(db)
+        
+        # Verify branch exists
+        branch = await service.get_branch_by_id(branch_id)
+        if not branch:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Branch not found"
+            )
+        
+        # Get alerts from repository
+        from app.repositories.branch_repo import BranchRepository
+        repo = BranchRepository(db)
+        alerts = await repo.get_branch_alerts(branch_id, is_resolved)
+        
+        # Transform to response
+        alert_responses = []
+        for alert in alerts:
+            alert_responses.append(BranchAlertResponse(
+                id=alert.id,
+                branch_id=alert.branch_id,
+                currency_id=alert.currency_id,
+                currency_code=alert.currency.code,
+                alert_type=alert.alert_type.value,
+                severity=alert.severity.value,
+                title=alert.title,
+                message=alert.message,
+                triggered_at=alert.triggered_at,
+                is_resolved=alert.is_resolved,
+                resolved_at=alert.resolved_at,
+                resolved_by=alert.resolved_by,
+                resolution_notes=alert.resolution_notes
+            ))
+        
+        return alert_responses
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting alerts: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve alerts"
+        )
+
+
+@router.put("/alerts/{alert_id}/resolve", response_model=BranchAlertResponse)
+async def resolve_alert(
+    alert_id: UUID,
+    request: ResolveAlertRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin", "manager"]))
+):
+    """
+    Resolve a branch alert
+    
+    **Permissions:** Admin or Manager only
+    """
+    try:
+        from app.repositories.branch_repo import BranchRepository
+        repo = BranchRepository(db)
+        
+        alert = await repo.resolve_alert(
+            alert_id,
+            resolved_by=current_user.id,
+            resolution_notes=request.resolution_notes
+        )
+        
+        await db.commit()
+        
+        logger.info(f"Alert {alert_id} resolved by {current_user.username}")
+        
+        return BranchAlertResponse(
+            id=alert.id,
+            branch_id=alert.branch_id,
+            currency_id=alert.currency_id,
+            currency_code=alert.currency.code,
+            alert_type=alert.alert_type.value,
+            severity=alert.severity.value,
+            title=alert.title,
+            message=alert.message,
+            triggered_at=alert.triggered_at,
+            is_resolved=alert.is_resolved,
+            resolved_at=alert.resolved_at,
+            resolved_by=alert.resolved_by,
+            resolution_notes=alert.resolution_notes
+        )
+        
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error resolving alert: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve alert"
+        )
+
+
+# ==================== Reconciliation Endpoint ====================
+
+@router.post(
+    "/{branch_id}/balances/{currency_id}/reconcile",
+    response_model=ReconciliationResponse
+)
+async def reconcile_balance(
+    branch_id: UUID,
+    currency_id: UUID,
+    request: ReconciliationRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(require_roles(["admin", "manager"]))
+):
+    """
+    Reconcile branch balance with actual count
+    
+    **Permissions:** Admin or Manager only
+    
+    This endpoint compares the system balance with the actual counted balance
+    and creates an adjustment if there's a difference.
+    """
+    try:
+        balance_service = BalanceService(db)
+        
+        result = await balance_service.reconcile_branch_balance(
+            branch_id=branch_id,
+            currency_id=currency_id,
+            actual_balance=request.actual_balance,
+            reconciled_by=current_user.id,
+            notes=request.notes
+        )
+        
+        await db.commit()
+        
+        logger.info(
+            f"Balance reconciled for branch {branch_id}, currency {currency_id} "
+            f"by {current_user.username}"
+        )
+        
+        return ReconciliationResponse(**result)
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error reconciling balance: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reconcile balance"
+        )
+
+
+# ==================== Balance History Endpoint ====================
+
+@router.get(
+    "/{branch_id}/balances/{currency_id}/history",
+    response_model=BalanceHistoryResponse
+)
+async def get_balance_history(
+    branch_id: UUID,
+    currency_id: UUID,
+    date_from: Optional[datetime] = Query(None, description="Start date (ISO format)"),
+    date_to: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum records to return"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get balance change history
+    
+    **Permissions:** Any authenticated user
+    
+    **Query Parameters:**
+    - date_from: Filter records from this date (ISO format)
+    - date_to: Filter records until this date (ISO format)
+    - limit: Maximum number of records (1-500, default: 100)
+    """
+    try:
+        service = BranchService(db)
+        
+        # Verify branch exists
+        branch = await service.get_branch_by_id(branch_id)
+        if not branch:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Branch not found"
+            )
+        
+        # Get balance to verify currency exists for branch
+        balance_service = BalanceService(db)
+        balance = await balance_service.get_branch_currency_balance(branch_id, currency_id)
+        
+        if not balance:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Balance not found for this branch and currency"
+            )
+        
+        # Get history
+        history = await balance_service.get_balance_history(
+            branch_id=branch_id,
+            currency_id=currency_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit
+        )
+        
+        # Transform to response
+        history_records = [
+            BalanceHistoryRecord(
+                id=record.id,
+                change_type=record.change_type.value,
+                amount=record.amount,
+                balance_before=record.balance_before,
+                balance_after=record.balance_after,
+                performed_at=record.performed_at,
+                performed_by=record.performed_by,
+                reference_id=record.reference_id,
+                reference_type=record.reference_type,
+                notes=record.notes
+            )
+            for record in history
+        ]
+        
+        return BalanceHistoryResponse(
+            branch_id=branch_id,
+            currency_id=currency_id,
+            currency_code=balance.currency.code,
+            total_records=len(history_records),
+            history=history_records
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting balance history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve balance history"
+        )
 
 # Continue with other endpoints...
 # (The rest of the endpoints remain the same but with improved error handling)

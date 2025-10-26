@@ -407,3 +407,144 @@ class BranchService:
             }
             for record in history
         ]
+    
+
+    async def assign_users_to_branch(
+        self,
+        branch_id: UUID,
+        user_ids: List[UUID],
+        current_user: Dict[str, Any]
+    ) -> Branch:
+        """
+        Assign multiple users to a branch
+        
+        Args:
+            branch_id: Branch UUID
+            user_ids: List of user UUIDs to assign
+            current_user: Current user performing the action
+            
+        Returns:
+            Updated branch with users
+            
+        Raises:
+            ResourceNotFoundError: If branch not found
+            ValidationError: If invalid user IDs
+        """
+        logger.info(f"Assigning {len(user_ids)} users to branch {branch_id}")
+        
+        # Get branch
+        branch = await self.repo.get_branch_by_id(branch_id)
+        if not branch:
+            raise ResourceNotFoundError("Branch", branch_id)
+        
+        # Validate all users exist
+        from app.repositories.user_repo import UserRepository
+        user_repo = UserRepository(self.db)
+        
+        for user_id in user_ids:
+            user = await user_repo.get_user_by_id(user_id)
+            if not user:
+                raise ValidationError(f"User {user_id} not found")
+            if not user.is_active:
+                raise ValidationError(f"User {user_id} is not active")
+        
+        try:
+            # Assign users to branch (using many-to-many relationship)
+            await self.repo.assign_users_to_branch(branch_id, user_ids)
+            await self.db.commit()
+            
+            logger.info(f"Successfully assigned {len(user_ids)} users to branch {branch.code}")
+            return branch
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to assign users: {str(e)}")
+            raise DatabaseOperationError(f"User assignment failed: {str(e)}")
+
+
+    async def remove_user_from_branch(
+        self,
+        branch_id: UUID,
+        user_id: UUID,
+        current_user: Dict[str, Any]
+    ) -> bool:
+        """
+        Remove a user from branch
+        
+        Args:
+            branch_id: Branch UUID
+            user_id: User UUID to remove
+            current_user: Current user performing the action
+            
+        Returns:
+            True if successful
+        """
+        logger.info(f"Removing user {user_id} from branch {branch_id}")
+        
+        branch = await self.repo.get_branch_by_id(branch_id)
+        if not branch:
+            raise ResourceNotFoundError("Branch", branch_id)
+        
+        try:
+            await self.repo.remove_user_from_branch(branch_id, user_id)
+            await self.db.commit()
+            
+            logger.info(f"Successfully removed user {user_id} from branch {branch.code}")
+            return True
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to remove user: {str(e)}")
+            raise DatabaseOperationError(f"User removal failed: {str(e)}")
+
+
+    async def check_balance_alerts(
+        self,
+        branch_id: UUID
+    ) -> List[BranchAlert]:
+        """
+        Check and return active balance alerts for a branch
+        
+        Args:
+            branch_id: Branch UUID
+            
+        Returns:
+            List of active alerts
+        """
+        logger.info(f"Checking balance alerts for branch {branch_id}")
+        
+        branch = await self.repo.get_branch_by_id(branch_id)
+        if not branch:
+            raise ResourceNotFoundError("Branch", branch_id)
+        
+        # Get all branch balances
+        balances = await self.balance_service.get_branch_balances(branch_id)
+        
+        alerts = []
+        
+        for balance in balances:
+            # Check low balance
+            if balance.is_below_minimum():
+                alert = await self.repo.get_or_create_alert(
+                    branch_id=branch_id,
+                    currency_id=balance.currency_id,
+                    alert_type=BalanceAlertType.LOW_BALANCE,
+                    severity=AlertSeverity.WARNING,
+                    title=f"Low Balance Alert - {balance.currency.code}",
+                    message=f"Balance ({balance.balance}) is below minimum threshold ({balance.minimum_threshold})"
+                )
+                alerts.append(alert)
+            
+            # Check high balance
+            if balance.is_above_maximum():
+                alert = await self.repo.get_or_create_alert(
+                    branch_id=branch_id,
+                    currency_id=balance.currency_id,
+                    alert_type=BalanceAlertType.HIGH_BALANCE,
+                    severity=AlertSeverity.INFO,
+                    title=f"High Balance Alert - {balance.currency.code}",
+                    message=f"Balance ({balance.balance}) is above maximum threshold ({balance.maximum_threshold})"
+                )
+                alerts.append(alert)
+        
+        return alerts

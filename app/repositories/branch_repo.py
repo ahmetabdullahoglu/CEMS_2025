@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.branch import (
     Branch, BranchBalance, BranchBalanceHistory, BranchAlert,
-    RegionEnum, BalanceAlertType, AlertSeverity
+    RegionEnum, BalanceAlertType, AlertSeverity, BalanceChangeType  
 )
 from app.db.models.currency import Currency
 from app.db.models.user import User
@@ -22,6 +22,7 @@ from app.core.exceptions import (
     DatabaseOperationError,
     ValidationError
 )
+
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -517,3 +518,203 @@ class BranchRepository:
             await self.db.rollback()
             logger.error(f"Failed to resolve alert: {str(e)}")
             raise DatabaseOperationError(f"Alert resolution failed: {str(e)}")
+
+
+    async def assign_users_to_branch(
+        self,
+        branch_id: UUID,
+        user_ids: List[UUID]
+    ) -> Branch:
+        """
+        Assign users to branch using many-to-many relationship
+        
+        Args:
+            branch_id: Branch UUID
+            user_ids: List of user UUIDs
+            
+        Returns:
+            Branch with updated users
+        """
+        from app.db.models.user import user_branches
+        
+        # Get branch
+        branch = await self.get_branch_by_id(branch_id)
+        if not branch:
+            raise ResourceNotFoundError("Branch", branch_id)
+        
+        # Clear existing assignments
+        stmt_delete = user_branches.delete().where(
+            user_branches.c.branch_id == branch_id
+        )
+        await self.db.execute(stmt_delete)
+        
+        # Add new assignments
+        for user_id in user_ids:
+            stmt_insert = user_branches.insert().values(
+                branch_id=branch_id,
+                user_id=user_id
+            )
+            await self.db.execute(stmt_insert)
+        
+        await self.db.flush()
+        
+        return branch
+
+
+    async def remove_user_from_branch(
+        self,
+        branch_id: UUID,
+        user_id: UUID
+    ) -> bool:
+        """
+        Remove a user from branch
+        
+        Args:
+            branch_id: Branch UUID
+            user_id: User UUID
+            
+        Returns:
+            True if successful
+        """
+        from app.db.models.user import user_branches
+        
+        stmt = user_branches.delete().where(
+            and_(
+                user_branches.c.branch_id == branch_id,
+                user_branches.c.user_id == user_id
+            )
+        )
+        
+        result = await self.db.execute(stmt)
+        await self.db.flush()
+        
+        return result.rowcount > 0
+
+
+    async def get_or_create_alert(
+        self,
+        branch_id: UUID,
+        currency_id: UUID,
+        alert_type: BalanceAlertType,
+        severity: AlertSeverity,
+        title: str,
+        message: str
+    ) -> BranchAlert:
+        """
+        Get existing unresolved alert or create new one
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+            alert_type: Type of alert
+            severity: Alert severity
+            title: Alert title
+            message: Alert message
+            
+        Returns:
+            BranchAlert instance
+        """
+        # Check if alert already exists
+        stmt = select(BranchAlert).where(
+            and_(
+                BranchAlert.branch_id == branch_id,
+                BranchAlert.currency_id == currency_id,
+                BranchAlert.alert_type == alert_type,
+                BranchAlert.is_resolved == False
+            )
+        )
+        
+        result = await self.db.execute(stmt)
+        alert = result.scalar_one_or_none()
+        
+        if not alert:
+            # Create new alert
+            alert = BranchAlert(
+                id=uuid.uuid4(),
+                branch_id=branch_id,
+                currency_id=currency_id,
+                alert_type=alert_type,
+                severity=severity,
+                title=title,
+                message=message,
+                triggered_at=datetime.utcnow()
+            )
+            self.db.add(alert)
+            await self.db.flush()
+        
+        return alert
+
+
+    async def get_balance_history(
+        self,
+        branch_id: UUID,
+        currency_id: UUID,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        change_type: Optional[BalanceChangeType] = None,
+        limit: int = 100
+    ) -> List[BranchBalanceHistory]:
+        """Get balance change history"""
+        stmt = select(BranchBalanceHistory).where(
+            and_(
+                BranchBalanceHistory.branch_id == branch_id,
+                BranchBalanceHistory.currency_id == currency_id
+            )
+        )
+        
+        # Add filters
+        if date_from:
+            stmt = stmt.where(BranchBalanceHistory.performed_at >= date_from)
+        
+        if date_to:
+            stmt = stmt.where(BranchBalanceHistory.performed_at <= date_to)
+        
+        if change_type:
+            stmt = stmt.where(BranchBalanceHistory.change_type == change_type)
+        
+        stmt = stmt.order_by(desc(BranchBalanceHistory.performed_at))
+        stmt = stmt.limit(limit)
+        
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+
+    async def get_branch_alerts(
+        self,
+        branch_id: UUID,
+        is_resolved: bool = False
+    ) -> List[BranchAlert]:
+        """Get branch alerts"""
+        stmt = select(BranchAlert).where(
+            and_(
+                BranchAlert.branch_id == branch_id,
+                BranchAlert.is_resolved == is_resolved
+            )
+        ).order_by(desc(BranchAlert.triggered_at))
+        
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+
+    async def resolve_alert(
+        self,
+        alert_id: UUID,
+        resolved_by: UUID,
+        resolution_notes: str
+    ) -> BranchAlert:
+        """Resolve an alert"""
+        stmt = select(BranchAlert).where(BranchAlert.id == alert_id)
+        result = await self.db.execute(stmt)
+        alert = result.scalar_one_or_none()
+        
+        if not alert:
+            raise ResourceNotFoundError("BranchAlert", alert_id)
+        
+        alert.is_resolved = True
+        alert.resolved_at = datetime.utcnow()
+        alert.resolved_by = resolved_by
+        alert.resolution_notes = resolution_notes
+        
+        await self.db.flush()
+        
+        return alert

@@ -4,7 +4,7 @@ Critical financial operations for branch balances
 All operations are ATOMIC and maintain data consistency
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional,List
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
@@ -786,3 +786,142 @@ class BalanceService:
         except Exception as e:
             logger.error(f"Error getting balance details: {str(e)}")
             raise DatabaseOperationError(f"Failed to retrieve balance details: {str(e)}")
+    
+    async def reconcile_branch_balance(
+        self,
+        branch_id: UUID,
+        currency_id: UUID,
+        actual_balance: Decimal,
+        reconciled_by: UUID,
+        notes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Reconcile branch balance with actual physical count
+        
+        This compares the system balance with the actual counted balance
+        and creates an adjustment if there's a difference.
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+            actual_balance: Actual counted balance
+            reconciled_by: User performing reconciliation
+            notes: Additional notes
+            
+        Returns:
+            Dict with reconciliation details:
+            {
+                'expected_balance': Decimal,
+                'actual_balance': Decimal,
+                'difference': Decimal,
+                'adjustment_made': bool,
+                'reconciliation_time': datetime
+            }
+            
+        Raises:
+            ValidationError: If validation fails
+            DatabaseOperationError: If database operation fails
+        """
+        try:
+            # Get current balance
+            balance = await self.repo.get_branch_balance(branch_id, currency_id)
+            
+            if not balance:
+                raise ValidationError(
+                    f"Balance not found for branch {branch_id} "
+                    f"and currency {currency_id}"
+                )
+            
+            expected_balance = balance.balance
+            difference = actual_balance - expected_balance
+            
+            reconciliation_result = {
+                'expected_balance': expected_balance,
+                'actual_balance': actual_balance,
+                'difference': difference,
+                'adjustment_made': False,
+                'reconciliation_time': datetime.utcnow()
+            }
+            
+            # If there's a difference, create adjustment
+            if difference != 0:
+                # Update balance
+                await self.update_balance(
+                    branch_id=branch_id,
+                    currency_id=currency_id,
+                    amount=difference,
+                    change_type=BalanceChangeType.RECONCILIATION,
+                    performed_by=reconciled_by,
+                    notes=f"Reconciliation adjustment. {notes or ''}"
+                )
+                
+                reconciliation_result['adjustment_made'] = True
+                
+                logger.warning(
+                    f"Balance reconciliation adjustment: Branch {branch_id}, "
+                    f"Currency {currency_id}, Difference: {difference}"
+                )
+            
+            # Update reconciliation timestamp
+            balance.last_reconciled_at = datetime.utcnow()
+            balance.last_reconciled_by = reconciled_by
+            
+            await self.db.flush()
+            
+            logger.info(
+                f"Balance reconciliation completed: Branch {branch_id}, "
+                f"Currency {currency_id}, Expected: {expected_balance}, "
+                f"Actual: {actual_balance}, Difference: {difference}"
+            )
+            
+            return reconciliation_result
+            
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Reconciliation failed: {str(e)}")
+            raise DatabaseOperationError(f"Balance reconciliation failed: {str(e)}")
+
+
+    async def get_balance_history(
+        self,
+        branch_id: UUID,
+        currency_id: UUID,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        change_type: Optional[BalanceChangeType] = None,
+        limit: int = 100
+    ) -> List[BranchBalanceHistory]:
+        """
+        Get balance change history with filtering
+        
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+            date_from: Start date (inclusive)
+            date_to: End date (inclusive)
+            change_type: Filter by change type
+            limit: Maximum number of records (default: 100)
+            
+        Returns:
+            List of balance history records
+        """
+        logger.info(
+            f"Getting balance history: Branch {branch_id}, "
+            f"Currency {currency_id}, From: {date_from}, To: {date_to}"
+        )
+        
+        try:
+            history = await self.repo.get_balance_history(
+                branch_id=branch_id,
+                currency_id=currency_id,
+                date_from=date_from,
+                date_to=date_to,
+                change_type=change_type,
+                limit=limit
+            )
+            
+            return history
+            
+        except Exception as e:
+            logger.error(f"Failed to get balance history: {str(e)}")
+            raise DatabaseOperationError(f"Failed to retrieve balance history: {str(e)}")

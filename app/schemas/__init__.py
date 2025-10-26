@@ -218,6 +218,16 @@ __all__ = [
     # "VaultResponse",
     # "VaultTransferCreate",
     # "VaultTransferResponse",
+    "UserAssignmentRequest",
+    "BranchUsersResponse",
+    "BalanceHistoryRecord",
+    "BalanceHistoryResponse",
+    "BalanceHistoryFilter",
+    "AlertStatistics",
+    "ReconciliationHistory",
+    "CurrencyBalanceSummary",
+    "ReconciliationRequest",
+    "ReconciliationResponse"
 ]
 
 
