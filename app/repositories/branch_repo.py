@@ -1,5 +1,5 @@
 """
-Branch Repository
+Branch Repository - FIXED VERSION
 Data access layer for branch operations
 """
 
@@ -9,6 +9,7 @@ from datetime import datetime
 from sqlalchemy import select, and_, or_, func, desc
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.branch import (
     Branch, BranchBalance, BranchBalanceHistory, BranchAlert,
@@ -29,7 +30,7 @@ logger = get_logger(__name__)
 class BranchRepository:
     """Repository for branch data access"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
     # ==================== Branch CRUD Operations ====================
@@ -66,7 +67,11 @@ class BranchRepository:
         # ✅ FIX: Include currency relationship when loading balances
         if include_balances:
             stmt = stmt.options(
-                selectinload(Branch.balances).selectinload(BranchBalance.currency),  # ← هذا السطر!
+                selectinload(Branch.balances).selectinload(BranchBalance.currency),
+                selectinload(Branch.manager)
+            )  # ← الإصلاح: إغلاق القوس بشكل صحيح
+        else:
+            stmt = stmt.options(
                 selectinload(Branch.manager)
             )
         
@@ -311,16 +316,16 @@ class BranchRepository:
         reserved_balance: Optional[float] = None
     ) -> BranchBalance:
         """
-        Update branch balance (with optimistic locking)
+        Update branch balance
         
         Args:
             branch_id: Branch UUID
             currency_id: Currency UUID
             new_balance: New balance amount
-            reserved_balance: New reserved balance (optional)
+            reserved_balance: Optional reserved amount
             
-                    Returns:
-            Updated branch balance
+        Returns:
+            Updated balance
         """
         balance = await self.get_branch_balance(branch_id, currency_id)
         if not balance:
@@ -329,17 +334,27 @@ class BranchRepository:
                 f"branch_id={branch_id}, currency_id={currency_id}"
             )
         
-        balance.balance = new_balance
-        if reserved_balance is not None:
-            balance.reserved_balance = reserved_balance
-        balance.last_updated = datetime.utcnow()
-        
-        await self.db.flush()
-        await self.db.refresh(balance)
-        
-        return balance
+        try:
+            balance.balance = new_balance
+            if reserved_balance is not None:
+                balance.reserved_balance = reserved_balance
+            balance.updated_at = datetime.utcnow()
+            
+            await self.db.flush()
+            await self.db.refresh(balance)
+            
+            logger.info(
+                f"Balance updated for branch {branch_id}, "
+                f"currency {currency_id}: {new_balance}"
+            )
+            return balance
+            
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to update balance: {str(e)}")
+            raise DatabaseOperationError(f"Balance update failed: {str(e)}")
     
-    # ==================== Balance History ====================
+    # ==================== Balance History Operations ====================
     
     async def create_balance_history(
         self,
@@ -349,37 +364,44 @@ class BranchRepository:
         Create balance history record
         
         Args:
-            history_data: History data
+            history_data: History record data
             
         Returns:
             Created history record
         """
-        history = BranchBalanceHistory(**history_data)
-        self.db.add(history)
-        await self.db.flush()
-        
-        return history
+        try:
+            history = BranchBalanceHistory(**history_data)
+            self.db.add(history)
+            await self.db.flush()
+            await self.db.refresh(history)
+            
+            logger.info(
+                f"Balance history created for branch {history.branch_id}, "
+                f"change type: {history.change_type}"
+            )
+            return history
+            
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to create balance history: {str(e)}")
+            raise DatabaseOperationError(f"Balance history creation failed: {str(e)}")
     
     async def get_balance_history(
         self,
         branch_id: UUID,
         currency_id: Optional[UUID] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 50
     ) -> List[BranchBalanceHistory]:
         """
-        Get balance history with filtering
+        Get balance history for branch
         
         Args:
             branch_id: Branch UUID
-            currency_id: Currency UUID (optional)
-            start_date: Start date filter
-            end_date: End date filter
-            limit: Maximum records to return
+            currency_id: Optional currency filter
+            limit: Number of records to return
             
         Returns:
-            List of balance history records
+            List of history records
         """
         stmt = select(BranchBalanceHistory).where(
             BranchBalanceHistory.branch_id == branch_id
@@ -388,71 +410,86 @@ class BranchRepository:
         if currency_id:
             stmt = stmt.where(BranchBalanceHistory.currency_id == currency_id)
         
-        if start_date:
-            stmt = stmt.where(BranchBalanceHistory.performed_at >= start_date)
-        
-        if end_date:
-            stmt = stmt.where(BranchBalanceHistory.performed_at <= end_date)
-        
         stmt = stmt.order_by(desc(BranchBalanceHistory.performed_at)).limit(limit)
         
         result = await self.db.execute(stmt)
         return result.scalars().all()
     
-    # ==================== Alerts ====================
+    # ==================== Alert Operations ====================
     
-    async def get_branch_alerts(
+    async def create_branch_alert(
+        self,
+        alert_data: Dict[str, Any]
+    ) -> BranchAlert:
+        """
+        Create branch alert
+        
+        Args:
+            alert_data: Alert data
+            
+        Returns:
+            Created alert
+        """
+        try:
+            alert = BranchAlert(**alert_data)
+            self.db.add(alert)
+            await self.db.flush()
+            await self.db.refresh(alert)
+            
+            logger.info(
+                f"Alert created for branch {alert.branch_id}: "
+                f"Type: {alert.alert_type}, Severity: {alert.severity}"
+            )
+            return alert
+            
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to create alert: {str(e)}")
+            raise DatabaseOperationError(f"Alert creation failed: {str(e)}")
+    
+    async def get_active_alerts(
         self,
         branch_id: UUID,
-        is_resolved: Optional[bool] = None,
         severity: Optional[AlertSeverity] = None
     ) -> List[BranchAlert]:
         """
-        Get branch alerts with filtering
+        Get active alerts for branch
         
         Args:
             branch_id: Branch UUID
-            is_resolved: Filter by resolution status
-            severity: Filter by severity
+            severity: Optional severity filter
             
         Returns:
-            List of branch alerts
+            List of active alerts
         """
-        stmt = select(BranchAlert).where(BranchAlert.branch_id == branch_id)
-        
-        if is_resolved is not None:
-            stmt = stmt.where(BranchAlert.is_resolved == is_resolved)
+        stmt = select(BranchAlert).where(
+            and_(
+                BranchAlert.branch_id == branch_id,
+                BranchAlert.is_resolved == False
+            )
+        )
         
         if severity:
             stmt = stmt.where(BranchAlert.severity == severity)
         
-        stmt = stmt.order_by(desc(BranchAlert.triggered_at))
+        stmt = stmt.order_by(desc(BranchAlert.created_at))
         
         result = await self.db.execute(stmt)
         return result.scalars().all()
-    
-    async def create_alert(self, alert_data: Dict[str, Any]) -> BranchAlert:
-        """Create branch alert"""
-        alert = BranchAlert(**alert_data)
-        self.db.add(alert)
-        await self.db.flush()
-        
-        logger.info(f"Alert created for branch {alert.branch_id}: {alert.title}")
-        return alert
     
     async def resolve_alert(
         self,
         alert_id: UUID,
         resolved_by: UUID,
-        resolution_notes: str
+        resolution_notes: Optional[str] = None
     ) -> BranchAlert:
         """
-        Resolve an alert
+        Resolve branch alert
         
         Args:
             alert_id: Alert UUID
-            resolved_by: User UUID who resolved the alert
-            resolution_notes: Notes about resolution
+            resolved_by: User who resolved the alert
+            resolution_notes: Optional resolution notes
             
         Returns:
             Resolved alert
@@ -464,66 +501,19 @@ class BranchRepository:
         if not alert:
             raise ResourceNotFoundError("BranchAlert", alert_id)
         
-        alert.is_resolved = True
-        alert.resolved_at = datetime.utcnow()
-        alert.resolved_by = resolved_by
-        alert.resolution_notes = resolution_notes
-        
-        await self.db.flush()
-        await self.db.refresh(alert)
-        
-        logger.info(f"Alert {alert_id} resolved by user {resolved_by}")
-        return alert
-    
-    # ==================== Statistics & Aggregations ====================
-    
-    async def get_branch_statistics(self, branch_id: UUID) -> Dict[str, Any]:
-        """
-        Get branch statistics
-        
-        Args:
-            branch_id: Branch UUID
+        try:
+            alert.is_resolved = True
+            alert.resolved_at = datetime.utcnow()
+            alert.resolved_by = resolved_by
+            alert.resolution_notes = resolution_notes
             
-        Returns:
-            Dictionary with statistics
-        """
-        # Get total balances by currency
-        stmt = select(
-            Currency.code,
-            func.sum(BranchBalance.balance).label('total_balance'),
-            func.sum(BranchBalance.reserved_balance).label('total_reserved')
-        ).join(
-            BranchBalance,
-            Currency.id == BranchBalance.currency_id
-        ).where(
-            and_(
-                BranchBalance.branch_id == branch_id,
-                BranchBalance.is_active == True
-            )
-        ).group_by(Currency.code)
-        
-        result = await self.db.execute(stmt)
-        balances = result.all()
-        
-        # Get active alerts count
-        alerts_stmt = select(func.count()).select_from(BranchAlert).where(
-            and_(
-                BranchAlert.branch_id == branch_id,
-                BranchAlert.is_resolved == False
-            )
-        )
-        alerts_result = await self.db.execute(alerts_stmt)
-        active_alerts = alerts_result.scalar()
-        
-        return {
-            'balances': [
-                {
-                    'currency': row.code,
-                    'total': float(row.total_balance),
-                    'reserved': float(row.total_reserved),
-                    'available': float(row.total_balance - row.total_reserved)
-                }
-                for row in balances
-            ],
-            'active_alerts': active_alerts
-        }
+            await self.db.flush()
+            await self.db.refresh(alert)
+            
+            logger.info(f"Alert {alert_id} resolved by user {resolved_by}")
+            return alert
+            
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to resolve alert: {str(e)}")
+            raise DatabaseOperationError(f"Alert resolution failed: {str(e)}")

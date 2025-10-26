@@ -1,27 +1,28 @@
+# app/schemas/branch.py
 """
-Branch Schemas
-Pydantic models for request/response validation
+Branch Management Schemas - FIXED VERSION
+Pydantic models for branch-related operations
 """
 
-from typing import Optional, List
+from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, validator, ConfigDict
 
 from app.db.models.branch import (
-    RegionEnum, BalanceAlertType, AlertSeverity, BalanceChangeType
+    RegionEnum, BalanceChangeType, BalanceAlertType, AlertSeverity
 )
 
 
 # ==================== Branch Schemas ====================
 
 class BranchBase(BaseModel):
-    """Base branch schema"""
+    """Base branch schema with common fields"""
     code: str = Field(..., min_length=5, max_length=10, description="Branch code (e.g., BR001)")
-    name_en: str = Field(..., min_length=2, max_length=200, description="Branch name in English")
-    name_ar: str = Field(..., min_length=2, max_length=200, description="Branch name in Arabic")
-    region: RegionEnum = Field(..., description="Branch region")
+    name_en: str = Field(..., min_length=2, max_length=200, description="English name")
+    name_ar: str = Field(..., min_length=2, max_length=200, description="Arabic name")
+    region: RegionEnum = Field(..., description="Geographic region")
     address: str = Field(..., min_length=10, max_length=500, description="Full address")
     city: str = Field(..., min_length=2, max_length=100, description="City")
     phone: str = Field(..., min_length=10, max_length=20, description="Phone number")
@@ -29,18 +30,16 @@ class BranchBase(BaseModel):
     
     @validator('code')
     def validate_code_format(cls, v):
-        """Validate branch code format"""
+        """Validate branch code format (BR followed by digits)"""
         if not v.startswith('BR') or not v[2:].isdigit():
-            raise ValueError("Branch code must start with 'BR' followed by digits")
-        return v.upper()
+            raise ValueError("Branch code must start with 'BR' followed by digits (e.g., BR001)")
+        return v
     
-    @validator('phone')
-    def validate_phone(cls, v):
-        """Validate phone number"""
-        # Remove spaces and dashes
-        clean_phone = v.replace(' ', '').replace('-', '')
-        if not clean_phone.startswith('+'):
-            raise ValueError("Phone number must start with country code (+)")
+    @validator('email')
+    def validate_email(cls, v):
+        """Basic email validation"""
+        if v and '@' not in v:
+            raise ValueError("Invalid email format")
         return v
     
     model_config = ConfigDict(from_attributes=True)
@@ -70,12 +69,12 @@ class BranchUpdate(BaseModel):
 
 
 class BranchResponse(BranchBase):
-    """Schema for branch response"""
+    """Schema for branch response - FIXED: opening_balance_date is truly optional"""
     id: UUID
     manager_id: Optional[UUID]
     is_main_branch: bool
     is_active: bool
-    opening_balance_date: Optional[datetime]
+    opening_balance_date: Optional[datetime] = None  # ✅ FIX: Default to None
     created_at: datetime
     updated_at: datetime
     
@@ -118,7 +117,7 @@ class BranchBalanceResponse(BranchBalanceBase):
     currency_name: str
     available_balance: Decimal
     last_updated: datetime
-    last_reconciled_at: Optional[datetime]
+    last_reconciled_at: Optional[datetime] = None  # ✅ FIX: Default to None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -155,10 +154,10 @@ class BranchBalanceHistoryResponse(BaseModel):
     amount: Decimal
     balance_before: Decimal
     balance_after: Decimal
-    reference_id: Optional[UUID]
-    reference_type: Optional[str]
+    reference_id: Optional[UUID] = None
+    reference_type: Optional[str] = None
     performed_at: datetime
-    notes: Optional[str]
+    notes: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -177,17 +176,17 @@ class BranchAlertResponse(BaseModel):
     """Schema for branch alert response"""
     id: UUID
     branch_id: UUID
-    currency_id: Optional[UUID]
-    currency_code: Optional[str]
+    currency_id: Optional[UUID] = None
+    currency_code: Optional[str] = None
     alert_type: BalanceAlertType
     severity: AlertSeverity
     title: str
     message: str
     is_resolved: bool
     triggered_at: datetime
-    resolved_at: Optional[datetime]
-    resolved_by: Optional[UUID]
-    resolution_notes: Optional[str]
+    resolved_at: Optional[datetime] = None
+    resolved_by: Optional[UUID] = None
+    resolution_notes: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -226,12 +225,12 @@ class BranchBalanceSummary(BaseModel):
     balance: Decimal
     reserved: Decimal
     available: Decimal
-    minimum_threshold: Optional[Decimal]
-    maximum_threshold: Optional[Decimal]
+    minimum_threshold: Optional[Decimal] = None
+    maximum_threshold: Optional[Decimal] = None
     is_below_minimum: bool
     is_above_maximum: bool
     last_updated: datetime
-    last_reconciled: Optional[datetime]
+    last_reconciled: Optional[datetime] = None
 
 
 class BranchStatistics(BaseModel):
@@ -249,15 +248,19 @@ class BranchStatistics(BaseModel):
 # ==================== List Response Schemas ====================
 
 class BranchListResponse(BaseModel):
-    """Schema for list of branches"""
+    """Schema for list of branches - supports both types"""
     total: int
-    branches: List[BranchResponse]
+    branches: List[BranchResponse | BranchWithBalances]  # ✅ FIX: Support both types
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BranchBalanceListResponse(BaseModel):
     """Schema for list of balances"""
     total: int
-    balances: List[BranchBalanceResponse]
+    balances: List[BranchBalanceResponse | dict]  # ✅ FIX: Support dict too
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BranchAlertListResponse(BaseModel):
