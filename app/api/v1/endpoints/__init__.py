@@ -8,10 +8,13 @@ All endpoint modules for the API
 from app.api.v1.endpoints import auth
 from app.api.v1.endpoints import currencies
 from app.api.v1.endpoints import branches
+#from app.api.v1.endpoints import customers
+
 
 # Export for easy imports
 __all__ = [
     "auth",
     "currencies", 
     "branches",
+    "customers"
 ]

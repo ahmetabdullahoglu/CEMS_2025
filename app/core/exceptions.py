@@ -511,7 +511,26 @@ def get_exception_by_name(exception_name: str) -> type:
     """
     return globals().get(exception_name)
 
+class NotFoundError(CEMSException):
+    def __init__(self, message: str = "Resource not found"):
+        super().__init__(message, status_code=404)
 
+class ValidationError(CEMSException):
+    def __init__(self, message: str = "Validation failed"):
+        super().__init__(message, status_code=422)
+
+class DuplicateError(CEMSException):
+    def __init__(self, message: str = "Resource already exists"):
+        super().__init__(message, status_code=409)
+
+class PermissionDeniedError(CEMSException):
+    def __init__(self, message: str = "Permission denied"):
+        super().__init__(message, status_code=403)
+
+class DatabaseOperationError(CEMSException):
+    def __init__(self, message: str = "Database operation failed"):
+        super().__init__(message, status_code=500)
+        
 # ==================== Exception Registry ====================
 
 # All custom exceptions for reference
@@ -618,6 +637,12 @@ ALL_EXCEPTIONS = [
     "NotificationError",
     "EmailSendError",
     "SMSSendError",
+    
+    "NotFoundError",
+    "ValidationError", 
+    "DuplicateError",
+    "PermissionDeniedError",
+    "DatabaseOperationError",
 ]
 
 
