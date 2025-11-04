@@ -197,7 +197,12 @@ class Customer(Base):
     #     back_populates="customer",
     #     cascade="all, delete-orphan"
     # )
-    
+    # Add this relationship
+    transactions = relationship(
+        "Transaction",
+        back_populates="customer",
+        foreign_keys="Transaction.customer_id"
+    )
     # Constraints
     __table_args__ = (
         CheckConstraint(

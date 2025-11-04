@@ -277,6 +277,13 @@ class BranchBalance(BaseModel):
     currency = relationship("Currency", backref="branch_balances")
     reconciled_by_user = relationship("User", foreign_keys=[last_reconciled_by])
     
+    # Add this relationship
+    transactions = relationship(
+        "Transaction",
+        back_populates="branch",
+        foreign_keys="Transaction.branch_id",
+        cascade="all, delete-orphan"
+    )
     # Table constraints
     __table_args__ = (
         UniqueConstraint('branch_id', 'currency_id', name='uq_branch_currency'),

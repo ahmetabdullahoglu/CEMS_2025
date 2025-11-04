@@ -29,7 +29,20 @@ from app.db.models.branch import (
 #     ExchangeTransaction,
 #     TransferTransaction
 # )
-
+# ==================== Transaction Models ====================
+from app.db.models.transaction import (
+    Transaction,
+    IncomeTransaction,
+    ExpenseTransaction,
+    ExchangeTransaction,
+    TransferTransaction,
+    TransactionType,
+    TransactionStatus,
+    IncomeCategory,
+    ExpenseCategory,
+    TransferType,
+    TransactionNumberGenerator
+)
 # Phase 7: Vault Management
 # from app.db.models.vault import Vault, VaultBalance, VaultTransfer
 
@@ -76,7 +89,18 @@ __all__ = [
     # "ExpenseTransaction",
     # "ExchangeTransaction",
     # "TransferTransaction",
-    
+     # Transactions
+    "Transaction",
+    "IncomeTransaction",
+    "ExpenseTransaction",
+    "ExchangeTransaction",
+    "TransferTransaction",
+    "TransactionType",
+    "TransactionStatus",
+    "IncomeCategory",
+    "ExpenseCategory",
+    "TransferType",
+    "TransactionNumberGenerator",
     # Vault Management
     # "Vault",
     # "VaultBalance",

@@ -135,7 +135,27 @@ class User(BaseModel):
         back_populates="users",
         lazy="selectin"
     )
+    # Add these relationships
+    transactions = relationship(
+        "Transaction",
+        back_populates="user",
+        foreign_keys="Transaction.user_id"
+    )
     
+    approved_expenses = relationship(
+        "ExpenseTransaction",
+        foreign_keys="ExpenseTransaction.approved_by_id"
+    )
+    
+    cancelled_transactions = relationship(
+        "Transaction",
+        foreign_keys="Transaction.cancelled_by_id"
+    )
+    
+    received_transfers = relationship(
+        "TransferTransaction",
+        foreign_keys="TransferTransaction.received_by_id"
+    )
     # Back references (will be populated by related models)
     # transactions = relationship("Transaction", back_populates="user")
     # created_customers = relationship("Customer", back_populates="created_by_user")

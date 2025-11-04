@@ -79,6 +79,22 @@ class Currency(BaseModel):
         lazy="selectin"
     )
     
+    # Add these relationships
+    transactions = relationship(
+        "Transaction",
+        back_populates="currency",
+        foreign_keys="Transaction.currency_id"
+    )
+    
+    exchange_from = relationship(
+        "ExchangeTransaction",
+        foreign_keys="ExchangeTransaction.from_currency_id"
+    )
+    
+    exchange_to = relationship(
+        "ExchangeTransaction",
+        foreign_keys="ExchangeTransaction.to_currency_id"
+    )
     # Table constraints
     __table_args__ = (
         CheckConstraint('LENGTH(code) = 3', name='currency_code_length_check'),

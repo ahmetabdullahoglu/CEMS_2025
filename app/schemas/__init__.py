@@ -100,7 +100,41 @@ from app.schemas.branch import (
 #     TransactionResponse,
 #     TransactionListResponse,
 # )
-
+# ==================== Transaction Schemas ====================
+from app.schemas.transaction import (
+    # Enums
+    TransactionTypeEnum,
+    TransactionStatusEnum,
+    IncomeCategoryEnum,
+    ExpenseCategoryEnum,
+    TransferTypeEnum,
+    
+    # Income
+    IncomeTransactionCreate,
+    IncomeTransactionResponse,
+    
+    # Expense
+    ExpenseTransactionCreate,
+    ExpenseTransactionResponse,
+    ExpenseApprovalRequest,
+    
+    # Exchange
+    ExchangeTransactionCreate,
+    ExchangeTransactionResponse,
+    ExchangeCalculationRequest,
+    ExchangeCalculationResponse,
+    
+    # Transfer
+    TransferTransactionCreate,
+    TransferTransactionResponse,
+    TransferReceiptRequest,
+    
+    # Common
+    TransactionCancelRequest,
+    TransactionFilter,
+    TransactionListResponse,
+    TransactionSummary,
+)
 # Phase 7: Vault Management
 # from app.schemas.vault import (
 #     VaultBase,
@@ -212,7 +246,28 @@ __all__ = [
     # "TransferTransactionCreate",
     # "TransactionResponse",
     # "TransactionListResponse",
-    
+    # Transaction Schemas
+    "TransactionTypeEnum",
+    "TransactionStatusEnum",
+    "IncomeCategoryEnum",
+    "ExpenseCategoryEnum",
+    "TransferTypeEnum",
+    "IncomeTransactionCreate",
+    "IncomeTransactionResponse",
+    "ExpenseTransactionCreate",
+    "ExpenseTransactionResponse",
+    "ExpenseApprovalRequest",
+    "ExchangeTransactionCreate",
+    "ExchangeTransactionResponse",
+    "ExchangeCalculationRequest",
+    "ExchangeCalculationResponse",
+    "TransferTransactionCreate",
+    "TransferTransactionResponse",
+    "TransferReceiptRequest",
+    "TransactionCancelRequest",
+    "TransactionFilter",
+    "TransactionListResponse",
+    "TransactionSummary",
     # Vault Management
     # "VaultBase",
     # "VaultResponse",
