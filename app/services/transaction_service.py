@@ -1,0 +1,985 @@
+# app/services/transaction_service.py
+"""
+Transaction Service - Core Business Logic
+==========================================
+Handles all transaction operations with ACID guarantees:
+- Income transactions (service fees, commissions)
+- Expense transactions (rent, salaries, utilities)
+- Exchange transactions (currency conversion)
+- Transfer transactions (branch-to-branch, vault-to-branch)
+
+CRITICAL: All operations are atomic with proper rollback on failures
+"""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional, Dict, Any, List
+from uuid import UUID
+
+from sqlalchemy import select, and_, or_, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from app.db.models.transaction import (
+    Transaction, IncomeTransaction, ExpenseTransaction,
+    ExchangeTransaction, TransferTransaction,
+    TransactionType, TransactionStatus,
+    IncomeCategory, ExpenseCategory, TransferType,
+    TransactionNumberGenerator
+)
+from app.db.models.branch import BranchBalance
+from app.db.models.currency import Currency, ExchangeRate
+from app.services.balance_service import BalanceService
+from app.services.currency_service import CurrencyService
+from app.core.exceptions import (
+    ValidationError, InsufficientBalanceError,
+    BusinessRuleViolationError, DatabaseOperationError
+)
+from app.utils.logger import get_logger
+from app.utils.validators import (
+    validate_positive_amount, validate_transaction_limits
+)
+
+logger = get_logger(__name__)
+
+
+class TransactionService:
+    """
+    Transaction Service handling all transaction business logic
+    
+    CRITICAL PRINCIPLES:
+    1. All operations are atomic (commit or rollback)
+    2. Balance updates must happen in same transaction
+    3. No orphaned records on failures
+    4. Comprehensive audit trail
+    5. Proper error handling with meaningful messages
+    """
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.balance_service = BalanceService(db)
+        self.currency_service = CurrencyService(db)
+        self.transaction_generator = TransactionNumberGenerator()
+    
+    # ==================== INCOME TRANSACTIONS ====================
+    
+    async def create_income(
+        self,
+        branch_id: UUID,
+        amount: Decimal,
+        currency_id: UUID,
+        category: IncomeCategory,
+        user_id: UUID,
+        customer_id: Optional[UUID] = None,
+        reference_number: Optional[str] = None,
+        notes: Optional[str] = None
+    ) -> IncomeTransaction:
+        """
+        Create income transaction (atomic operation)
+        
+        Steps:
+        1. Validate inputs
+        2. Generate transaction number
+        3. Start DB transaction
+        4. Create income record
+        5. Update branch balance (+amount)
+        6. Create balance history
+        7. Commit or rollback
+        
+        Args:
+            branch_id: Branch receiving income
+            amount: Income amount (must be positive)
+            currency_id: Currency of transaction
+            category: Income category (SERVICE_FEE, COMMISSION, OTHER)
+            user_id: User executing transaction
+            customer_id: Optional customer reference
+            reference_number: Optional external reference
+            notes: Optional transaction notes
+            
+        Returns:
+            Created IncomeTransaction
+            
+        Raises:
+            ValidationError: Invalid inputs
+            DatabaseOperationError: Transaction failed
+        """
+        try:
+            # Step 1: Validate inputs
+            validate_positive_amount(amount)
+            await self._validate_branch_exists(branch_id)
+            await self._validate_currency_exists(currency_id)
+            await self._validate_branch_has_currency(branch_id, currency_id)
+            
+            if customer_id:
+                await self._validate_customer_exists(customer_id)
+            
+            # Check for duplicate reference number
+            if reference_number:
+                await self._check_duplicate_reference(reference_number)
+            
+            # Step 2: Generate transaction number
+            transaction_number = await self.transaction_generator.generate_number(
+                self.db, TransactionType.INCOME
+            )
+            
+            # Step 3-7: Atomic operation
+            try:
+                # Create income transaction
+                income = IncomeTransaction(
+                    transaction_number=transaction_number,
+                    transaction_type=TransactionType.INCOME,
+                    status=TransactionStatus.PENDING,
+                    amount=amount,
+                    currency_id=currency_id,
+                    branch_id=branch_id,
+                    user_id=user_id,
+                    customer_id=customer_id,
+                    reference_number=reference_number,
+                    notes=notes,
+                    income_category=category,
+                    transaction_date=datetime.utcnow()
+                )
+                
+                self.db.add(income)
+                await self.db.flush()  # Get ID but don't commit yet
+                
+                # Update branch balance
+                await self.balance_service.update_balance(
+                    branch_id=branch_id,
+                    currency_id=currency_id,
+                    amount=amount,
+                    transaction_id=income.id,
+                    change_type="income",
+                    notes=f"Income: {category.value}"
+                )
+                
+                # Mark transaction as completed
+                income.status = TransactionStatus.COMPLETED
+                income.completed_at = datetime.utcnow()
+                
+                # Commit everything
+                await self.db.commit()
+                await self.db.refresh(income)
+                
+                logger.info(
+                    f"Income transaction created: {transaction_number}, "
+                    f"Branch: {branch_id}, Amount: {amount} {currency_id}"
+                )
+                
+                return income
+                
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"Failed to create income transaction: {str(e)}")
+                raise DatabaseOperationError(
+                    f"Failed to create income transaction: {str(e)}"
+                )
+                
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in create_income: {str(e)}")
+            raise DatabaseOperationError(f"Transaction failed: {str(e)}")
+    
+    # ==================== EXPENSE TRANSACTIONS ====================
+    
+    async def create_expense(
+        self,
+        branch_id: UUID,
+        amount: Decimal,
+        currency_id: UUID,
+        category: ExpenseCategory,
+        payee: str,
+        user_id: UUID,
+        reference_number: Optional[str] = None,
+        notes: Optional[str] = None,
+        requires_approval: bool = False
+    ) -> ExpenseTransaction:
+        """
+        Create expense transaction (atomic operation)
+        
+        Steps:
+        1. Check branch has sufficient balance
+        2. Generate transaction number
+        3. Start DB transaction
+        4. Create expense record
+        5. Update branch balance (-amount)
+        6. Create balance history
+        7. Handle approval workflow if required
+        8. Commit or rollback
+        
+        Args:
+            branch_id: Branch making payment
+            amount: Expense amount (must be positive)
+            currency_id: Currency of transaction
+            category: Expense category
+            payee: Payment recipient
+            user_id: User executing transaction
+            reference_number: Optional external reference
+            notes: Optional transaction notes
+            requires_approval: Whether approval is needed
+            
+        Returns:
+            Created ExpenseTransaction
+            
+        Raises:
+            ValidationError: Invalid inputs
+            InsufficientBalanceError: Not enough funds
+            DatabaseOperationError: Transaction failed
+        """
+        try:
+            # Step 1: Validate inputs
+            validate_positive_amount(amount)
+            await self._validate_branch_exists(branch_id)
+            await self._validate_currency_exists(currency_id)
+            await self._validate_branch_has_currency(branch_id, currency_id)
+            
+            if not payee or len(payee.strip()) < 2:
+                raise ValidationError("Payee name is required and must be at least 2 characters")
+            
+            # Check duplicate reference
+            if reference_number:
+                await self._check_duplicate_reference(reference_number)
+            
+            # Check sufficient balance
+            balance_info = await self.balance_service.get_balance(branch_id, currency_id)
+            available_balance = Decimal(str(balance_info['available_balance']))
+            
+            if available_balance < amount:
+                raise InsufficientBalanceError(
+                    f"Insufficient balance. Available: {available_balance}, "
+                    f"Required: {amount}"
+                )
+            
+            # Validate transaction limits
+            await validate_transaction_limits(branch_id, amount, self.db)
+            
+            # Step 2: Generate transaction number
+            transaction_number = await self.transaction_generator.generate_number(
+                self.db, TransactionType.EXPENSE
+            )
+            
+            # Step 3-8: Atomic operation
+            try:
+                # Create expense transaction
+                expense = ExpenseTransaction(
+                    transaction_number=transaction_number,
+                    transaction_type=TransactionType.EXPENSE,
+                    status=TransactionStatus.PENDING if requires_approval else TransactionStatus.PENDING,
+                    amount=amount,
+                    currency_id=currency_id,
+                    branch_id=branch_id,
+                    user_id=user_id,
+                    reference_number=reference_number,
+                    notes=notes,
+                    expense_category=category,
+                    expense_to=payee.strip(),
+                    approval_required=requires_approval,
+                    transaction_date=datetime.utcnow()
+                )
+                
+                self.db.add(expense)
+                await self.db.flush()
+                
+                # Update branch balance (deduct amount)
+                await self.balance_service.update_balance(
+                    branch_id=branch_id,
+                    currency_id=currency_id,
+                    amount=-amount,  # Negative for expense
+                    transaction_id=expense.id,
+                    change_type="expense",
+                    notes=f"Expense: {category.value} to {payee}"
+                )
+                
+                # Mark as completed if no approval needed
+                if not requires_approval:
+                    expense.status = TransactionStatus.COMPLETED
+                    expense.completed_at = datetime.utcnow()
+                
+                await self.db.commit()
+                await self.db.refresh(expense)
+                
+                logger.info(
+                    f"Expense transaction created: {transaction_number}, "
+                    f"Branch: {branch_id}, Amount: {amount} {currency_id}"
+                )
+                
+                return expense
+                
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"Failed to create expense transaction: {str(e)}")
+                raise DatabaseOperationError(
+                    f"Failed to create expense transaction: {str(e)}"
+                )
+                
+        except (ValidationError, InsufficientBalanceError):
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in create_expense: {str(e)}")
+            raise DatabaseOperationError(f"Transaction failed: {str(e)}")
+    
+    # ==================== EXCHANGE TRANSACTIONS ====================
+    
+    async def create_exchange(
+        self,
+        branch_id: UUID,
+        customer_id: UUID,
+        from_currency_id: UUID,
+        to_currency_id: UUID,
+        from_amount: Decimal,
+        user_id: UUID,
+        reference_number: Optional[str] = None,
+        notes: Optional[str] = None
+    ) -> ExchangeTransaction:
+        """
+        Create currency exchange transaction (atomic operation)
+        
+        Steps:
+        1. Get latest exchange rate
+        2. Calculate to_amount and commission
+        3. Check branch has from_currency balance
+        4. Generate transaction number
+        5. Start DB transaction
+        6. Create exchange record
+        7. Update branch balance (-from_amount in from_currency)
+        8. Update branch balance (+to_amount in to_currency)
+        9. Create commission income (if applicable)
+        10. Create balance_history entries
+        11. Commit or rollback
+        
+        Args:
+            branch_id: Branch executing exchange
+            customer_id: Customer (required for exchanges)
+            from_currency_id: Source currency
+            to_currency_id: Target currency
+            from_amount: Amount to exchange
+            user_id: User executing transaction
+            reference_number: Optional external reference
+            notes: Optional transaction notes
+            
+        Returns:
+            Created ExchangeTransaction
+            
+        Raises:
+            ValidationError: Invalid inputs or same currencies
+            InsufficientBalanceError: Not enough funds
+            DatabaseOperationError: Transaction failed
+        """
+        try:
+            # Validate inputs
+            validate_positive_amount(from_amount)
+            await self._validate_branch_exists(branch_id)
+            await self._validate_currency_exists(from_currency_id)
+            await self._validate_currency_exists(to_currency_id)
+            await self._validate_customer_exists(customer_id)
+            
+            if from_currency_id == to_currency_id:
+                raise ValidationError("Cannot exchange between same currencies")
+            
+            # Check duplicate reference
+            if reference_number:
+                await self._check_duplicate_reference(reference_number)
+            
+            # Step 1: Get latest exchange rate
+            rate_info = await self.currency_service.get_latest_rate(
+                from_currency_id, to_currency_id
+            )
+            
+            if not rate_info:
+                raise ValidationError(
+                    f"No exchange rate found for {from_currency_id} -> {to_currency_id}"
+                )
+            
+            exchange_rate = Decimal(str(rate_info['rate']))
+            
+            # Step 2: Calculate amounts
+            to_amount = from_amount * exchange_rate
+            
+            # Calculate commission (example: 1% of from_amount)
+            commission_rate = Decimal("0.01")  # 1%
+            commission_amount = from_amount * commission_rate
+            
+            # Step 3: Check balance
+            from_balance_info = await self.balance_service.get_balance(
+                branch_id, from_currency_id
+            )
+            available = Decimal(str(from_balance_info['available_balance']))
+            
+            if available < from_amount:
+                raise InsufficientBalanceError(
+                    f"Insufficient {from_currency_id} balance. "
+                    f"Available: {available}, Required: {from_amount}"
+                )
+            
+            # Step 4: Generate transaction number
+            transaction_number = await self.transaction_generator.generate_number(
+                self.db, TransactionType.EXCHANGE
+            )
+            
+            # Steps 5-11: Atomic operation
+            try:
+                # Create exchange transaction
+                exchange = ExchangeTransaction(
+                    transaction_number=transaction_number,
+                    transaction_type=TransactionType.EXCHANGE,
+                    status=TransactionStatus.PENDING,
+                    amount=from_amount,
+                    currency_id=from_currency_id,
+                    branch_id=branch_id,
+                    user_id=user_id,
+                    customer_id=customer_id,
+                    reference_number=reference_number,
+                    notes=notes,
+                    from_currency_id=from_currency_id,
+                    to_currency_id=to_currency_id,
+                    from_amount=from_amount,
+                    to_amount=to_amount,
+                    exchange_rate_used=exchange_rate,
+                    commission_amount=commission_amount,
+                    commission_percentage=commission_rate * 100,
+                    transaction_date=datetime.utcnow()
+                )
+                
+                self.db.add(exchange)
+                await self.db.flush()
+                
+                # Deduct from_currency from branch
+                await self.balance_service.update_balance(
+                    branch_id=branch_id,
+                    currency_id=from_currency_id,
+                    amount=-from_amount,
+                    transaction_id=exchange.id,
+                    change_type="exchange_out",
+                    notes=f"Exchange out: {from_amount} to {to_currency_id}"
+                )
+                
+                # Add to_currency to branch
+                await self.balance_service.update_balance(
+                    branch_id=branch_id,
+                    currency_id=to_currency_id,
+                    amount=to_amount,
+                    transaction_id=exchange.id,
+                    change_type="exchange_in",
+                    notes=f"Exchange in: {to_amount} from {from_currency_id}"
+                )
+                
+                # Record commission as income
+                if commission_amount > 0:
+                    await self.balance_service.update_balance(
+                        branch_id=branch_id,
+                        currency_id=from_currency_id,
+                        amount=commission_amount,
+                        transaction_id=exchange.id,
+                        change_type="commission",
+                        notes=f"Exchange commission ({commission_rate * 100}%)"
+                    )
+                
+                # Mark as completed
+                exchange.status = TransactionStatus.COMPLETED
+                exchange.completed_at = datetime.utcnow()
+                
+                await self.db.commit()
+                await self.db.refresh(exchange)
+                
+                logger.info(
+                    f"Exchange transaction created: {transaction_number}, "
+                    f"Branch: {branch_id}, {from_amount} {from_currency_id} -> "
+                    f"{to_amount} {to_currency_id}"
+                )
+                
+                return exchange
+                
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"Failed to create exchange transaction: {str(e)}")
+                raise DatabaseOperationError(
+                    f"Failed to create exchange transaction: {str(e)}"
+                )
+                
+        except (ValidationError, InsufficientBalanceError):
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in create_exchange: {str(e)}")
+            raise DatabaseOperationError(f"Transaction failed: {str(e)}")
+    
+    # ==================== TRANSFER TRANSACTIONS ====================
+    
+    async def create_transfer(
+        self,
+        from_branch_id: UUID,
+        to_branch_id: UUID,
+        amount: Decimal,
+        currency_id: UUID,
+        user_id: UUID,
+        transfer_type: TransferType = TransferType.BRANCH_TO_BRANCH,
+        reference_number: Optional[str] = None,
+        notes: Optional[str] = None
+    ) -> TransferTransaction:
+        """
+        Create branch transfer transaction (two-phase commit)
+        
+        Phase 1 - Initiate Transfer:
+        1. Check from_branch balance
+        2. Generate transaction number
+        3. Start DB transaction
+        4. Create transfer record (status: pending)
+        5. Reserve balance in from_branch
+        6. Commit
+        
+        Phase 2 - Complete Transfer (separate endpoint):
+        Use complete_transfer() method
+        
+        Args:
+            from_branch_id: Source branch
+            to_branch_id: Destination branch
+            amount: Transfer amount
+            currency_id: Currency of transfer
+            user_id: User initiating transfer
+            transfer_type: Type of transfer
+            reference_number: Optional external reference
+            notes: Optional transfer notes
+            
+        Returns:
+            Created TransferTransaction (status: pending)
+            
+        Raises:
+            ValidationError: Invalid inputs or same branches
+            InsufficientBalanceError: Not enough funds
+            DatabaseOperationError: Transaction failed
+        """
+        try:
+            # Validate inputs
+            validate_positive_amount(amount)
+            await self._validate_branch_exists(from_branch_id)
+            await self._validate_branch_exists(to_branch_id)
+            await self._validate_currency_exists(currency_id)
+            
+            if from_branch_id == to_branch_id:
+                raise ValidationError("Cannot transfer to the same branch")
+            
+            # Check duplicate reference
+            if reference_number:
+                await self._check_duplicate_reference(reference_number)
+            
+            # Check balance
+            balance_info = await self.balance_service.get_balance(
+                from_branch_id, currency_id
+            )
+            available = Decimal(str(balance_info['available_balance']))
+            
+            if available < amount:
+                raise InsufficientBalanceError(
+                    f"Insufficient balance for transfer. "
+                    f"Available: {available}, Required: {amount}"
+                )
+            
+            # Generate transaction number
+            transaction_number = await self.transaction_generator.generate_number(
+                self.db, TransactionType.TRANSFER
+            )
+            
+            # Atomic operation - Phase 1
+            try:
+                # Create transfer transaction
+                transfer = TransferTransaction(
+                    transaction_number=transaction_number,
+                    transaction_type=TransactionType.TRANSFER,
+                    status=TransactionStatus.PENDING,
+                    amount=amount,
+                    currency_id=currency_id,
+                    branch_id=from_branch_id,
+                    user_id=user_id,
+                    reference_number=reference_number,
+                    notes=notes,
+                    from_branch_id=from_branch_id,
+                    to_branch_id=to_branch_id,
+                    transfer_type=transfer_type,
+                    transaction_date=datetime.utcnow()
+                )
+                
+                self.db.add(transfer)
+                await self.db.flush()
+                
+                # Reserve balance (don't deduct yet)
+                await self.balance_service.reserve_balance(
+                    branch_id=from_branch_id,
+                    currency_id=currency_id,
+                    amount=amount,
+                    transaction_id=transfer.id
+                )
+                
+                await self.db.commit()
+                await self.db.refresh(transfer)
+                
+                logger.info(
+                    f"Transfer initiated: {transaction_number}, "
+                    f"From: {from_branch_id} -> To: {to_branch_id}, "
+                    f"Amount: {amount} {currency_id}"
+                )
+                
+                return transfer
+                
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"Failed to initiate transfer: {str(e)}")
+                raise DatabaseOperationError(
+                    f"Failed to initiate transfer: {str(e)}"
+                )
+                
+        except (ValidationError, InsufficientBalanceError):
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in create_transfer: {str(e)}")
+            raise DatabaseOperationError(f"Transaction failed: {str(e)}")
+    
+    async def complete_transfer(
+        self,
+        transfer_id: UUID,
+        received_by_user_id: UUID
+    ) -> TransferTransaction:
+        """
+        Complete transfer transaction (Phase 2)
+        
+        Steps:
+        1. Validate transfer exists and is pending
+        2. Start DB transaction
+        3. Update from_branch balance (-amount)
+        4. Update to_branch balance (+amount)
+        5. Release reserved balance
+        6. Update transfer status (completed)
+        7. Commit or rollback
+        
+        Args:
+            transfer_id: Transfer transaction ID
+            received_by_user_id: User confirming receipt
+            
+        Returns:
+            Updated TransferTransaction
+            
+        Raises:
+            ValidationError: Invalid transfer state
+            DatabaseOperationError: Transaction failed
+        """
+        try:
+            # Get transfer
+            transfer = await self.db.get(TransferTransaction, transfer_id)
+            
+            if not transfer:
+                raise ValidationError(f"Transfer {transfer_id} not found")
+            
+            if transfer.status != TransactionStatus.PENDING:
+                raise ValidationError(
+                    f"Transfer {transfer_id} is not pending (status: {transfer.status})"
+                )
+            
+            # Atomic operation - Phase 2
+            try:
+                # Deduct from source branch
+                await self.balance_service.update_balance(
+                    branch_id=transfer.from_branch_id,
+                    currency_id=transfer.currency_id,
+                    amount=-transfer.amount,
+                    transaction_id=transfer.id,
+                    change_type="transfer_out",
+                    notes=f"Transfer to {transfer.to_branch_id}"
+                )
+                
+                # Add to destination branch
+                await self.balance_service.update_balance(
+                    branch_id=transfer.to_branch_id,
+                    currency_id=transfer.currency_id,
+                    amount=transfer.amount,
+                    transaction_id=transfer.id,
+                    change_type="transfer_in",
+                    notes=f"Transfer from {transfer.from_branch_id}"
+                )
+                
+                # Release reserved balance
+                await self.balance_service.release_reserved_balance(
+                    transaction_id=transfer.id
+                )
+                
+                # Update transfer status
+                transfer.status = TransactionStatus.COMPLETED
+                transfer.completed_at = datetime.utcnow()
+                transfer.received_by_id = received_by_user_id
+                transfer.received_at = datetime.utcnow()
+                
+                await self.db.commit()
+                await self.db.refresh(transfer)
+                
+                logger.info(f"Transfer completed: {transfer.transaction_number}")
+                
+                return transfer
+                
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"Failed to complete transfer: {str(e)}")
+                raise DatabaseOperationError(
+                    f"Failed to complete transfer: {str(e)}"
+                )
+                
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in complete_transfer: {str(e)}")
+            raise DatabaseOperationError(f"Transaction failed: {str(e)}")
+    
+    # ==================== TRANSACTION CANCELLATION ====================
+    
+    async def cancel_transaction(
+        self,
+        transaction_id: UUID,
+        reason: str,
+        cancelled_by_user_id: UUID
+    ) -> Transaction:
+        """
+        Cancel pending transaction and reverse balance changes
+        
+        Steps:
+        1. Validate transaction exists and can be cancelled
+        2. Start DB transaction
+        3. Reverse balance changes
+        4. Update transaction status (cancelled)
+        5. Release any reserved balances
+        6. Commit or rollback
+        
+        Args:
+            transaction_id: Transaction to cancel
+            reason: Cancellation reason (required)
+            cancelled_by_user_id: User cancelling transaction
+            
+        Returns:
+            Updated Transaction
+            
+        Raises:
+            ValidationError: Cannot cancel this transaction
+            DatabaseOperationError: Cancellation failed
+        """
+        try:
+            # Get transaction
+            transaction = await self.db.get(Transaction, transaction_id)
+            
+            if not transaction:
+                raise ValidationError(f"Transaction {transaction_id} not found")
+            
+            if transaction.status != TransactionStatus.PENDING:
+                raise ValidationError(
+                    f"Cannot cancel transaction with status: {transaction.status}. "
+                    f"Only PENDING transactions can be cancelled."
+                )
+            
+            if not reason or len(reason.strip()) < 10:
+                raise ValidationError(
+                    "Cancellation reason must be at least 10 characters"
+                )
+            
+            # Atomic operation
+            try:
+                # Reverse balance changes based on transaction type
+                if isinstance(transaction, IncomeTransaction):
+                    # Reverse income (deduct amount)
+                    await self.balance_service.update_balance(
+                        branch_id=transaction.branch_id,
+                        currency_id=transaction.currency_id,
+                        amount=-transaction.amount,
+                        transaction_id=transaction.id,
+                        change_type="cancellation",
+                        notes=f"Cancelled income: {reason}"
+                    )
+                
+                elif isinstance(transaction, ExpenseTransaction):
+                    # Reverse expense (add amount back)
+                    await self.balance_service.update_balance(
+                        branch_id=transaction.branch_id,
+                        currency_id=transaction.currency_id,
+                        amount=transaction.amount,
+                        transaction_id=transaction.id,
+                        change_type="cancellation",
+                        notes=f"Cancelled expense: {reason}"
+                    )
+                
+                elif isinstance(transaction, TransferTransaction):
+                    # Release reserved balance
+                    await self.balance_service.release_reserved_balance(
+                        transaction_id=transaction.id
+                    )
+                
+                # Update transaction status
+                transaction.status = TransactionStatus.CANCELLED
+                transaction.cancelled_at = datetime.utcnow()
+                transaction.cancelled_by_id = cancelled_by_user_id
+                transaction.cancellation_reason = reason.strip()
+                
+                await self.db.commit()
+                await self.db.refresh(transaction)
+                
+                logger.info(
+                    f"Transaction cancelled: {transaction.transaction_number}, "
+                    f"Reason: {reason}"
+                )
+                
+                return transaction
+                
+            except Exception as e:
+                await self.db.rollback()
+                logger.error(f"Failed to cancel transaction: {str(e)}")
+                raise DatabaseOperationError(
+                    f"Failed to cancel transaction: {str(e)}"
+                )
+                
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in cancel_transaction: {str(e)}")
+            raise DatabaseOperationError(f"Transaction failed: {str(e)}")
+    
+    # ==================== QUERY METHODS ====================
+    
+    async def get_transaction(self, transaction_id: UUID) -> Optional[Transaction]:
+        """Get transaction by ID"""
+        return await self.db.get(Transaction, transaction_id)
+    
+    async def get_transaction_by_number(
+        self, transaction_number: str
+    ) -> Optional[Transaction]:
+        """Get transaction by transaction number"""
+        stmt = select(Transaction).where(
+            Transaction.transaction_number == transaction_number
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+    
+    async def get_branch_transactions(
+        self,
+        branch_id: UUID,
+        transaction_type: Optional[TransactionType] = None,
+        status: Optional[TransactionStatus] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[Transaction]:
+        """Get transactions for a branch with filters"""
+        stmt = select(Transaction).where(Transaction.branch_id == branch_id)
+        
+        if transaction_type:
+            stmt = stmt.where(Transaction.transaction_type == transaction_type)
+        
+        if status:
+            stmt = stmt.where(Transaction.status == status)
+        
+        if date_from:
+            stmt = stmt.where(Transaction.transaction_date >= date_from)
+        
+        if date_to:
+            stmt = stmt.where(Transaction.transaction_date <= date_to)
+        
+        stmt = stmt.order_by(Transaction.transaction_date.desc())
+        stmt = stmt.offset(skip).limit(limit)
+        
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+    
+    async def get_transaction_statistics(
+        self,
+        branch_id: Optional[UUID] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """Get transaction statistics"""
+        stmt = select(Transaction)
+        
+        if branch_id:
+            stmt = stmt.where(Transaction.branch_id == branch_id)
+        
+        if date_from:
+            stmt = stmt.where(Transaction.transaction_date >= date_from)
+        
+        if date_to:
+            stmt = stmt.where(Transaction.transaction_date <= date_to)
+        
+        result = await self.db.execute(stmt)
+        transactions = list(result.scalars().all())
+        
+        # Calculate statistics
+        stats = {
+            'total_count': len(transactions),
+            'by_type': {},
+            'by_status': {},
+            'total_amount_by_currency': {}
+        }
+        
+        for txn in transactions:
+            # Count by type
+            type_key = txn.transaction_type.value
+            stats['by_type'][type_key] = stats['by_type'].get(type_key, 0) + 1
+            
+            # Count by status
+            status_key = txn.status.value
+            stats['by_status'][status_key] = stats['by_status'].get(status_key, 0) + 1
+            
+            # Sum amounts by currency
+            currency_key = str(txn.currency_id)
+            if currency_key not in stats['total_amount_by_currency']:
+                stats['total_amount_by_currency'][currency_key] = 0
+            stats['total_amount_by_currency'][currency_key] += float(txn.amount)
+        
+        return stats
+    
+    # ==================== VALIDATION HELPERS ====================
+    
+    async def _validate_branch_exists(self, branch_id: UUID) -> None:
+        """Validate branch exists"""
+        from app.db.models.branch import Branch
+        
+        branch = await self.db.get(Branch, branch_id)
+        if not branch:
+            raise ValidationError(f"Branch {branch_id} not found")
+        
+        if not branch.is_active:
+            raise ValidationError(f"Branch {branch_id} is not active")
+    
+    async def _validate_currency_exists(self, currency_id: UUID) -> None:
+        """Validate currency exists"""
+        currency = await self.db.get(Currency, currency_id)
+        if not currency:
+            raise ValidationError(f"Currency {currency_id} not found")
+        
+        if not currency.is_active:
+            raise ValidationError(f"Currency {currency_id} is not active")
+    
+    async def _validate_branch_has_currency(
+        self, branch_id: UUID, currency_id: UUID
+    ) -> None:
+        """Validate branch has a balance record for this currency"""
+        balance = await self.balance_service.get_balance(branch_id, currency_id)
+        if not balance:
+            raise ValidationError(
+                f"Branch {branch_id} does not have balance for currency {currency_id}"
+            )
+    
+    async def _validate_customer_exists(self, customer_id: UUID) -> None:
+        """Validate customer exists"""
+        from app.db.models.customer import Customer
+        
+        customer = await self.db.get(Customer, customer_id)
+        if not customer:
+            raise ValidationError(f"Customer {customer_id} not found")
+        
+        if not customer.is_active:
+            raise ValidationError(f"Customer {customer_id} is not active")
+    
+    async def _check_duplicate_reference(self, reference_number: str) -> None:
+        """Check for duplicate reference number"""
+        stmt = select(Transaction).where(
+            Transaction.reference_number == reference_number
+        )
+        result = await self.db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        
+        if existing:
+            raise ValidationError(
+                f"Transaction with reference number {reference_number} already exists"
+            )
