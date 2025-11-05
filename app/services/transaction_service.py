@@ -39,6 +39,8 @@ from app.utils.logger import get_logger
 from app.utils.validators import (
     validate_positive_amount, validate_transaction_limits
 )
+from app.utils.decorators import retry_on_deadlock
+
 
 logger = get_logger(__name__)
 
@@ -62,7 +64,7 @@ class TransactionService:
         self.transaction_generator = TransactionNumberGenerator()
     
     # ==================== INCOME TRANSACTIONS ====================
-    
+    @retry_on_deadlock(max_attempts=3)  # ← أضف هذا السطر فقط
     async def create_income(
         self,
         branch_id: UUID,
@@ -182,7 +184,7 @@ class TransactionService:
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
     # ==================== EXPENSE TRANSACTIONS ====================
-    
+    @retry_on_deadlock(max_attempts=3)  # ← وهنا
     async def create_expense(
         self,
         branch_id: UUID,
@@ -320,7 +322,7 @@ class TransactionService:
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
     # ==================== EXCHANGE TRANSACTIONS ====================
-    
+    @retry_on_deadlock(max_attempts=3)  # ← وهنا
     async def create_exchange(
         self,
         branch_id: UUID,
