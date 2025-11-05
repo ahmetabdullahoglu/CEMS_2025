@@ -20,7 +20,6 @@ from app.db.models.branch import (
 
 # Phase 5: Customer Management
 # from app.db.models.customer import Customer, CustomerDocument, CustomerNote
-
 # Phase 6: Transaction Management
 # from app.db.models.transaction import (
 #     Transaction,
@@ -29,6 +28,7 @@ from app.db.models.branch import (
 #     ExchangeTransaction,
 #     TransferTransaction
 # )
+from app.db.models.customer import Customer, CustomerDocument, CustomerNote
 # ==================== Transaction Models ====================
 from app.db.models.transaction import (
     Transaction,
@@ -82,7 +82,9 @@ __all__ = [
     # "Customer",
     # "CustomerDocument",
     # "CustomerNote",
-    
+    "Customer",
+    "CustomerDocument", 
+    "CustomerNote",
     # Transaction Management
     # "Transaction",
     # "IncomeTransaction",

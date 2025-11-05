@@ -45,9 +45,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Taksim, Beyoğlu",
         "city": "Istanbul",
         "country": "Turkey",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": True,
-        "risk_level": RiskLevel.LOW,
+        "risk_level": "low",
         "documents": [
             {
                 "document_type": DocumentType.NATIONAL_ID,
@@ -76,9 +76,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Kadıköy, Moda Street 45",
         "city": "Istanbul",
         "country": "Turkey",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": True,
-        "risk_level": RiskLevel.LOW,
+        "risk_level": "low",
         "documents": [
             {
                 "document_type": DocumentType.NATIONAL_ID,
@@ -107,9 +107,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Riyadh, Al Malaz District",
         "city": "Riyadh",
         "country": "Saudi Arabia",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": True,
-        "risk_level": RiskLevel.MEDIUM,
+        "risk_level": "medium",
         "documents": [
             {
                 "document_type": DocumentType.PASSPORT,
@@ -138,7 +138,7 @@ SAMPLE_CUSTOMERS = [
         "address": "London, Baker Street 221B",
         "city": "London",
         "country": "United Kingdom",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": False,
         "risk_level": None,
         "documents": [
@@ -169,9 +169,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Ankara, Kızılay Business Center",
         "city": "Ankara",
         "country": "Turkey",
-        "customer_type": CustomerType.CORPORATE,
+        "customer_type": "corporate",
         "is_verified": True,
-        "risk_level": RiskLevel.MEDIUM,
+        "risk_level": "medium",
         "documents": [
             {
                 "document_type": DocumentType.COMMERCIAL_REGISTRATION,
@@ -206,7 +206,7 @@ SAMPLE_CUSTOMERS = [
         "address": "Izmir, Alsancak",
         "city": "Izmir",
         "country": "Turkey",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": False,
         "risk_level": None,
         "documents": [
@@ -232,9 +232,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Dubai, Business Bay",
         "city": "Dubai",
         "country": "UAE",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": True,
-        "risk_level": RiskLevel.LOW,
+        "risk_level": "low",
         "documents": [
             {
                 "document_type": DocumentType.PASSPORT,
@@ -262,7 +262,7 @@ SAMPLE_CUSTOMERS = [
         "address": "Antalya, Lara Beach",
         "city": "Antalya",
         "country": "Turkey",
-        "customer_type": CustomerType.INDIVIDUAL,
+        "customer_type": "individual",
         "is_verified": False,
         "risk_level": None,
         "documents": [],
@@ -434,10 +434,10 @@ async def show_customers():
         
         for customer in customers:
             status = "✓ Verified" if customer.is_verified else "⚠ Pending"
-            risk = f" - Risk: {customer.risk_level.value}" if customer.risk_level else ""
+            risk = f" - Risk: {customer.risk_level}" if customer.risk_level else ""
             print(f"{customer.customer_number}: {customer.full_name}")
             print(f"  {status}{risk}")
-            print(f"  Type: {customer.customer_type.value.title()}")
+            print(f"  Type: {customer.customer_type.title()}")
             print(f"  Phone: {customer.phone_number}")
             if customer.email:
                 print(f"  Email: {customer.email}")

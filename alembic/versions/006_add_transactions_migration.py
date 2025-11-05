@@ -1,5 +1,5 @@
 """
-Add transaction tables - Without customer dependency
+Add transaction tables - With customer dependency
 
 Revision ID: 006_add_transactions
 Revises: 005_create_customer_tables
@@ -39,127 +39,122 @@ def upgrade():
     if 'transfertype' not in existing_enums:
         op.execute("CREATE TYPE transfertype AS ENUM ('branch_to_branch', 'vault_to_branch', 'branch_to_vault')")
     
-    # ==================== Create Table ====================
-    op.create_table(
-        'transactions',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('transaction_number', sa.String(50), nullable=False, unique=True),
-        sa.Column('transaction_type', postgresql.ENUM('income', 'expense', 'exchange', 'transfer', 
-                  name='transactiontype', create_type=False), nullable=False),
-        sa.Column('status', postgresql.ENUM('pending', 'completed', 'cancelled', 'failed',
-                  name='transactionstatus', create_type=False), nullable=False, 
-                 server_default='pending'),
-        sa.Column('amount', sa.Numeric(15, 2), nullable=False),
-        
-        # Foreign Keys
-        sa.Column('branch_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('customer_id', postgresql.UUID(as_uuid=True), nullable=True),  # NO FK for now
-        sa.Column('currency_id', postgresql.UUID(as_uuid=True), nullable=False),
-        
-        sa.Column('reference_number', sa.String(100), nullable=True),
-        sa.Column('notes', sa.Text, nullable=True),
-        sa.Column('transaction_date', sa.DateTime(timezone=True), nullable=False,
-                 server_default=sa.func.now()),
-        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('cancelled_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('cancelled_by_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('cancellation_reason', sa.Text, nullable=True),
-        
-        # Income fields
-        sa.Column('income_category', postgresql.ENUM('service_fee', 'commission', 'other',
-                  name='incomecategory', create_type=False), nullable=True),
-        sa.Column('income_source', sa.String(200), nullable=True),
-        
-        # Expense fields
-        sa.Column('expense_category', postgresql.ENUM('rent', 'salary', 'utilities', 'maintenance', 'supplies', 'other',
-                  name='expensecategory', create_type=False), nullable=True),
-        sa.Column('expense_to', sa.String(200), nullable=True),
-        sa.Column('approval_required', sa.Boolean, nullable=True, server_default='false'),
-        sa.Column('approved_by_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('approved_at', sa.DateTime(timezone=True), nullable=True),
-        
-        # Exchange fields
-        sa.Column('from_currency_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('to_currency_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('from_amount', sa.Numeric(15, 2), nullable=True),
-        sa.Column('to_amount', sa.Numeric(15, 2), nullable=True),
-        sa.Column('exchange_rate_used', sa.Numeric(12, 6), nullable=True),
-        sa.Column('commission_amount', sa.Numeric(15, 2), nullable=True, server_default='0.00'),
-        sa.Column('commission_percentage', sa.Numeric(5, 2), nullable=True, server_default='0.00'),
-        
-        # Transfer fields
-        sa.Column('from_branch_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('to_branch_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('transfer_type', postgresql.ENUM('branch_to_branch', 'vault_to_branch', 'branch_to_vault',
-                  name='transfertype', create_type=False), nullable=True),
-        sa.Column('received_by_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('received_at', sa.DateTime(timezone=True), nullable=True),
-        
-        # Audit
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        
-        # ========== Foreign Keys (WITHOUT customer FK) ==========
-        sa.ForeignKeyConstraint(['branch_id'], ['branches.id'], name='fk_transaction_branch', ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], name='fk_transaction_user', ondelete='RESTRICT'),
-        # REMOVED: customer FK - will add later when customers table exists
-        sa.ForeignKeyConstraint(['currency_id'], ['currencies.id'], name='fk_transaction_currency', ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['cancelled_by_id'], ['users.id'], name='fk_transaction_cancelled_by', ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['approved_by_id'], ['users.id'], name='fk_transaction_approved_by', ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['from_currency_id'], ['currencies.id'], name='fk_transaction_from_currency', ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['to_currency_id'], ['currencies.id'], name='fk_transaction_to_currency', ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['from_branch_id'], ['branches.id'], name='fk_transaction_from_branch', ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['to_branch_id'], ['branches.id'], name='fk_transaction_to_branch', ondelete='RESTRICT'),
-        sa.ForeignKeyConstraint(['received_by_id'], ['users.id'], name='fk_transaction_received_by', ondelete='SET NULL'),
-        
-        # ========== Constraints ==========
-        sa.CheckConstraint('amount > 0', name='check_amount_positive'),
-        sa.CheckConstraint("(status != 'cancelled') OR (cancelled_at IS NOT NULL AND cancelled_by_id IS NOT NULL)", name='check_cancellation_data'),
-        sa.CheckConstraint("(status != 'completed') OR (completed_at IS NOT NULL)", name='check_completion_data'),
-        sa.CheckConstraint("(transaction_type != 'expense') OR (approval_required = false) OR (approved_by_id IS NOT NULL AND approved_at IS NOT NULL)", name='check_expense_approval'),
-        sa.CheckConstraint("(transaction_type != 'exchange') OR (from_amount > 0)", name='check_exchange_from_amount'),
-        sa.CheckConstraint("(transaction_type != 'exchange') OR (to_amount > 0)", name='check_exchange_to_amount'),
-        sa.CheckConstraint("(transaction_type != 'exchange') OR (exchange_rate_used > 0)", name='check_exchange_rate_positive'),
-        sa.CheckConstraint("(transaction_type != 'exchange') OR (commission_amount >= 0)", name='check_commission_non_negative'),
-        sa.CheckConstraint("(transaction_type != 'exchange') OR (commission_percentage >= 0 AND commission_percentage <= 100)", name='check_commission_percentage_range'),
-        sa.CheckConstraint("(transaction_type != 'exchange') OR (from_currency_id != to_currency_id)", name='check_different_currencies'),
-        sa.CheckConstraint("(transaction_type != 'transfer') OR (from_branch_id != to_branch_id)", name='check_different_branches'),
-        sa.CheckConstraint("(transaction_type != 'transfer') OR (transfer_type != 'branch_to_branch') OR (from_branch_id IS NOT NULL AND to_branch_id IS NOT NULL)", name='check_branch_transfer_branches'),
-    )
+    # ==================== Create transactions table ====================
+    op.execute("""
+        CREATE TABLE transactions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            transaction_number VARCHAR(50) UNIQUE NOT NULL,
+            transaction_type transactiontype NOT NULL,
+            status transactionstatus NOT NULL DEFAULT 'pending',
+            
+            -- Core Transaction Data
+            amount NUMERIC(15, 2) NOT NULL CHECK (amount > 0),
+            
+            -- Foreign Keys
+            branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+            customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+            currency_id UUID NOT NULL REFERENCES currencies(id) ON DELETE RESTRICT,
+            
+            -- Optional Reference
+            reference_number VARCHAR(100),
+            notes TEXT,
+            
+            -- Timestamps
+            transaction_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            completed_at TIMESTAMP WITH TIME ZONE,
+            
+            -- Cancellation Info
+            cancelled_at TIMESTAMP WITH TIME ZONE,
+            cancelled_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+            cancellation_reason TEXT,
+            
+            -- Income-specific fields
+            income_category incomecategory,
+            income_source VARCHAR(200),
+            
+            -- Expense-specific fields
+            expense_category expensecategory,
+            expense_to VARCHAR(200),
+            approval_required BOOLEAN DEFAULT false,
+            approved_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+            approved_at TIMESTAMP WITH TIME ZONE,
+            
+            -- Exchange-specific fields
+            from_currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+            to_currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+            from_amount NUMERIC(15, 2),
+            to_amount NUMERIC(15, 2),
+            exchange_rate_used NUMERIC(12, 6),
+            commission_amount NUMERIC(15, 2) DEFAULT 0.00,
+            commission_percentage NUMERIC(5, 2) DEFAULT 0.00,
+            
+            -- Transfer-specific fields
+            from_branch_id UUID REFERENCES branches(id) ON DELETE RESTRICT,
+            to_branch_id UUID REFERENCES branches(id) ON DELETE RESTRICT,
+            transfer_type transfertype,
+            received_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+            received_at TIMESTAMP WITH TIME ZONE,
+            
+            -- Audit
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+            
+            -- Constraints
+            CONSTRAINT check_amount_positive CHECK (amount > 0),
+            CONSTRAINT check_cancelled_fields CHECK (
+                (status != 'cancelled') OR 
+                (cancelled_at IS NOT NULL AND cancelled_by_id IS NOT NULL)
+            ),
+            CONSTRAINT check_completed_fields CHECK (
+                (status != 'completed') OR (completed_at IS NOT NULL)
+            ),
+            CONSTRAINT check_exchange_fields CHECK (
+                (transaction_type != 'exchange') OR 
+                (from_currency_id IS NOT NULL AND to_currency_id IS NOT NULL AND 
+                 from_amount IS NOT NULL AND to_amount IS NOT NULL)
+            ),
+            CONSTRAINT check_transfer_fields CHECK (
+                (transaction_type != 'transfer') OR 
+                (from_branch_id IS NOT NULL AND to_branch_id IS NOT NULL AND transfer_type IS NOT NULL)
+            )
+        )
+    """)
     
-    # ==================== Indexes ====================
-    op.create_index('idx_transaction_number', 'transactions', ['transaction_number'], unique=True)
-    op.create_index('idx_transaction_type', 'transactions', ['transaction_type'])
-    op.create_index('idx_transaction_status', 'transactions', ['status'])
-    op.create_index('idx_transaction_date_status', 'transactions', ['transaction_date', 'status'])
-    op.create_index('idx_branch_currency_date', 'transactions', ['branch_id', 'currency_id', 'transaction_date'])
-    op.create_index('idx_transaction_branch', 'transactions', ['branch_id'])
-    op.create_index('idx_transaction_user', 'transactions', ['user_id'])
-    op.create_index('idx_transaction_customer', 'transactions', ['customer_id'])
-    op.create_index('idx_transaction_currency', 'transactions', ['currency_id'])
+    # ==================== Create Indexes ====================
+    op.execute("CREATE INDEX idx_transaction_number ON transactions(transaction_number)")
+    op.execute("CREATE INDEX idx_transaction_type ON transactions(transaction_type)")
+    op.execute("CREATE INDEX idx_transaction_status ON transactions(status)")
+    op.execute("CREATE INDEX idx_transaction_branch ON transactions(branch_id)")
+    op.execute("CREATE INDEX idx_transaction_user ON transactions(user_id)")
+    op.execute("CREATE INDEX idx_transaction_customer ON transactions(customer_id)")
+    op.execute("CREATE INDEX idx_transaction_currency ON transactions(currency_id)")
+    op.execute("CREATE INDEX idx_transaction_date ON transactions(transaction_date DESC)")
+    op.execute("CREATE INDEX idx_transaction_branch_date ON transactions(branch_id, transaction_date DESC)")
+    op.execute("CREATE INDEX idx_transaction_customer_date ON transactions(customer_id, transaction_date DESC) WHERE customer_id IS NOT NULL")
+    op.execute("CREATE INDEX idx_transaction_status_date ON transactions(status, transaction_date DESC)")
     
-    # ==================== Triggers ====================
+    # ==================== Create Functions & Triggers ====================
+    
+    # Function to generate transaction number
     op.execute("""
         CREATE OR REPLACE FUNCTION generate_transaction_number()
         RETURNS TRIGGER AS $$
         DECLARE
-            date_str TEXT;
-            prefix TEXT;
-            last_number INTEGER;
-            next_number INTEGER;
+            new_number VARCHAR(50);
+            counter INTEGER;
         BEGIN
-            date_str := TO_CHAR(NEW.transaction_date, 'YYYYMMDD');
-            prefix := 'TRX-' || date_str || '-';
-            
-            SELECT COALESCE(
-                MAX(CAST(SUBSTRING(transaction_number FROM LENGTH(prefix) + 1) AS INTEGER)), 0
-            ) INTO last_number
+            -- Get the next transaction number for today
+            SELECT COUNT(*) + 1 INTO counter
             FROM transactions
-            WHERE transaction_number LIKE prefix || '%';
+            WHERE DATE(created_at) = CURRENT_DATE;
             
-            next_number := last_number + 1;
-            NEW.transaction_number := prefix || LPAD(next_number::TEXT, 5, '0');
+            -- Format: TRX-YYYYMMDD-NNNNN
+            new_number := 'TRX-' || 
+                         TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' ||
+                         LPAD(counter::TEXT, 5, '0');
+            
+            NEW.transaction_number := new_number;
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
@@ -173,6 +168,7 @@ def upgrade():
         EXECUTE FUNCTION generate_transaction_number();
     """)
     
+    # Function to update updated_at
     op.execute("""
         CREATE OR REPLACE FUNCTION update_transaction_updated_at()
         RETURNS TRIGGER AS $$
@@ -190,6 +186,7 @@ def upgrade():
         EXECUTE FUNCTION update_transaction_updated_at();
     """)
     
+    # Function to prevent modification of completed transactions
     op.execute("""
         CREATE OR REPLACE FUNCTION prevent_completed_transaction_modification()
         RETURNS TRIGGER AS $$
@@ -215,21 +212,30 @@ def upgrade():
         EXECUTE FUNCTION prevent_completed_transaction_modification();
     """)
     
-    print("✅ Transaction tables created successfully (without customer FK)")
+    print("✅ Transaction tables created successfully")
 
 
 def downgrade():
     """Drop transaction tables"""
+    
+    # Drop triggers
     op.execute("DROP TRIGGER IF EXISTS trigger_prevent_completed_modification ON transactions")
     op.execute("DROP TRIGGER IF EXISTS trigger_update_transaction_updated_at ON transactions")
     op.execute("DROP TRIGGER IF EXISTS trigger_generate_transaction_number ON transactions")
+    
+    # Drop functions
     op.execute("DROP FUNCTION IF EXISTS prevent_completed_transaction_modification()")
     op.execute("DROP FUNCTION IF EXISTS update_transaction_updated_at()")
     op.execute("DROP FUNCTION IF EXISTS generate_transaction_number()")
+    
+    # Drop table
     op.drop_table('transactions')
+    
+    # Drop enums
     op.execute("DROP TYPE IF EXISTS transfertype")
     op.execute("DROP TYPE IF EXISTS expensecategory")
     op.execute("DROP TYPE IF EXISTS incomecategory")
     op.execute("DROP TYPE IF EXISTS transactionstatus")
     op.execute("DROP TYPE IF EXISTS transactiontype")
-    print("✅ Transaction tables dropped")
+    
+    print("✅ Transaction tables dropped successfully")
