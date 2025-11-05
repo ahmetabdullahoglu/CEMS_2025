@@ -5,7 +5,7 @@ Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, currencies, branches,customers
+from app.api.v1.endpoints import auth, currencies, branches,customers,transactions
 
 # Create main API router
 api_router = APIRouter()
@@ -40,6 +40,11 @@ api_router.include_router(
 api_router.include_router(customers.router, prefix="/customers", tags=["Customers"])
 
 # api_router.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
+api_router.include_router(
+    transactions.router,
+    prefix="/transactions",
+    tags=["transactions"]
+)
 # api_router.include_router(vault.router, prefix="/vault", tags=["Vault"])
 # api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 
