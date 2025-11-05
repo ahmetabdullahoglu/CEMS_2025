@@ -120,7 +120,7 @@ class CustomerCreate(CustomerBase):
     risk_level: RiskLevel = RiskLevel.LOW
     
     class Config:
-        json_json_json_schema_extra = {
+        schema_extra = {
             "example": {
                 "first_name": "Ahmed",
                 "last_name": "Ali",
@@ -194,7 +194,7 @@ class CustomerResponse(CustomerBase):
     updated_at: datetime
     
     class Config:
-        from_attributes = True
+        orm_mode = True
         use_enum_values = True
 
 
@@ -213,7 +213,7 @@ class CustomerListResponse(BaseModel):
     registered_at: datetime
     
     class Config:
-        from_attributes = True
+        orm_mode = True
         use_enum_values = True
 
 
@@ -263,7 +263,7 @@ class CustomerDocumentCreate(CustomerDocumentBase):
     document_url: str = Field(..., max_length=500)
     
     class Config:
-        json_json_json_schema_extra = {
+        schema_extra = {
             "example": {
                 "customer_id": "123e4567-e89b-12d3-a456-426614174000",
                 "document_type": "national_id",
@@ -298,7 +298,7 @@ class CustomerDocumentResponse(CustomerDocumentBase):
     updated_at: datetime
     
     class Config:
-        from_attributes = True
+        orm_mode = True
         use_enum_values = True
 
 
@@ -317,7 +317,7 @@ class CustomerNoteCreate(CustomerNoteBase):
     customer_id: UUID
     
     class Config:
-        json_json_json_schema_extra = {
+        schema_extra = {
             "example": {
                 "customer_id": "123e4567-e89b-12d3-a456-426614174000",
                 "note_text": "Customer requested higher transaction limit",
@@ -341,7 +341,7 @@ class CustomerNoteResponse(CustomerNoteBase):
     updated_at: datetime
     
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 # ============================================================================
@@ -355,7 +355,7 @@ class CustomerDetailResponse(CustomerResponse):
     total_transactions: int = 0
     
     class Config:
-        from_attributes = True
+        orm_mode = True
         use_enum_values = True
 
 
@@ -371,7 +371,7 @@ class CustomerKYCVerification(BaseModel):
     risk_level: Optional[RiskLevel] = None
     
     class Config:
-        json_json_json_schema_extra = {
+        schema_extra = {
             "example": {
                 "customer_id": "123e4567-e89b-12d3-a456-426614174000",
                 "is_verified": True,
