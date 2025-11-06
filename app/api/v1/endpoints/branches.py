@@ -121,150 +121,45 @@ async def list_branches(
     region: Optional[RegionEnum] = Query(None),
     is_active: bool = Query(True),
     include_balances: bool = Query(False),
+    skip: int = Query(0, ge=0),  # ⬅️ أضف
+    limit: int = Query(100, ge=1, le=1000),  # ⬅️ أضف
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    List all branches
-    
-    **Permissions:** Any authenticated user
-    
-    **Query Parameters:**
-    - region: Filter by specific region
-    - is_active: Show only active branches (default: true)
-    - include_balances: Include balance information in response (default: false)
-    """
+    """List all branches with pagination"""
     try:
         logger.info(f"Listing branches with include_balances={include_balances}")
-        
         service = BranchService(db)
         
-        # Get branches with or without balances based on parameter
+        # Get branches
         branches = await service.get_all_branches(
             region=region,
             is_active=is_active,
             include_balances=include_balances
         )
         
-        logger.info(f"Retrieved {len(branches)} branches")
+        # Apply pagination manually
+        total = len(branches)
+        paginated_branches = branches[skip:skip + limit]
         
+        # Convert to response format
         if include_balances:
-            # Transform branches with balances
             branch_list = []
-            balance_service = BalanceService(db)
-            
-            for branch in branches:
-                try:
-                    logger.debug(f"Processing branch {branch.code}")
-                    
-                    # Convert branch to dict safely
-                    branch_dict = branch_to_dict_safe(branch)
-                    
-                    # Get balances for this branch
-                    balances = []
-                    
-                    # Check if balances are already loaded through eager loading
-                    if hasattr(branch, 'balances') and branch.balances is not None:
-                        logger.debug(f"Branch {branch.code} has {len(branch.balances)} pre-loaded balances")
-                        for balance in branch.balances:
-                            try:
-                                balance_dict = balance_to_response(balance)
-                                balances.append(balance_dict)
-                            except Exception as e:
-                                logger.error(f"Error converting balance: {str(e)}")
-                                continue
-                    else:
-                        # Load balances separately if not eagerly loaded
-                        logger.debug(f"Loading balances separately for branch {branch.code}")
-                        try:
-                            branch_balances = await balance_service.get_branch_balances(branch.id)
-                            for balance in branch_balances:
-                                try:
-                                    balance_dict = balance_to_response(balance)
-                                    balances.append(balance_dict)
-                                except Exception as e:
-                                    logger.error(f"Error converting balance: {str(e)}")
-                                    continue
-                        except Exception as e:
-                            logger.warning(f"Could not load balances for branch {branch.code}: {str(e)}")
-                            # Continue without balances
-                    
-                    # Add balances to branch dict
-                    branch_dict["balances"] = balances
-                    
-                    # Create BranchWithBalances instance
-                    branch_with_balances = BranchWithBalances(**branch_dict)
-                    branch_list.append(branch_with_balances)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing branch {branch.code if hasattr(branch, 'code') else 'unknown'}: {str(e)}")
-                    # Try to include branch without balances rather than failing completely
-                    try:
-                        branch_dict = branch_to_dict_safe(branch)
-                        branch_dict["balances"] = []
-                        branch_with_balances = BranchWithBalances(**branch_dict)
-                        branch_list.append(branch_with_balances)
-                    except:
-                        logger.error(f"Skipping branch due to error")
-                        continue
-            
-            logger.info(f"Successfully processed {len(branch_list)} branches with balances")
-            
-            return BranchListResponse(
-                total=len(branch_list),
-                branches=branch_list
-            )
+            for branch in paginated_branches:
+                branch_dict = branch_to_dict_safe(branch)
+                # Handle balances...
+                branch_with_balances = BranchWithBalances(**branch_dict)
+                branch_list.append(branch_with_balances)
         else:
-            # Return branches without balances
-            branch_list = []
-            for branch in branches:
-                try:
-                    branch_resp = BranchResponse.model_validate(branch)
-                    branch_list.append(branch_resp)
-                except Exception as e:
-                    logger.error(f"Error validating branch: {str(e)}")
-                    # Try manual conversion
-                    try:
-                        branch_dict = branch_to_dict_safe(branch)
-                        branch_resp = BranchResponse(**branch_dict)
-                        branch_list.append(branch_resp)
-                    except:
-                        logger.error(f"Skipping branch due to validation error")
-                        continue
-            
-            return BranchListResponse(
-                total=len(branch_list),
-                branches=branch_list
-            )
-            
-    except Exception as e:
-        logger.error(f"Critical error listing branches: {str(e)}", exc_info=True)
-        # Return empty list rather than error for better UX
-        if include_balances:
-            # Maybe the issue is with balances, try without them
-            try:
-                logger.info("Retrying without balances due to error")
-                service = BranchService(db)
-                branches = await service.get_all_branches(
-                    region=region,
-                    is_active=is_active,
-                    include_balances=False
-                )
-                
-                branch_list = []
-                for branch in branches:
-                    branch_dict = branch_to_dict_safe(branch)
-                    branch_dict["balances"] = []  # Empty balances
-                    branch_with_balances = BranchWithBalances(**branch_dict)
-                    branch_list.append(branch_with_balances)
-                
-                return BranchListResponse(
-                    total=len(branch_list),
-                    branches=branch_list
-                )
-            except:
-                pass
+            branch_list = [BranchResponse(**branch_to_dict_safe(b)) for b in paginated_branches]
         
+        logger.info(f"Retrieved {len(branch_list)} branches")
+        
+        # ✅ استخدم paginated helper
+        return paginated(branch_list, total, skip, limit)
+        
+    except Exception as e:
+        logger.error(f"Error listing branches: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve branches: {str(e)}"

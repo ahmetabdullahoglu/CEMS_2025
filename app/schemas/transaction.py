@@ -14,11 +14,11 @@ Features:
 - Status-specific responses
 """
 
-from datetime import datetime
+from datetime import datetime,date
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
-
+from pydantic import BaseModel
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic import ConfigDict
 

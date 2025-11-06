@@ -183,6 +183,88 @@ class TransactionService:
             logger.error(f"Unexpected error in create_income: {str(e)}")
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
+    # في app/services/transaction_service.py
+
+    async def list_transactions(
+        self,
+        filters: 'TransactionFilter',
+        skip: int = 0,
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """
+        List transactions with filters and pagination
+        
+        Args:
+            filters: TransactionFilter object with filter criteria
+            skip: Number of records to skip
+            limit: Number of records to return
+            
+        Returns:
+            Dict with 'transactions' list and 'total' count
+        """
+        try:
+            logger.info(f"Listing transactions with filters: {filters.dict(exclude_none=True)}")
+            
+            # Build base query
+            query = select(Transaction)
+            
+            # Apply filters
+            conditions = []
+            
+            if filters.transaction_type:
+                conditions.append(Transaction.transaction_type == filters.transaction_type)
+            
+            if filters.branch_id:
+                conditions.append(Transaction.branch_id == filters.branch_id)
+            
+            if filters.customer_id:
+                conditions.append(Transaction.customer_id == filters.customer_id)
+            
+            if filters.status:
+                conditions.append(Transaction.status == filters.status)
+            
+            if filters.currency_id:
+                conditions.append(Transaction.currency_id == filters.currency_id)
+            
+            if filters.date_from:
+                conditions.append(Transaction.transaction_date >= filters.date_from)
+            
+            if filters.date_to:
+                conditions.append(Transaction.transaction_date <= filters.date_to)
+            
+            if filters.amount_min:
+                conditions.append(Transaction.amount >= filters.amount_min)
+            
+            if filters.amount_max:
+                conditions.append(Transaction.amount <= filters.amount_max)
+            
+            # Apply all conditions
+            if conditions:
+                query = query.where(and_(*conditions))
+            
+            # Get total count
+            count_query = select(func.count()).select_from(query.subquery())
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Apply pagination and ordering
+            query = query.order_by(Transaction.transaction_date.desc())
+            query = query.offset(skip).limit(limit)
+            
+            # Execute query
+            result = await self.db.execute(query)
+            transactions = result.scalars().all()
+            
+            logger.info(f"Found {len(transactions)} transactions (total: {total})")
+            
+            return {
+                "transactions": transactions,
+                "total": total
+            }
+            
+        except Exception as e:
+            logger.error(f"Error listing transactions: {str(e)}")
+            raise
     # ==================== EXPENSE TRANSACTIONS ====================
     @retry_on_deadlock(max_attempts=3)  # ← وهنا
     async def create_expense(

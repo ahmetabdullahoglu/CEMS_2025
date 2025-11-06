@@ -60,6 +60,7 @@ from app.schemas.transaction import (
 )
 from app.schemas.common import SuccessResponse, PaginationParams
 from app.utils.logger import get_logger
+from app.schemas.common import PaginatedResponse, paginated
 
 logger = get_logger(__name__)
 
@@ -132,7 +133,7 @@ async def create_income_transaction(
 
 @router.get(
     "/income",
-    response_model=TransactionListResponse,
+    response_model=PaginatedResponse[IncomeTransactionResponse],  # غيّر هنا
     summary="List Income Transactions",
     description="Get list of income transactions with filtering and pagination"
 )
@@ -146,21 +147,12 @@ async def list_income_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """
-    List income transactions with optional filters.
-    
-    **Permissions Required:** transactions.read
-    
-    **Filters:**
-    - branch_id: Filter by specific branch
-    - customer_id: Filter by customer
-    - date_from: Start date (inclusive)
-    - date_to: End date (inclusive)
-    """
+    """List income transactions with optional filters."""
     try:
+        logger.info(f"Listing income transactions for user {current_user.id}")
         service = TransactionService(db)
         
-        # Build filter
+        # إنشاء filters
         filters = TransactionFilter(
             transaction_type=TransactionType.INCOME,
             branch_id=branch_id,
@@ -169,18 +161,20 @@ async def list_income_transactions(
             date_to=date_to
         )
         
+        # استدعاء list_transactions
         result = await service.list_transactions(
             filters=filters,
             skip=skip,
             limit=limit
         )
         
-        return result
+        # تحويل لـ paginated response
+        return paginated(result.transactions, result.total, skip, limit)
         
     except Exception as e:
         logger.error(f"Error listing income transactions: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
 

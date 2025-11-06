@@ -18,14 +18,14 @@ from app.api.deps import get_current_active_user, get_current_superuser
 from app.services.customer_service import CustomerService
 from app.schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse,
-    CustomerDetailResponse, CustomerListResponse,
+    CustomerDetailResponse,  # ⬅️ حذفنا CustomerListResponse
     CustomerDocumentCreate, CustomerDocumentResponse,
     CustomerNoteCreate, CustomerNoteResponse,
     CustomerKYCVerification
 )
+from app.schemas.common import PaginatedResponse, paginated  # ⬅️ أضف هذا
 from app.core.exceptions import NotFoundError, ValidationError, DuplicateError
 from app.utils.logger import get_logger
-from app.schemas.common import PaginatedResponse, paginated  # أضف paginated هنا
 
 logger = get_logger(__name__)
 
@@ -99,7 +99,7 @@ async def create_customer(
 
 @router.get(
     "",
-    response_model=PaginatedResponse[CustomerResponse],
+    response_model=PaginatedResponse[CustomerResponse],  # ⬅️ هنا
     summary="Search/List Customers"
 )
 async def search_customers(

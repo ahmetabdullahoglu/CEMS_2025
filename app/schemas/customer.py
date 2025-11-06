@@ -177,44 +177,56 @@ class CustomerUpdate(BaseModel):
         use_enum_values = True
 
 
-class CustomerResponse(CustomerBase):
-    """Schema for customer response"""
-    id: UUID
-    customer_number: str
-    risk_level: RiskLevel
-    is_active: bool
-    is_verified: bool
-    registered_at: datetime
-    verified_at: Optional[datetime] = None
-    last_transaction_date: Optional[datetime] = None
-    branch_id: UUID
-    registered_by_id: Optional[UUID] = None
-    verified_by_id: Optional[UUID] = None
-    created_at: datetime
-    updated_at: datetime
-    
-    class Config:
-        from_attributes = True
-        use_enum_values = True
-
-
-class CustomerListResponse(BaseModel):
-    """Schema for customer list response"""
+class CustomerResponse(BaseModel):
+    """Schema for customer response - NO VALIDATION on output"""
+    # Basic Info
     id: UUID
     customer_number: str
     first_name: str
     last_name: str
+    name_ar: Optional[str] = None
+    
+    # Identification - NO VALIDATORS HERE
+    national_id: Optional[str] = None
+    passport_number: Optional[str] = None
+    
+    # Contact
     phone_number: str
+    email: Optional[EmailStr] = None
+    
+    # Personal Details
+    date_of_birth: date
+    nationality: str
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: str
+    
+    # Type & Status
     customer_type: CustomerType
     risk_level: RiskLevel
     is_active: bool
     is_verified: bool
-    branch_id: UUID
+    
+    # Timestamps
     registered_at: datetime
+    verified_at: Optional[datetime] = None
+    last_transaction_date: Optional[datetime] = None
+    
+    # Relationships
+    branch_id: UUID
+    registered_by_id: Optional[UUID] = None
+    verified_by_id: Optional[UUID] = None
+    
+    # Metadata
+    created_at: datetime
+    updated_at: datetime
+    additional_info: Optional[dict] = None
     
     class Config:
         from_attributes = True
         use_enum_values = True
+
+
 
 
 class CustomerSearchQuery(BaseModel):
