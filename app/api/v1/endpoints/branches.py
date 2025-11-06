@@ -45,6 +45,7 @@ from app.core.exceptions import (
     BusinessRuleViolationError
 )
 from app.utils.logger import get_logger
+from app.schemas.common import PaginatedResponse, paginated
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -115,7 +116,7 @@ def branch_to_dict_safe(branch) -> dict:
 
 # ==================== Branch CRUD Endpoints ====================
 
-@router.get("", response_model=BranchListResponse)
+@router.get("", response_model=PaginatedResponse[BranchResponse])
 async def list_branches(
     region: Optional[RegionEnum] = Query(None),
     is_active: bool = Query(True),

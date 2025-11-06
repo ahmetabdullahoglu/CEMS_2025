@@ -402,3 +402,27 @@ def create_error_response(
         ErrorResponse: Error response object
     """
     return ErrorResponse.create(code=code, message=message, details=details)
+
+# ==================== Pagination Helper (Simplified) ====================
+
+def paginated(items: List, total: int, skip: int = 0, limit: int = 100):
+    """
+    Create paginated response - simplified helper
+    
+    Usage in endpoints:
+        return paginated(customers, total, skip, limit)
+        
+    Returns dict compatible with PaginatedResponse
+    """
+    page = (skip // limit) + 1 if limit > 0 else 1
+    total_pages = (total + limit - 1) // limit if limit > 0 else 1
+    
+    return {
+        "data": items,
+        "total": total,
+        "page": page,
+        "page_size": limit,
+        "total_pages": total_pages,
+        "has_next": (skip + limit) < total,
+        "has_prev": skip > 0
+    }

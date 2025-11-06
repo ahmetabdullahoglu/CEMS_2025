@@ -25,6 +25,7 @@ from app.schemas.customer import (
 )
 from app.core.exceptions import NotFoundError, ValidationError, DuplicateError
 from app.utils.logger import get_logger
+from app.schemas.common import PaginatedResponse, paginated  # أضف paginated هنا
 
 logger = get_logger(__name__)
 
@@ -98,7 +99,7 @@ async def create_customer(
 
 @router.get(
     "",
-    response_model=CustomerListResponse,
+    response_model=PaginatedResponse[CustomerResponse],
     summary="Search/List Customers"
 )
 async def search_customers(
@@ -152,12 +153,7 @@ async def search_customers(
             limit=limit
         )
         
-        return {
-            "customers": customers,
-            "total": total,
-            "skip": skip,
-            "limit": limit
-        }
+        return paginated(customers, total, skip, limit)
         
     except Exception as e:
         logger.error(f"Error searching customers: {str(e)}")
