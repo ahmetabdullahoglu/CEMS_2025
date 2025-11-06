@@ -187,6 +187,10 @@ class Branch(BaseModel, UserTrackingMixin):
         back_populates="branch",
         foreign_keys="[Transaction.branch_id]"
     )
+    customers = relationship(
+    "Customer",
+    back_populates="branch"
+    )
     # Table constraints
     __table_args__ = (
         CheckConstraint("code ~ '^BR[0-9]{3,6}$'", name="branch_code_format_check"),

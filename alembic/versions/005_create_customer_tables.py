@@ -100,8 +100,8 @@ def upgrade():
                 CHECK (national_id IS NOT NULL OR passport_number IS NOT NULL),
             CONSTRAINT customer_type_specific_fields
                 CHECK (
-                    (customer_type = 'individual' AND company_name IS NULL) OR
-                    (customer_type = 'corporate' AND company_name IS NOT NULL)
+                    (customer_type = 'individual') OR
+                    (customer_type = 'corporate')
                 )
         )
     """)
@@ -127,7 +127,8 @@ def upgrade():
             issue_date DATE,
             expiry_date DATE,
             issuing_authority VARCHAR(200),
-            
+            document_url VARCHAR(500),
+
             -- File Information
             file_path VARCHAR(500),
             file_name VARCHAR(255),

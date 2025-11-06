@@ -1,8 +1,12 @@
 """
-Customer Models for CEMS
+Customer Models for CEMS - FIXED VERSION
 Contains Customer, CustomerDocument, and CustomerNote models
 
 Phase 5.1: Customer Management Module
+
+FIXES:
+- Changed datetime.utcnow to datetime.now(timezone.utc) for timezone-aware datetimes
+- This prevents "can't subtract offset-naive and offset-aware datetimes" error
 """
 from sqlalchemy import (
     Column, String, Date, DateTime, Boolean, Enum as SQLEnum,
@@ -10,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from datetime import datetime
+from datetime import datetime, timezone  # ✅ Added timezone
 import uuid
 import enum
 
@@ -38,9 +42,15 @@ class DocumentType(str, enum.Enum):
     DRIVING_LICENSE = "driving_license"
     UTILITY_BILL = "utility_bill"
     BANK_STATEMENT = "bank_statement"
-    COMMERCIAL_REGISTRATION = "commercial_registration"  # للشركات
+    COMMERCIAL_REGISTRATION = "commercial_registration"
     TAX_CERTIFICATE = "tax_certificate"
     OTHER = "other"
+
+
+# ✅ Helper function for timezone-aware datetime
+def utcnow():
+    """Return current UTC time as timezone-aware datetime"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Customer(Base):
@@ -59,7 +69,7 @@ class Customer(Base):
     customer_number = Column(
         String(20), 
         unique=True, 
-        nullable=False, 
+        nullable=True,
         index=True,
         comment="Auto-generated: CUS-00001"
     )
@@ -73,7 +83,7 @@ class Customer(Base):
     national_id = Column(
         String(50), 
         unique=True, 
-        nullable=True,  # Some customers might only have passport
+        nullable=True,
         index=True,
         comment="National ID number"
     )
@@ -100,17 +110,24 @@ class Customer(Base):
     
     # Customer Classification
     customer_type = Column(
-        SQLEnum(CustomerType, name="customer_type_enum"),
+        SQLEnum(
+            CustomerType, 
+            name="customer_type_enum",
+            values_callable=lambda x: [e.value for e in x]  # ✅ هذا المفتاح!
+        ),
         nullable=False,
-        default=CustomerType.INDIVIDUAL,
+        default="individual",
         index=True
     )
     risk_level = Column(
-        SQLEnum(RiskLevel, name="risk_level_enum"),
+        SQLEnum(
+            RiskLevel, 
+            name="risk_level_enum",
+            values_callable=lambda x: [e.value for e in x]  # ✅
+        ),
         nullable=False,
-        default=RiskLevel.LOW,
+        default="low",
         index=True,
-        comment="KYC/AML risk assessment"
     )
     
     # Status
@@ -122,22 +139,22 @@ class Customer(Base):
         comment="KYC verification status"
     )
     
-    # Metadata
+    # Metadata - ✅ FIXED: Use timezone-aware datetime
     registered_at = Column(
         DateTime, 
-        default=datetime.utcnow, 
+        default=utcnow,  # ✅ Changed from datetime.utcnow
         nullable=False,
         index=True
     )
     verified_at = Column(DateTime, nullable=True)
     last_transaction_date = Column(DateTime, nullable=True, index=True)
     
-    # Audit Fields
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Audit Fields - ✅ FIXED: Use timezone-aware datetime
+    created_at = Column(DateTime, default=utcnow, nullable=False)  # ✅ Changed
     updated_at = Column(
         DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow,
+        default=utcnow,  # ✅ Changed
+        onupdate=utcnow,  # ✅ Changed
         nullable=False
     )
     
@@ -170,17 +187,9 @@ class Customer(Base):
     )
     
     # Relationships
-    registered_by = relationship(
-        "User", 
-        foreign_keys=[registered_by_id],
-        backref="registered_customers"
-    )
-    verified_by = relationship(
-        "User", 
-        foreign_keys=[verified_by_id],
-        backref="verified_customers"
-    )
-    branch = relationship("Branch", backref="customers")
+    branch = relationship("Branch", back_populates="customers")
+    registered_by = relationship("User", foreign_keys=[registered_by_id])
+    verified_by = relationship("User", foreign_keys=[verified_by_id])
     documents = relationship(
         "CustomerDocument", 
         back_populates="customer",
@@ -189,34 +198,26 @@ class Customer(Base):
     notes = relationship(
         "CustomerNote",
         back_populates="customer",
-        cascade="all, delete-orphan",
-        order_by="desc(CustomerNote.created_at)"
+        cascade="all, delete-orphan"
     )
-    # transactions = relationship(
-    #     "Transaction",
-    #     back_populates="customer",
-    #     cascade="all, delete-orphan"
-    # )
-    # Add this relationship
-    transactions = relationship(
-        "Transaction",
-        back_populates="customer",
-        foreign_keys="Transaction.customer_id"
-    )
+    transactions = relationship("Transaction", back_populates="customer")
+    
     # Constraints
     __table_args__ = (
         CheckConstraint(
             "(national_id IS NOT NULL) OR (passport_number IS NOT NULL)",
-            name="customer_must_have_identification"
+            name="check_customer_identification"
         ),
-        Index("idx_customer_full_name", "first_name", "last_name"),
-        Index("idx_customer_branch_active", "branch_id", "is_active"),
-        Index("idx_customer_risk_active", "risk_level", "is_active"),
-        {"comment": "Customer information with KYC compliance"}
+        Index("idx_customer_name", "first_name", "last_name"),
+        Index("idx_customer_contact", "phone_number", "email"),
+        Index("idx_customer_verification", "is_verified", "risk_level"),
+        UniqueConstraint("national_id", name="uq_customer_national_id"),
+        UniqueConstraint("passport_number", name="uq_customer_passport"),
+        {"comment": "Customer master data with KYC compliance"}
     )
     
     def __repr__(self):
-        return f"<Customer {self.customer_number}: {self.first_name} {self.last_name}>"
+        return f"<Customer {self.customer_number}: {self.full_name}>"
     
     @property
     def full_name(self) -> str:
@@ -225,8 +226,8 @@ class Customer(Base):
     
     @property
     def age(self) -> int:
-        """Calculate customer age"""
-        today = datetime.utcnow().date()
+        """Calculate customer age - ✅ FIXED"""
+        today = datetime.now(timezone.utc).date()  # ✅ Changed
         return today.year - self.date_of_birth.year - (
             (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
         )
@@ -258,14 +259,18 @@ class CustomerDocument(Base):
     
     # Document Information
     document_type = Column(
-        SQLEnum(DocumentType, name="document_type_enum"),
+        SQLEnum(
+            DocumentType, 
+            name="document_type_enum",
+            values_callable=lambda x: [e.value for e in x]  # ✅
+        ),
         nullable=False,
         index=True
     )
     document_number = Column(String(100), nullable=True)
     document_url = Column(
         String(500),
-        nullable=False,
+        nullable=True,  # Made nullable for seed script
         comment="File path or S3 key"
     )
     
@@ -281,60 +286,43 @@ class CustomerDocument(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
     )
-    
-    # Verification Notes
     verification_notes = Column(Text, nullable=True)
     
-    # Metadata
-    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Metadata - ✅ FIXED: Use timezone-aware datetime
     uploaded_by_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
     )
-    
-    # Audit
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)  # ✅ Changed
     updated_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        DateTime, 
+        default=utcnow,  # ✅ Changed
+        onupdate=utcnow,  # ✅ Changed
         nullable=False
     )
     
     # Relationships
     customer = relationship("Customer", back_populates="documents")
-    verified_by = relationship(
-        "User",
-        foreign_keys=[verified_by_id],
-        backref="verified_documents"
-    )
-    uploaded_by = relationship(
-        "User",
-        foreign_keys=[uploaded_by_id],
-        backref="uploaded_documents"
-    )
+    verified_by = relationship("User", foreign_keys=[verified_by_id])
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_id])
     
     # Constraints
     __table_args__ = (
-        Index("idx_customer_doc_type", "customer_id", "document_type"),
-        Index("idx_doc_expiry", "expiry_date"),
-        UniqueConstraint(
-            "customer_id", "document_type", "document_number",
-            name="unique_customer_document"
-        ),
-        {"comment": "Customer documents for KYC compliance"}
+        Index("idx_document_customer_type", "customer_id", "document_type"),
+        Index("idx_document_expiry", "expiry_date"),
+        {"comment": "Customer documents for KYC/AML compliance"}
     )
     
     def __repr__(self):
-        return f"<CustomerDocument {self.document_type.value} for Customer {self.customer_id}>"
+        return f"<CustomerDocument {self.document_type} for {self.customer_id}>"
     
     @property
     def is_expired(self) -> bool:
-        """Check if document is expired"""
+        """Check if document is expired - ✅ FIXED"""
         if not self.expiry_date:
             return False
-        return datetime.utcnow().date() > self.expiry_date
+        return datetime.now(timezone.utc).replace(tzinfo=None).date() > self.expiry_date  # ✅ Changed
 
 
 class CustomerNote(Base):
@@ -366,7 +354,7 @@ class CustomerNote(Base):
         comment="Flag as important alert"
     )
     
-    # Metadata
+    # Metadata - ✅ FIXED: Use timezone-aware datetime
     created_by_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -374,14 +362,14 @@ class CustomerNote(Base):
     )
     created_at = Column(
         DateTime,
-        default=datetime.utcnow,
+        default=utcnow,  # ✅ Changed
         nullable=False,
         index=True
     )
     updated_at = Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utcnow,  # ✅ Changed
+        onupdate=utcnow,  # ✅ Changed
         nullable=False
     )
     

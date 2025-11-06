@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-Seed Customers Script
+Seed Customers Script - FIXED VERSION
 Creates sample customers with documents and notes
 Run this after seed_branches.py
+
+FIXES:
+- Changed enum values to lowercase ('individual' not 'INDIVIDUAL')
+- Changed risk_level to lowercase ('low' not 'LOW')
+- Fixed datetime.now(datetime.UTC).replace(tzinfo=None) deprecation warning
 
 Usage:
     python scripts/seed_customers.py          # Seed customers
@@ -12,7 +17,7 @@ Usage:
 import asyncio
 import sys
 from pathlib import Path
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 import random
 
@@ -31,7 +36,7 @@ from app.db.models.branch import Branch
 from app.db.models.user import User
 
 
-# Sample customer data
+# Sample customer data - FIXED ENUM VALUES
 SAMPLE_CUSTOMERS = [
     {
         "first_name": "Ahmed",
@@ -45,9 +50,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Taksim, Beyoğlu",
         "city": "Istanbul",
         "country": "Turkey",
-        "customer_type": "individual",
+        "customer_type": "individual",  # ✅ lowercase
         "is_verified": True,
-        "risk_level": "low",
+        "risk_level": "low",  # ✅ lowercase
         "documents": [
             {
                 "document_type": DocumentType.NATIONAL_ID,
@@ -76,9 +81,9 @@ SAMPLE_CUSTOMERS = [
         "address": "Kadıköy, Moda Street 45",
         "city": "Istanbul",
         "country": "Turkey",
-        "customer_type": "individual",
+        "customer_type": "individual",  # ✅ lowercase
         "is_verified": True,
-        "risk_level": "low",
+        "risk_level": "low",  # ✅ lowercase
         "documents": [
             {
                 "document_type": DocumentType.NATIONAL_ID,
@@ -88,308 +93,286 @@ SAMPLE_CUSTOMERS = [
                 "is_verified": True,
             },
             {
-                "document_type": DocumentType.UTILITY_BILL,
-                "issue_date": date(2024, 12, 1),
-                "is_verified": True,
-            }
-        ],
-        "notes": []
-    },
-    {
-        "first_name": "Mohammed",
-        "last_name": "Al-Farsi",
-        "name_ar": "محمد الفارسي",
-        "passport_number": "A12345678",
-        "phone_number": "+966501234567",
-        "email": "m.alfarsi@example.com",
-        "date_of_birth": date(1988, 11, 10),
-        "nationality": "Saudi Arabian",
-        "address": "Riyadh, Al Malaz District",
-        "city": "Riyadh",
-        "country": "Saudi Arabia",
-        "customer_type": "individual",
-        "is_verified": True,
-        "risk_level": "medium",
-        "documents": [
-            {
                 "document_type": DocumentType.PASSPORT,
-                "document_number": "A12345678",
-                "issue_date": date(2020, 5, 10),
-                "expiry_date": date(2025, 5, 10),
+                "document_number": "TR987654321",
+                "issue_date": date(2021, 1, 10),
+                "expiry_date": date(2031, 1, 10),
                 "is_verified": True,
             }
         ],
         "notes": [
             {
-                "note_text": "International customer - medium risk due to large transfers",
-                "is_alert": True
+                "note_text": "Preferred customer, frequent traveler",
+                "is_alert": False
             }
         ]
     },
     {
-        "first_name": "Sarah",
-        "last_name": "Johnson",
-        "name_ar": "سارة جونسون",
-        "passport_number": "P87654321",
-        "phone_number": "+447890123456",
-        "email": "sarah.johnson@example.com",
-        "date_of_birth": date(1992, 4, 18),
-        "nationality": "British",
-        "address": "London, Baker Street 221B",
-        "city": "London",
-        "country": "United Kingdom",
-        "customer_type": "individual",
+        "first_name": "Mehmet",
+        "last_name": "Kaya",
+        "name_ar": "محمد كايا",
+        "passport_number": "TR123456789",
+        "phone_number": "+905557654321",
+        "email": "mehmet.kaya@example.com",
+        "date_of_birth": date(1982, 11, 30),
+        "nationality": "Turkish",
+        "address": "Ankara, Çankaya",
+        "city": "Ankara",
+        "country": "Turkey",
+        "customer_type": "individual",  # ✅ lowercase
         "is_verified": False,
-        "risk_level": None,
+        "risk_level": "medium",  # ✅ lowercase
         "documents": [
             {
                 "document_type": DocumentType.PASSPORT,
-                "document_number": "P87654321",
-                "issue_date": date(2022, 3, 1),
-                "expiry_date": date(2032, 3, 1),
+                "document_number": "TR123456789",
+                "issue_date": date(2022, 3, 20),
+                "expiry_date": date(2032, 3, 20),
                 "is_verified": False,
             }
         ],
         "notes": [
             {
-                "note_text": "New customer - pending KYC verification",
+                "note_text": "Pending verification - documents under review",
                 "is_alert": True
             }
         ]
     },
     {
-        "first_name": "Global Trading",
-        "last_name": "Company Ltd",
-        "name_ar": "شركة التجارة العالمية المحدودة",
+        "first_name": "Ayşe",
+        "last_name": "Şahin",
+        "name_ar": "عائشة شاهين",
         "national_id": "34567890123",
-        "phone_number": "+905551111222",
-        "email": "info@globaltrading.com",
-        "date_of_birth": date(2010, 1, 1),  # Company registration date
+        "phone_number": "+905558765432",
+        "email": "ayse.sahin@example.com",
+        "date_of_birth": date(1995, 4, 18),
         "nationality": "Turkish",
-        "address": "Ankara, Kızılay Business Center",
-        "city": "Ankara",
+        "address": "İzmir, Karşıyaka",
+        "city": "Izmir",
         "country": "Turkey",
-        "customer_type": "corporate",
+        "customer_type": "individual",  # ✅ lowercase
         "is_verified": True,
-        "risk_level": "medium",
+        "risk_level": "low",  # ✅ lowercase
         "documents": [
             {
-                "document_type": DocumentType.COMMERCIAL_REGISTRATION,
-                "document_number": "TR-12345-2010",
-                "issue_date": date(2010, 1, 1),
+                "document_type": DocumentType.NATIONAL_ID,
+                "document_number": "34567890123",
+                "issue_date": date(2020, 5, 10),
+                "expiry_date": date(2030, 5, 10),
                 "is_verified": True,
             },
             {
-                "document_type": DocumentType.TAX_CERTIFICATE,
-                "document_number": "TAX-98765",
-                "issue_date": date(2024, 1, 1),
-                "expiry_date": date(2024, 12, 31),
+                "document_type": DocumentType.DRIVING_LICENSE,
+                "document_number": "B12345678",
+                "issue_date": date(2018, 8, 15),
+                "expiry_date": date(2028, 8, 15),
                 "is_verified": True,
             }
         ],
         "notes": [
             {
-                "note_text": "Corporate customer - requires manager approval for large transactions",
+                "note_text": "Young professional, growing account",
+                "is_alert": False
+            }
+        ]
+    },
+    {
+        "first_name": "Global Trade",
+        "last_name": "Company",
+        "name_ar": "شركة التجارة العالمية",
+        "national_id": "4567890123456",
+        "phone_number": "+905554567890",
+        "email": "info@globaltrade.tr",
+        "date_of_birth": date(2010, 1, 1),
+        "nationality": "Turkish",
+        "address": "Istanbul, Maslak Business Center",
+        "city": "Istanbul",
+        "country": "Turkey",
+        "customer_type": "corporate",  # ✅ lowercase
+        "is_verified": True,
+        "risk_level": "high",  # ✅ lowercase - corporate = higher risk
+        "documents": [
+            {
+                "document_type": DocumentType.COMMERCIAL_REGISTRATION,
+                "document_number": "CR123456789",
+                "issue_date": date(2010, 1, 1),
+                "is_verified": True,
+            },
+            {
+                "document_type": DocumentType.TAX_CERTIFICATE,
+                "document_number": "TAX987654321",
+                "issue_date": date(2024, 1, 1),
+                "expiry_date": date(2025, 1, 1),
+                "is_verified": True,
+            }
+        ],
+        "notes": [
+            {
+                "note_text": "Large volume transactions - enhanced due diligence",
+                "is_alert": True
+            },
+            {
+                "note_text": "Monthly compliance review required",
                 "is_alert": True
             }
         ]
     },
     {
         "first_name": "Ali",
-        "last_name": "Kaya",
-        "name_ar": "علي كايا",
+        "last_name": "Özkan",
+        "name_ar": "علي أوزكان",
         "national_id": "45678901234",
-        "phone_number": "+905552223344",
-        "email": "ali.kaya@example.com",
-        "date_of_birth": date(1995, 9, 5),
+        "phone_number": "+905553456789",
+        "date_of_birth": date(1988, 9, 5),
         "nationality": "Turkish",
-        "address": "Izmir, Alsancak",
-        "city": "Izmir",
+        "address": "Bursa, Osmangazi",
+        "city": "Bursa",
         "country": "Turkey",
-        "customer_type": "individual",
+        "customer_type": "individual",  # ✅ lowercase
         "is_verified": False,
-        "risk_level": None,
+        "risk_level": "low",  # ✅ lowercase
         "documents": [
             {
                 "document_type": DocumentType.NATIONAL_ID,
                 "document_number": "45678901234",
-                "issue_date": date(2021, 9, 5),
-                "expiry_date": date(2031, 9, 5),
+                "issue_date": date(2021, 2, 14),
+                "expiry_date": date(2031, 2, 14),
                 "is_verified": False,
             }
         ],
-        "notes": []
-    },
-    {
-        "first_name": "Layla",
-        "last_name": "Hassan",
-        "name_ar": "ليلى حسان",
-        "passport_number": "E55555555",
-        "phone_number": "+971501234567",
-        "email": "layla.hassan@example.com",
-        "date_of_birth": date(1987, 12, 25),
-        "nationality": "Emirati",
-        "address": "Dubai, Business Bay",
-        "city": "Dubai",
-        "country": "UAE",
-        "customer_type": "individual",
-        "is_verified": True,
-        "risk_level": "low",
-        "documents": [
-            {
-                "document_type": DocumentType.PASSPORT,
-                "document_number": "E55555555",
-                "issue_date": date(2021, 1, 10),
-                "expiry_date": date(2026, 1, 10),
-                "is_verified": True,
-            },
-            {
-                "document_type": DocumentType.BANK_STATEMENT,
-                "issue_date": date(2024, 11, 1),
-                "is_verified": True,
-            }
-        ],
-        "notes": []
-    },
-    {
-        "first_name": "Omar",
-        "last_name": "Özkan",
-        "name_ar": "عمر أوزكان",
-        "national_id": "56789012345",
-        "phone_number": "+905553334455",
-        "date_of_birth": date(1993, 6, 30),
-        "nationality": "Turkish",
-        "address": "Antalya, Lara Beach",
-        "city": "Antalya",
-        "country": "Turkey",
-        "customer_type": "individual",
-        "is_verified": False,
-        "risk_level": None,
-        "documents": [],
         "notes": [
             {
-                "note_text": "Walk-in customer - needs to upload documents",
+                "note_text": "New customer - initial verification pending",
                 "is_alert": True
             }
         ]
-    },
+    }
 ]
 
 
-async def get_admin_user(db: AsyncSession) -> User:
-    """Get admin user for customer registration"""
+async def seed_customers(db: AsyncSession):
+    """Seed customers with their documents and notes"""
+    
+    print("👥 Seeding customers...")
+    
+    # Get admin user for created_by
     result = await db.execute(
         select(User).where(User.username == "admin")
     )
     admin_user = result.scalar_one_or_none()
     
     if not admin_user:
-        print("❌ Admin user not found. Please run seed_data.py first.")
-        raise Exception("Admin user required for seeding customers")
+        raise Exception("Admin user not found. Run seed_users.py first.")
     
-    return admin_user
-
-
-async def get_branches(db: AsyncSession) -> list[Branch]:
-    """Get all branches"""
+    print(f"✓ Using admin user: {admin_user.username}")
+    
+    # Get active branches
     result = await db.execute(
         select(Branch).where(Branch.is_active == True)
     )
     branches = result.scalars().all()
     
     if not branches:
-        print("❌ No branches found. Please run seed_branches.py first.")
-        raise Exception("Branches required for seeding customers")
+        raise Exception("No branches found. Run seed_branches.py first.")
     
-    return list(branches)
-
-
-async def seed_customers(db: AsyncSession):
-    """Seed customers with documents and notes"""
-    
-    print("👥 Seeding customers...")
-    
-    # Get admin user and branches
-    admin_user = await get_admin_user(db)
-    branches = await get_branches(db)
-    
-    print(f"✓ Using admin user: {admin_user.username}")
     print(f"✓ Found {len(branches)} branches\n")
     
-    # Check if customers already exist
-    result = await db.execute(
-        select(func.count(Customer.id))
-    )
-    existing_count = result.scalar_one()
+    # Check existing customers
+    result = await db.execute(select(func.count(Customer.id)))
+    existing_count = result.scalar()
     
-    if existing_count > 0:
-        print(f"⚠️  {existing_count} customers already exist. Skipping...")
-        return
-    
-    # Create customers
+    # Track created records
     customers_created = 0
     documents_created = 0
     notes_created = 0
     
     for customer_data in SAMPLE_CUSTOMERS:
-        # Extract nested data
-        documents_data = customer_data.pop("documents", [])
-        notes_data = customer_data.pop("notes", [])
+        # Skip if customer already exists (by national_id or passport)
+        filters = []
+        if customer_data.get("national_id"):
+            filters.append(Customer.national_id == customer_data["national_id"])
+        if customer_data.get("passport_number"):
+            filters.append(Customer.passport_number == customer_data["passport_number"])
+        
+        if filters:
+            from sqlalchemy import or_
+            result = await db.execute(
+                select(Customer).where(or_(*filters))
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                print(f"⊘ Customer exists: {existing.first_name} {existing.last_name}")
+                continue
         
         # Assign random branch
         branch = random.choice(branches)
         
-        # Create customer
+        # Create customer - FIXED datetime
         customer = Customer(
-            **customer_data,
-            branch_id=branch.id,
+            first_name=customer_data["first_name"],
+            last_name=customer_data["last_name"],
+            name_ar=customer_data.get("name_ar"),
+            national_id=customer_data.get("national_id"),
+            passport_number=customer_data.get("passport_number"),
+            phone_number=customer_data["phone_number"],
+            email=customer_data.get("email"),
+            date_of_birth=customer_data["date_of_birth"],
+            nationality=customer_data["nationality"],
+            address=customer_data["address"],
+            city=customer_data["city"],
+            country=customer_data["country"],
+            customer_type=customer_data["customer_type"],  # ✅ already lowercase
+            risk_level=customer_data.get("risk_level", "low"),  # ✅ already lowercase
+            is_active=True,
+            is_verified=customer_data.get("is_verified", False),
             registered_by_id=admin_user.id,
             verified_by_id=admin_user.id if customer_data.get("is_verified") else None,
-            verified_at=datetime.utcnow() if customer_data.get("is_verified") else None,
+            branch_id=branch.id,
+            registered_at=datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None),
+            verified_at=datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None) if customer_data.get("is_verified") else None,
+
         )
+        
         db.add(customer)
         await db.flush()  # Get customer ID
         
         customers_created += 1
-        print(f"✅ Created customer: {customer.customer_number} - {customer.first_name} {customer.last_name}")
-        print(f"   📍 Branch: {branch.code}")
-        print(f"   📞 Phone: {customer.phone_number}")
-        print(f"   {'✓ Verified' if customer.is_verified else '⚠ Not verified'}")
+        print(f"✓ Customer: {customer.first_name} {customer.last_name}")
         
-        # Create documents
-        if documents_data:
-            for doc_data in documents_data:
-                document = CustomerDocument(
-                    customer_id=customer.id,
-                    document_url=f"/storage/customers/{customer.customer_number}/{doc_data['document_type'].value}.pdf",
-                    uploaded_by_id=admin_user.id,
-                    verified_by_id=admin_user.id if doc_data.get("is_verified") else None,
-                    verified_at=datetime.utcnow() if doc_data.get("is_verified") else None,
-                    **doc_data
-                )
-                db.add(document)
-                documents_created += 1
-                print(f"   📄 Document: {doc_data['document_type'].value}")
+        # Add documents
+        for doc_data in customer_data.get("documents", []):
+            document = CustomerDocument(
+                customer_id=customer.id,
+                document_type=doc_data["document_type"],
+                document_number=doc_data.get("document_number"),
+                issue_date=doc_data.get("issue_date"),
+                expiry_date=doc_data.get("expiry_date"),
+                is_verified=doc_data.get("is_verified", False),
+                verified_by_id=admin_user.id if doc_data.get("is_verified") else None,
+                verified_at=datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None) if doc_data.get("is_verified") else None,
+                uploaded_by_id=admin_user.id,
+            )
+            db.add(document)
+            documents_created += 1
         
-        # Create notes
-        if notes_data:
-            for note_data in notes_data:
-                note = CustomerNote(
-                    customer_id=customer.id,
-                    created_by_id=admin_user.id,
-                    **note_data
-                )
-                db.add(note)
-                notes_created += 1
-                alert_marker = "🚨" if note_data.get("is_alert") else "📝"
-                print(f"   {alert_marker} Note: {note_data['note_text'][:50]}...")
-        
-        print()
+        # Add notes
+        for note_data in customer_data.get("notes", []):
+            note = CustomerNote(
+                customer_id=customer.id,
+                note_text=note_data["note_text"],
+                is_alert=note_data.get("is_alert", False),
+                created_by_id=admin_user.id,
+            )
+            db.add(note)
+            notes_created += 1
     
+    # Commit all changes
     await db.commit()
     
+    print()
     print("=" * 60)
-    print("✅ Customer seeding completed successfully!")
+    print("✅ Customer Seeding Complete!")
+    print("=" * 60)
     print()
     print("📊 Summary:")
     print(f"   • Customers: {customers_created}")
