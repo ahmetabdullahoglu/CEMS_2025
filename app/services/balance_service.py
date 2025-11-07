@@ -37,10 +37,48 @@ class BalanceService:
     """
     
     def __init__(self, db: AsyncSession):
-
         self.db = db
         self.repo = BranchRepository(db)
-    
+
+    async def get_balance(
+        self,
+        branch_id: UUID,
+        currency_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Get balance information for a branch and currency
+
+        Args:
+            branch_id: Branch UUID
+            currency_id: Currency UUID
+
+        Returns:
+            Dictionary with balance information:
+            - balance: Total balance
+            - available_balance: Balance minus reserved
+            - reserved_balance: Reserved balance
+            - currency_id: Currency UUID
+            - branch_id: Branch UUID
+
+        Raises:
+            ValidationError: If balance not found
+        """
+        balance = await self.repo.get_branch_balance(branch_id, currency_id)
+
+        if not balance:
+            raise ValidationError(
+                f"Balance not found for branch {branch_id} and currency {currency_id}"
+            )
+
+        return {
+            "balance": balance.balance,
+            "available_balance": balance.balance - balance.reserved_balance,
+            "reserved_balance": balance.reserved_balance,
+            "currency_id": currency_id,
+            "branch_id": branch_id,
+            "last_updated": balance.last_updated
+        }
+
     async def update_balance(
         self,
         branch_id: UUID,
