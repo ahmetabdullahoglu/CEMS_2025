@@ -1044,14 +1044,12 @@ async def get_transaction_stats(
     """
     try:
         service = TransactionService(db)
-        
-        filters = TransactionFilter(
+
+        stats = await service.get_transaction_statistics(
             branch_id=branch_id,
             date_from=date_from,
             date_to=date_to
         )
-        
-        stats = await service.get_transaction_statistics(filters)
         
         return stats
         

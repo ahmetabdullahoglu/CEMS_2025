@@ -399,8 +399,9 @@ class TransactionEndpointTester:
 
             # Test 2: Get transaction statistics
             try:
-                filters = TransactionFilter(branch_id=self.test_branch_id)
-                result = await service.get_transaction_statistics(filters)
+                result = await service.get_transaction_statistics(
+                    branch_id=self.test_branch_id
+                )
 
                 self.log_test(
                     "Get transaction statistics",

@@ -602,44 +602,48 @@ class TransferTransaction(Transaction):
 class TransactionNumberGenerator:
     """
     Transaction Number Generator
-    
+
     Generates unique transaction numbers in format: TRX-YYYYMMDD-NNNNN
     Thread-safe and database-backed.
     """
-    
+
     @staticmethod
-    def generate(session: Session, transaction_date: datetime = None) -> str:
+    async def generate(session: 'AsyncSession', transaction_date: datetime = None) -> str:
         """
-        Generate unique transaction number
-        
+        Generate unique transaction number (async)
+
         Args:
-            session: Database session
+            session: Async database session
             transaction_date: Transaction date (default: now)
-        
+
         Returns:
             Unique transaction number (e.g., TRX-20250109-00001)
         """
+        from sqlalchemy import select
+
         if transaction_date is None:
             transaction_date = datetime.utcnow()
-        
+
         date_str = transaction_date.strftime("%Y%m%d")
         prefix = f"TRX-{date_str}-"
-        
-        # Get the last transaction number for today
-        last_transaction = (
-            session.query(Transaction)
-            .filter(Transaction.transaction_number.like(f"{prefix}%"))
+
+        # Get the last transaction number for today using async query
+        stmt = (
+            select(Transaction)
+            .where(Transaction.transaction_number.like(f"{prefix}%"))
             .order_by(Transaction.transaction_number.desc())
-            .first()
+            .limit(1)
         )
-        
+        result = await session.execute(stmt)
+        last_transaction = result.scalar_one_or_none()
+
         if last_transaction:
             # Extract sequence number and increment
             last_number = int(last_transaction.transaction_number.split("-")[-1])
             next_number = last_number + 1
         else:
             next_number = 1
-        
+
         return f"{prefix}{next_number:05d}"
 
 

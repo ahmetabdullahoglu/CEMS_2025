@@ -146,8 +146,8 @@ class TransactionService:
                 await self._check_duplicate_reference(reference_number)
             
             # Step 2: Generate transaction number
-            transaction_number = await self.transaction_generator.generate_number(
-                self.db, TransactionType.INCOME
+            transaction_number = await self.transaction_generator.generate(
+                self.db
             )
             
             # Step 3-7: Atomic operation
@@ -389,11 +389,11 @@ class TransactionService:
                 )
             
             # Validate transaction limits
-            await validate_transaction_limits(branch_id, amount, self.db)
-            
+            validate_transaction_limits(amount, "expense")
+
             # Step 2: Generate transaction number
-            transaction_number = await self.transaction_generator.generate_number(
-                self.db, TransactionType.EXPENSE
+            transaction_number = await self.transaction_generator.generate(
+                self.db
             )
             
             # Step 3-8: Atomic operation
@@ -472,15 +472,24 @@ class TransactionService:
             ExchangeCalculationResponse dict
         """
         try:
-            # Get latest exchange rate
+            # Get currency details first to get codes
+            from_currency = await self.db.get(Currency, calculation.from_currency_id)
+            to_currency = await self.db.get(Currency, calculation.to_currency_id)
+
+            if not from_currency:
+                raise ValidationError(f"From currency not found: {calculation.from_currency_id}")
+            if not to_currency:
+                raise ValidationError(f"To currency not found: {calculation.to_currency_id}")
+
+            # Get latest exchange rate using currency codes
             rate_info = await self.currency_service.get_latest_rate(
-                calculation.from_currency_id,
-                calculation.to_currency_id
+                from_currency.code,
+                to_currency.code
             )
 
             if not rate_info:
                 raise ValidationError(
-                    f"No exchange rate found for {calculation.from_currency_id} -> {calculation.to_currency_id}"
+                    f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
                 )
 
             exchange_rate = Decimal(str(rate_info['rate']))
@@ -498,15 +507,11 @@ class TransactionService:
             # Effective rate (including commission)
             effective_rate = to_amount / calculation.from_amount if calculation.from_amount > 0 else Decimal("0")
 
-            # Get currency details
-            from_currency = await self.db.get(Currency, calculation.from_currency_id)
-            to_currency = await self.db.get(Currency, calculation.to_currency_id)
-
             return {
                 "from_currency_id": calculation.from_currency_id,
-                "from_currency_code": from_currency.code if from_currency else "",
+                "from_currency_code": from_currency.code,
                 "to_currency_id": calculation.to_currency_id,
-                "to_currency_code": to_currency.code if to_currency else "",
+                "to_currency_code": to_currency.code,
                 "from_amount": calculation.from_amount,
                 "to_amount": to_amount.quantize(Decimal("0.01")),
                 "exchange_rate": exchange_rate,
@@ -641,8 +646,8 @@ class TransactionService:
                 )
             
             # Step 4: Generate transaction number
-            transaction_number = await self.transaction_generator.generate_number(
-                self.db, TransactionType.EXCHANGE
+            transaction_number = await self.transaction_generator.generate(
+                self.db
             )
             
             # Steps 5-11: Atomic operation
@@ -829,8 +834,8 @@ class TransactionService:
                 )
             
             # Generate transaction number
-            transaction_number = await self.transaction_generator.generate_number(
-                self.db, TransactionType.TRANSFER
+            transaction_number = await self.transaction_generator.generate(
+                self.db
             )
             
             # Atomic operation - Phase 1
