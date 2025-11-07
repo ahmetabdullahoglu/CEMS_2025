@@ -64,7 +64,33 @@ class TransactionService:
         self.transaction_generator = TransactionNumberGenerator()
     
     # ==================== INCOME TRANSACTIONS ====================
-    @retry_on_deadlock(max_attempts=3)  # ← أضف هذا السطر فقط
+    @retry_on_deadlock(max_attempts=3)
+    async def create_income_transaction(
+        self,
+        transaction: 'IncomeTransactionCreate',
+        user_id: UUID
+    ) -> IncomeTransaction:
+        """
+        Create income transaction from schema
+
+        Args:
+            transaction: IncomeTransactionCreate schema
+            user_id: User creating the transaction
+
+        Returns:
+            Created IncomeTransaction
+        """
+        return await self.create_income(
+            branch_id=transaction.branch_id,
+            amount=transaction.amount,
+            currency_id=transaction.currency_id,
+            category=transaction.income_category,
+            user_id=user_id,
+            customer_id=transaction.customer_id,
+            reference_number=transaction.reference_number,
+            notes=transaction.notes
+        )
+
     async def create_income(
         self,
         branch_id: UUID,
@@ -266,7 +292,34 @@ class TransactionService:
             logger.error(f"Error listing transactions: {str(e)}")
             raise
     # ==================== EXPENSE TRANSACTIONS ====================
-    @retry_on_deadlock(max_attempts=3)  # ← وهنا
+    @retry_on_deadlock(max_attempts=3)
+    async def create_expense_transaction(
+        self,
+        transaction: 'ExpenseTransactionCreate',
+        user_id: UUID
+    ) -> ExpenseTransaction:
+        """
+        Create expense transaction from schema
+
+        Args:
+            transaction: ExpenseTransactionCreate schema
+            user_id: User creating the transaction
+
+        Returns:
+            Created ExpenseTransaction
+        """
+        return await self.create_expense(
+            branch_id=transaction.branch_id,
+            amount=transaction.amount,
+            currency_id=transaction.currency_id,
+            category=transaction.expense_category,
+            payee=transaction.expense_to,
+            user_id=user_id,
+            reference_number=transaction.reference_number,
+            notes=transaction.notes,
+            requires_approval=transaction.approval_required
+        )
+
     async def create_expense(
         self,
         branch_id: UUID,
@@ -404,7 +457,98 @@ class TransactionService:
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
     # ==================== EXCHANGE TRANSACTIONS ====================
-    @retry_on_deadlock(max_attempts=3)  # ← وهنا
+
+    async def calculate_exchange(
+        self,
+        calculation: 'ExchangeCalculationRequest'
+    ) -> Dict[str, Any]:
+        """
+        Calculate exchange rate preview
+
+        Args:
+            calculation: ExchangeCalculationRequest schema
+
+        Returns:
+            ExchangeCalculationResponse dict
+        """
+        try:
+            # Get latest exchange rate
+            rate_info = await self.currency_service.get_latest_rate(
+                calculation.from_currency_id,
+                calculation.to_currency_id
+            )
+
+            if not rate_info:
+                raise ValidationError(
+                    f"No exchange rate found for {calculation.from_currency_id} -> {calculation.to_currency_id}"
+                )
+
+            exchange_rate = Decimal(str(rate_info['rate']))
+
+            # Calculate amounts
+            to_amount = calculation.from_amount * exchange_rate
+
+            # Calculate commission (default 1% or from request)
+            commission_percentage = calculation.commission_percentage or Decimal("1.0")
+            commission_amount = (calculation.from_amount * commission_percentage / 100).quantize(Decimal("0.01"))
+
+            # Total cost
+            total_cost = calculation.from_amount + commission_amount
+
+            # Effective rate (including commission)
+            effective_rate = to_amount / calculation.from_amount if calculation.from_amount > 0 else Decimal("0")
+
+            # Get currency details
+            from_currency = await self.db.get(Currency, calculation.from_currency_id)
+            to_currency = await self.db.get(Currency, calculation.to_currency_id)
+
+            return {
+                "from_currency_id": calculation.from_currency_id,
+                "from_currency_code": from_currency.code if from_currency else "",
+                "to_currency_id": calculation.to_currency_id,
+                "to_currency_code": to_currency.code if to_currency else "",
+                "from_amount": calculation.from_amount,
+                "to_amount": to_amount.quantize(Decimal("0.01")),
+                "exchange_rate": exchange_rate,
+                "commission_percentage": commission_percentage,
+                "commission_amount": commission_amount,
+                "total_cost": total_cost,
+                "effective_rate": effective_rate.quantize(Decimal("0.000001"))
+            }
+
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Error calculating exchange: {str(e)}")
+            raise ValidationError(f"Failed to calculate exchange: {str(e)}")
+
+    @retry_on_deadlock(max_attempts=3)
+    async def create_exchange_transaction(
+        self,
+        transaction: 'ExchangeTransactionCreate',
+        user_id: UUID
+    ) -> ExchangeTransaction:
+        """
+        Create exchange transaction from schema
+
+        Args:
+            transaction: ExchangeTransactionCreate schema
+            user_id: User creating the transaction
+
+        Returns:
+            Created ExchangeTransaction
+        """
+        return await self.create_exchange(
+            branch_id=transaction.branch_id,
+            customer_id=transaction.customer_id,
+            from_currency_id=transaction.from_currency_id,
+            to_currency_id=transaction.to_currency_id,
+            from_amount=transaction.from_amount,
+            user_id=user_id,
+            reference_number=transaction.reference_number,
+            notes=transaction.notes
+        )
+
     async def create_exchange(
         self,
         branch_id: UUID,
@@ -588,7 +732,33 @@ class TransactionService:
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
     # ==================== TRANSFER TRANSACTIONS ====================
-    
+
+    async def create_transfer_transaction(
+        self,
+        transaction: 'TransferTransactionCreate',
+        user_id: UUID
+    ) -> TransferTransaction:
+        """
+        Create transfer transaction from schema
+
+        Args:
+            transaction: TransferTransactionCreate schema
+            user_id: User creating the transaction
+
+        Returns:
+            Created TransferTransaction
+        """
+        return await self.create_transfer(
+            from_branch_id=transaction.from_branch_id,
+            to_branch_id=transaction.to_branch_id,
+            amount=transaction.amount,
+            currency_id=transaction.currency_id,
+            user_id=user_id,
+            transfer_type=transaction.transfer_type,
+            reference_number=transaction.reference_number,
+            notes=transaction.notes
+        )
+
     async def create_transfer(
         self,
         from_branch_id: UUID,
@@ -717,6 +887,25 @@ class TransactionService:
             logger.error(f"Unexpected error in create_transfer: {str(e)}")
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
+    async def receive_transfer(
+        self,
+        transaction_id: UUID,
+        received_by_id: UUID,
+        receipt_notes: Optional[str] = None
+    ) -> TransferTransaction:
+        """
+        Complete transfer by receiving funds
+
+        Args:
+            transaction_id: Transfer transaction ID
+            received_by_id: User confirming receipt
+            receipt_notes: Optional receipt notes
+
+        Returns:
+            Updated TransferTransaction
+        """
+        return await self.complete_transfer(transaction_id, received_by_id)
+
     async def complete_transfer(
         self,
         transfer_id: UUID,
@@ -810,8 +999,70 @@ class TransactionService:
             logger.error(f"Unexpected error in complete_transfer: {str(e)}")
             raise DatabaseOperationError(f"Transaction failed: {str(e)}")
     
+    # ==================== EXPENSE APPROVAL ====================
+
+    async def approve_expense_transaction(
+        self,
+        transaction_id: UUID,
+        approver_id: UUID,
+        approval_notes: Optional[str] = None
+    ) -> ExpenseTransaction:
+        """
+        Approve expense transaction
+
+        Args:
+            transaction_id: Expense transaction ID
+            approver_id: User approving the expense
+            approval_notes: Optional approval notes
+
+        Returns:
+            Approved ExpenseTransaction
+
+        Raises:
+            ValidationError: Invalid transaction or already approved
+            DatabaseOperationError: Approval failed
+        """
+        try:
+            # Get expense transaction
+            expense = await self.db.get(ExpenseTransaction, transaction_id)
+
+            if not expense:
+                raise ValidationError(f"Transaction {transaction_id} not found")
+
+            if expense.transaction_type != TransactionType.EXPENSE:
+                raise ValidationError("Transaction is not an expense transaction")
+
+            if not expense.approval_required:
+                raise ValidationError("This expense does not require approval")
+
+            if expense.approved_by_id:
+                raise ValidationError("Expense already approved")
+
+            # Approve the expense
+            expense.approve(approver_id)
+
+            # If there are approval notes, add them to the transaction notes
+            if approval_notes:
+                expense.notes = f"{expense.notes or ''}\nApproval notes: {approval_notes}"
+
+            await self.db.commit()
+            await self.db.refresh(expense)
+
+            logger.info(
+                f"Expense transaction approved: {expense.transaction_number} by user {approver_id}"
+            )
+
+            return expense
+
+        except ValidationError:
+            raise
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error approving expense transaction: {str(e)}")
+            raise DatabaseOperationError(f"Failed to approve expense: {str(e)}")
+
     # ==================== TRANSACTION CANCELLATION ====================
-    
+
     async def cancel_transaction(
         self,
         transaction_id: UUID,

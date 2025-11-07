@@ -133,7 +133,7 @@ async def create_income_transaction(
 
 @router.get(
     "/income",
-    response_model=PaginatedResponse[IncomeTransactionResponse],  # غيّر هنا
+    response_model=PaginatedResponse[IncomeTransactionResponse],
     summary="List Income Transactions",
     description="Get list of income transactions with filtering and pagination"
 )
@@ -151,8 +151,8 @@ async def list_income_transactions(
     try:
         logger.info(f"Listing income transactions for user {current_user.id}")
         service = TransactionService(db)
-        
-        # إنشاء filters
+
+        # Create filters
         filters = TransactionFilter(
             transaction_type=TransactionType.INCOME,
             branch_id=branch_id,
@@ -160,16 +160,16 @@ async def list_income_transactions(
             date_from=date_from,
             date_to=date_to
         )
-        
-        # استدعاء list_transactions
+
+        # Call list_transactions
         result = await service.list_transactions(
             filters=filters,
             skip=skip,
             limit=limit
         )
-        
-        # تحويل لـ paginated response
-        return paginated(result.transactions, result.total, skip, limit)
+
+        # Convert to paginated response
+        return paginated(result["transactions"], result["total"], skip, limit)
         
     except Exception as e:
         logger.error(f"Error listing income transactions: {str(e)}")
@@ -280,7 +280,7 @@ async def create_expense_transaction(
         )
 
 
-@router.put(
+@router.post(
     "/expense/{transaction_id}/approve",
     response_model=ExpenseTransactionResponse,
     summary="Approve Expense Transaction",
@@ -288,7 +288,7 @@ async def create_expense_transaction(
 )
 async def approve_expense_transaction(
     transaction_id: UUID = Path(..., description="Transaction ID"),
-    approval: ExpenseApprovalRequest = ...,
+    approval: ExpenseApprovalRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -676,7 +676,7 @@ async def create_transfer_transaction(
         )
 
 
-@router.put(
+@router.post(
     "/transfer/{transaction_id}/receive",
     response_model=TransferTransactionResponse,
     summary="Complete Transfer Receipt",
@@ -684,7 +684,7 @@ async def create_transfer_transaction(
 )
 async def receive_transfer(
     transaction_id: UUID = Path(..., description="Transaction ID"),
-    receipt: TransferReceiptRequest = ...,
+    receipt: TransferReceiptRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -835,8 +835,8 @@ async def list_all_transactions(
     customer_id: Optional[UUID] = Query(None, description="Filter by customer"),
     status_filter: Optional[TransactionStatus] = Query(None, description="Filter by status"),
     currency_id: Optional[UUID] = Query(None, description="Filter by currency"),
-    amount_min: Optional[Decimal] = Query(None, description="Minimum amount"),
-    amount_max: Optional[Decimal] = Query(None, description="Maximum amount"),
+    amount_min: Optional[Decimal] = Query(None, ge=0, description="Minimum amount"),
+    amount_max: Optional[Decimal] = Query(None, ge=0, description="Maximum amount"),
     date_from: Optional[date] = Query(None, description="Start date"),
     date_to: Optional[date] = Query(None, description="End date"),
     skip: int = Query(0, ge=0, description="Pagination offset"),
@@ -934,7 +934,7 @@ async def get_transaction(
         )
 
 
-@router.put(
+@router.post(
     "/{transaction_id}/cancel",
     response_model=dict,
     summary="Cancel Transaction",
@@ -942,7 +942,7 @@ async def get_transaction(
 )
 async def cancel_transaction(
     transaction_id: UUID = Path(..., description="Transaction ID"),
-    cancellation: TransactionCancelRequest = ...,
+    cancellation: TransactionCancelRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -983,8 +983,8 @@ async def cancel_transaction(
         service = TransactionService(db)
         result = await service.cancel_transaction(
             transaction_id=transaction_id,
-            cancelled_by_id=current_user.id,
-            cancellation_reason=cancellation.cancellation_reason
+            reason=cancellation.reason,
+            cancelled_by_user_id=current_user.id
         )
         
         logger.info(

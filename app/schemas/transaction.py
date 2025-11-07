@@ -14,13 +14,11 @@ Features:
 - Status-specific responses
 """
 
-from datetime import datetime,date
+from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel
-from pydantic import BaseModel, Field, field_validator, model_validator
-from pydantic import ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 # Import enums from models
 from enum import Enum
@@ -217,8 +215,13 @@ class ExpenseTransactionResponse(TransactionBase):
 
 class ExpenseApprovalRequest(BaseModel):
     """Schema for approving expense"""
-    
-    notes: Optional[str] = Field(None, description="Approval notes")
+
+    approval_notes: Optional[str] = Field(None, description="Approval notes")
+
+    # Backwards compatibility alias
+    @property
+    def notes(self) -> Optional[str]:
+        return self.approval_notes
 
 
 # ==================== Exchange Transaction Schemas ====================
@@ -427,21 +430,31 @@ class TransferTransactionResponse(BaseModel):
 
 class TransferReceiptRequest(BaseModel):
     """Schema for confirming transfer receipt"""
-    
-    notes: Optional[str] = Field(None, description="Receipt notes")
+
+    receipt_notes: Optional[str] = Field(None, description="Receipt notes")
+
+    # Backwards compatibility alias
+    @property
+    def notes(self) -> Optional[str]:
+        return self.receipt_notes
 
 
 # ==================== Common Transaction Operations ====================
 
 class TransactionCancelRequest(BaseModel):
     """Schema for cancelling transaction"""
-    
+
     reason: str = Field(
         ...,
         min_length=10,
         max_length=500,
         description="Cancellation reason (required)"
     )
+
+    # Backwards compatibility alias
+    @property
+    def cancellation_reason(self) -> str:
+        return self.reason
 
 
 class TransactionStatusUpdate(BaseModel):
@@ -455,16 +468,20 @@ class TransactionStatusUpdate(BaseModel):
 
 class TransactionFilter(BaseModel):
     """Schema for filtering transactions"""
-    
+
     branch_id: Optional[UUID] = None
     customer_id: Optional[UUID] = None
     currency_id: Optional[UUID] = None
+    from_currency_id: Optional[UUID] = None
+    to_currency_id: Optional[UUID] = None
+    from_branch_id: Optional[UUID] = None
+    to_branch_id: Optional[UUID] = None
     transaction_type: Optional[TransactionTypeEnum] = None
     status: Optional[TransactionStatusEnum] = None
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
-    min_amount: Optional[Decimal] = Field(None, ge=0)
-    max_amount: Optional[Decimal] = Field(None, ge=0)
+    amount_min: Optional[Decimal] = Field(None, ge=0)
+    amount_max: Optional[Decimal] = Field(None, ge=0)
     
     # Pagination
     skip: int = Field(0, ge=0)
@@ -478,8 +495,8 @@ class TransactionFilter(BaseModel):
                 "status": "completed",
                 "date_from": "2025-01-01T00:00:00Z",
                 "date_to": "2025-01-31T23:59:59Z",
-                "min_amount": 100.00,
-                "max_amount": 10000.00,
+                "amount_min": 100.00,
+                "amount_max": 10000.00,
                 "skip": 0,
                 "limit": 50
             }
