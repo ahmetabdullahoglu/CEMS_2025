@@ -325,7 +325,7 @@ class IncomeTransaction(Transaction):
     
     # ========== Polymorphic Configuration ==========
     __mapper_args__ = {
-        "polymorphic_identity": TransactionType.INCOME
+        "polymorphic_identity": "income"  # Must match enum value exactly
     }
     
     def __repr__(self):
@@ -376,7 +376,7 @@ class ExpenseTransaction(Transaction):
     
     # ========== Polymorphic Configuration ==========
     __mapper_args__ = {
-        "polymorphic_identity": TransactionType.EXPENSE
+        "polymorphic_identity": "expense"  # Must match enum value exactly
     }
     
     # ========== Relationships ==========
@@ -470,7 +470,7 @@ class ExchangeTransaction(Transaction):
     
     # ========== Polymorphic Configuration ==========
     __mapper_args__ = {
-        "polymorphic_identity": TransactionType.EXCHANGE
+        "polymorphic_identity": "exchange"  # Must match enum value exactly
     }
     
     # ========== Relationships ==========
@@ -555,7 +555,7 @@ class TransferTransaction(Transaction):
     
     # ========== Polymorphic Configuration ==========
     __mapper_args__ = {
-        "polymorphic_identity": TransactionType.TRANSFER
+        "polymorphic_identity": "transfer"  # Must match enum value exactly
     }
     
     # ========== Relationships ==========

@@ -141,11 +141,11 @@ async def create_income_transactions(
             customer = random.choice(customers) if customers else None
             currency = currencies[scenario["currency"]]
             
-            income = await service.create_income_transaction(
+            income = await service.create_income(
                 branch_id=branch.id,
                 amount=scenario["amount"],
                 currency_id=currency.id,
-                income_category=scenario["category"],
+                category=scenario["category"],
                 income_source=scenario["source"],
                 user_id=user.id,
                 customer_id=customer.id if customer else None,
@@ -227,12 +227,12 @@ async def create_expense_transactions(
             branch = random.choice(branches)
             currency = currencies[scenario["currency"]]
             
-            expense = await service.create_expense_transaction(
+            expense = await service.create_expense(
                 branch_id=branch.id,
                 amount=scenario["amount"],
                 currency_id=currency.id,
-                expense_category=scenario["category"],
-                payee_name=scenario["payee"],
+                category=scenario["category"],
+                payee=scenario["payee"],
                 user_id=teller.id,
                 reference_number=scenario["reference"],
                 requires_approval=scenario["requires_approval"],
@@ -326,7 +326,7 @@ async def create_exchange_transactions(
             from_curr = currencies[scenario["from_currency"]]
             to_curr = currencies[scenario["to_currency"]]
             
-            exchange = await service.create_exchange_transaction(
+            exchange = await service.create_exchange(
                 branch_id=branch.id,
                 customer_id=customer.id,
                 from_currency_id=from_curr.id,
@@ -403,7 +403,7 @@ async def create_transfer_transactions(
             currency = currencies[scenario["currency"]]
             
             # Initiate transfer
-            transfer = await service.create_transfer_transaction(
+            transfer = await service.create_transfer(
                 from_branch_id=from_branch.id,
                 to_branch_id=to_branch.id,
                 amount=scenario["amount"],

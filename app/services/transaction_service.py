@@ -492,7 +492,7 @@ class TransactionService:
                     f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
                 )
 
-            exchange_rate = Decimal(str(rate_info['rate']))
+            exchange_rate = Decimal(str(rate_info.rate))
 
             # Calculate amounts
             to_amount = calculation.from_amount * exchange_rate
