@@ -288,7 +288,7 @@ async def create_expense_transaction(
 )
 async def approve_expense_transaction(
     transaction_id: UUID = Path(..., description="Transaction ID"),
-    approval: ExpenseApprovalRequest,
+    approval: ExpenseApprovalRequest = ...,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -684,7 +684,7 @@ async def create_transfer_transaction(
 )
 async def receive_transfer(
     transaction_id: UUID = Path(..., description="Transaction ID"),
-    receipt: TransferReceiptRequest,
+    receipt: TransferReceiptRequest = ...,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -942,7 +942,7 @@ async def get_transaction(
 )
 async def cancel_transaction(
     transaction_id: UUID = Path(..., description="Transaction ID"),
-    cancellation: TransactionCancelRequest,
+    cancellation: TransactionCancelRequest = ...,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
