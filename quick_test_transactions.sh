@@ -55,8 +55,8 @@ BRANCHES_RESPONSE=$(curl -s -X 'GET' \
   "${BASE_URL}/branches?limit=2" \
   -H "Authorization: Bearer ${TOKEN}")
 
-BRANCH_ID=$(echo "$BRANCHES_RESPONSE" | jq -r '.items[0].id // .branches[0].id // empty' 2>/dev/null)
-BRANCH_2_ID=$(echo "$BRANCHES_RESPONSE" | jq -r '.items[1].id // .branches[1].id // empty' 2>/dev/null)
+BRANCH_ID=$(echo "$BRANCHES_RESPONSE" | jq -r '.items[0].id // .data[0].id // empty' 2>/dev/null)
+BRANCH_2_ID=$(echo "$BRANCHES_RESPONSE" | jq -r '.items[1].id // .data[1].id // empty' 2>/dev/null)
 
 if [ -z "$BRANCH_ID" ] || [ "$BRANCH_ID" = "null" ]; then
   echo "${RED}❌ FAILED - No branches found${NC}"
@@ -73,12 +73,17 @@ echo ""
 # Step 3: Get Currency IDs
 echo "${BLUE}💱 Step 3: Fetch Currency IDs${NC}"
 echo "-------------------------------------"
+#CURRENCIES_RESPONSE=$(curl -s -X 'GET' \
+#  "${BASE_URL}/currencies?limit=2" \
+#  -H "Authorization: Bearer ${TOKEN}")
+#branches/ec686dce-1fbf-452b-a7b2-39a0e48f37c6/balances
+
 CURRENCIES_RESPONSE=$(curl -s -X 'GET' \
-  "${BASE_URL}/currencies?limit=2" \
+  "${BASE_URL}/branches/${BRANCH_ID}/balances?limit=2" \
   -H "Authorization: Bearer ${TOKEN}")
 
-CURRENCY_ID=$(echo "$CURRENCIES_RESPONSE" | jq -r '.items[0].id // .currencies[0].id // empty' 2>/dev/null)
-CURRENCY_2_ID=$(echo "$CURRENCIES_RESPONSE" | jq -r '.items[1].id // .currencies[1].id // empty' 2>/dev/null)
+CURRENCY_ID=$(echo "$CURRENCIES_RESPONSE" | jq -r '.items[0].id // .balances[0].currency_id // empty' 2>/dev/null)
+CURRENCY_2_ID=$(echo "$CURRENCIES_RESPONSE" | jq -r '.items[1].id // .balances[1].currency_id // empty' 2>/dev/null)
 
 if [ -z "$CURRENCY_ID" ] || [ "$CURRENCY_ID" = "null" ]; then
   echo "${RED}❌ FAILED - No currencies found${NC}"
@@ -96,10 +101,10 @@ echo ""
 echo "${BLUE}👥 Step 4: Fetch Customer IDs${NC}"
 echo "-------------------------------------"
 CUSTOMERS_RESPONSE=$(curl -s -X 'GET' \
-  "${BASE_URL}/customers?limit=1" \
+  "${BASE_URL}/customers/customers?limit=1" \
   -H "Authorization: Bearer ${TOKEN}")
 
-CUSTOMER_ID=$(echo "$CUSTOMERS_RESPONSE" | jq -r '.items[0].id // .customers[0].id // empty' 2>/dev/null)
+CUSTOMER_ID=$(echo "$CUSTOMERS_RESPONSE" | jq -r '.items[0].id // .data[0].id // empty' 2>/dev/null)
 
 if [ -z "$CUSTOMER_ID" ] || [ "$CUSTOMER_ID" = "null" ]; then
   echo "${YELLOW}⚠️  WARNING - No customers found (will test without customer)${NC}"
