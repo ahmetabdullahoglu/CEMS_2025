@@ -146,7 +146,6 @@ async def create_income_transactions(
                 amount=scenario["amount"],
                 currency_id=currency.id,
                 category=scenario["category"],
-                income_source=scenario["source"],
                 user_id=user.id,
                 customer_id=customer.id if customer else None,
                 reference_number=scenario["reference"],
@@ -332,20 +331,15 @@ async def create_exchange_transactions(
                 from_currency_id=from_curr.id,
                 to_currency_id=to_curr.id,
                 from_amount=scenario["from_amount"],
-                exchange_rate=scenario["rate"],
-                commission_rate=scenario["commission"],
                 user_id=user.id,
                 notes=f"Sample exchange - {customer.first_name}"
             )
-            
-            to_amount = scenario["from_amount"] * scenario["rate"]
-            commission_amount = scenario["from_amount"] * scenario["commission"]
-            
+
             created += 1
             print(f"  ✅ {exchange.transaction_number}")
-            print(f"     {scenario['from_amount']} {scenario['from_currency']} → "
-                  f"{to_amount:.2f} {scenario['to_currency']}")
-            print(f"     Rate: {scenario['rate']}, Commission: {commission_amount:.2f}")
+            print(f"     {exchange.from_amount} {scenario['from_currency']} → "
+                  f"{exchange.to_amount:.2f} {scenario['to_currency']}")
+            print(f"     Rate: {exchange.exchange_rate_used}, Commission: {exchange.commission_amount:.2f}")
             print(f"     Customer: {customer.customer_number} - {branch.code}")
             
         except Exception as e:
