@@ -359,7 +359,7 @@ class BranchBalanceHistory(BaseModel):
     
     # Change Information
     change_type = Column(
-        Enum(BalanceChangeType),
+        Enum(BalanceChangeType, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True,
         comment="Type of balance change"
@@ -463,14 +463,14 @@ class BranchAlert(BaseModel):
     
     # Alert Information
     alert_type = Column(
-        Enum(BalanceAlertType),
+        Enum(BalanceAlertType, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True,
         comment="Type of alert"
     )
-    
+
     severity = Column(
-        Enum(AlertSeverity),
+        Enum(AlertSeverity, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=AlertSeverity.INFO,
         index=True,
