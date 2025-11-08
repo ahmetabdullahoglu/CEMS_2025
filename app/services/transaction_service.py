@@ -1242,42 +1242,75 @@ class TransactionService:
     ) -> Dict[str, Any]:
         """Get transaction statistics"""
         stmt = select(Transaction)
-        
+
         if branch_id:
             stmt = stmt.where(Transaction.branch_id == branch_id)
-        
+
         if date_from:
             stmt = stmt.where(Transaction.transaction_date >= date_from)
-        
+
         if date_to:
             stmt = stmt.where(Transaction.transaction_date <= date_to)
-        
+
         result = await self.db.execute(stmt)
         transactions = list(result.scalars().all())
-        
+
         # Calculate statistics
         stats = {
             'total_count': len(transactions),
+            'total_amount': Decimal('0'),
             'by_type': {},
             'by_status': {},
-            'total_amount_by_currency': {}
+            'total_amount_by_currency': {},
+            'date_range': {
+                'from': None,
+                'to': None
+            }
         }
-        
+
+        # Track date range
+        min_date = None
+        max_date = None
+
         for txn in transactions:
             # Count by type
             type_key = txn.transaction_type.value
             stats['by_type'][type_key] = stats['by_type'].get(type_key, 0) + 1
-            
+
             # Count by status
             status_key = txn.status.value
             stats['by_status'][status_key] = stats['by_status'].get(status_key, 0) + 1
-            
+
             # Sum amounts by currency
             currency_key = str(txn.currency_id)
             if currency_key not in stats['total_amount_by_currency']:
                 stats['total_amount_by_currency'][currency_key] = 0
             stats['total_amount_by_currency'][currency_key] += float(txn.amount)
-        
+
+            # Sum total amount (all currencies combined)
+            stats['total_amount'] += txn.amount
+
+            # Track date range
+            txn_date = txn.transaction_date
+            if min_date is None or txn_date < min_date:
+                min_date = txn_date
+            if max_date is None or txn_date > max_date:
+                max_date = txn_date
+
+        # Set date range
+        if min_date and max_date:
+            stats['date_range']['from'] = min_date
+            stats['date_range']['to'] = max_date
+        elif date_from or date_to:
+            # If no transactions but date filters provided
+            stats['date_range']['from'] = date_from
+            stats['date_range']['to'] = date_to
+        else:
+            # No transactions and no filters - use current date
+            now = datetime.utcnow()
+            stats['date_range']['from'] = now
+            stats['date_range']['to'] = now
+
         return stats
     
     # ==================== VALIDATION HELPERS ====================
