@@ -155,7 +155,6 @@ class TransactionService:
                 # Create income transaction
                 income = IncomeTransaction(
                     transaction_number=transaction_number,
-                    transaction_type=TransactionType.INCOME,
                     status=TransactionStatus.PENDING,
                     amount=amount,
                     currency_id=currency_id,
@@ -401,7 +400,6 @@ class TransactionService:
                 # Create expense transaction
                 expense = ExpenseTransaction(
                     transaction_number=transaction_number,
-                    transaction_type=TransactionType.EXPENSE,
                     status=TransactionStatus.PENDING if requires_approval else TransactionStatus.PENDING,
                     amount=amount,
                     currency_id=currency_id,
@@ -655,7 +653,6 @@ class TransactionService:
                 # Create exchange transaction
                 exchange = ExchangeTransaction(
                     transaction_number=transaction_number,
-                    transaction_type=TransactionType.EXCHANGE,
                     status=TransactionStatus.PENDING,
                     amount=from_amount,
                     currency_id=from_currency_id,
@@ -843,7 +840,6 @@ class TransactionService:
                 # Create transfer transaction
                 transfer = TransferTransaction(
                     transaction_number=transaction_number,
-                    transaction_type=TransactionType.TRANSFER,
                     status=TransactionStatus.PENDING,
                     amount=amount,
                     currency_id=currency_id,
