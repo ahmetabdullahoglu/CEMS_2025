@@ -27,7 +27,7 @@ from app.db.models.transaction import (
     IncomeCategory, ExpenseCategory, TransferType,
     TransactionNumberGenerator
 )
-from app.db.models.branch import BranchBalance
+from app.db.models.branch import BranchBalance, BalanceChangeType
 from app.db.models.currency import Currency, ExchangeRate
 from app.services.balance_service import BalanceService
 from app.services.currency_service import CurrencyService
@@ -175,8 +175,9 @@ class TransactionService:
                     branch_id=branch_id,
                     currency_id=currency_id,
                     amount=amount,
-                    transaction_id=income.id,
-                    change_type="income",
+                    change_type=BalanceChangeType.TRANSACTION,
+                    reference_id=income.id,
+                    reference_type="transaction",
                     notes=f"Income: {category.value}"
                 )
                 
@@ -421,8 +422,9 @@ class TransactionService:
                     branch_id=branch_id,
                     currency_id=currency_id,
                     amount=-amount,  # Negative for expense
-                    transaction_id=expense.id,
-                    change_type="expense",
+                    change_type=BalanceChangeType.TRANSACTION,
+                    reference_id=expense.id,
+                    reference_type="transaction",
                     notes=f"Expense: {category.value} to {payee}"
                 )
                 
@@ -679,29 +681,32 @@ class TransactionService:
                     branch_id=branch_id,
                     currency_id=from_currency_id,
                     amount=-from_amount,
-                    transaction_id=exchange.id,
-                    change_type="exchange_out",
+                    change_type=BalanceChangeType.TRANSACTION,
+                    reference_id=exchange.id,
+                    reference_type="transaction",
                     notes=f"Exchange out: {from_amount} to {to_currency_id}"
                 )
-                
+
                 # Add to_currency to branch
                 await self.balance_service.update_balance(
                     branch_id=branch_id,
                     currency_id=to_currency_id,
                     amount=to_amount,
-                    transaction_id=exchange.id,
-                    change_type="exchange_in",
+                    change_type=BalanceChangeType.TRANSACTION,
+                    reference_id=exchange.id,
+                    reference_type="transaction",
                     notes=f"Exchange in: {to_amount} from {from_currency_id}"
                 )
-                
+
                 # Record commission as income
                 if commission_amount > 0:
                     await self.balance_service.update_balance(
                         branch_id=branch_id,
                         currency_id=from_currency_id,
                         amount=commission_amount,
-                        transaction_id=exchange.id,
-                        change_type="commission",
+                        change_type=BalanceChangeType.TRANSACTION,
+                        reference_id=exchange.id,
+                        reference_type="transaction",
                         notes=f"Exchange commission ({commission_rate * 100}%)"
                     )
                 
@@ -861,7 +866,8 @@ class TransactionService:
                     branch_id=from_branch_id,
                     currency_id=currency_id,
                     amount=amount,
-                    transaction_id=transfer.id
+                    reference_id=transfer.id,
+                    reference_type="transaction"
                 )
                 
                 await self.db.commit()
@@ -954,24 +960,29 @@ class TransactionService:
                     branch_id=transfer.from_branch_id,
                     currency_id=transfer.currency_id,
                     amount=-transfer.amount,
-                    transaction_id=transfer.id,
-                    change_type="transfer_out",
+                    change_type=BalanceChangeType.TRANSFER_OUT,
+                    reference_id=transfer.id,
+                    reference_type="transaction",
                     notes=f"Transfer to {transfer.to_branch_id}"
                 )
-                
+
                 # Add to destination branch
                 await self.balance_service.update_balance(
                     branch_id=transfer.to_branch_id,
                     currency_id=transfer.currency_id,
                     amount=transfer.amount,
-                    transaction_id=transfer.id,
-                    change_type="transfer_in",
+                    change_type=BalanceChangeType.TRANSFER_IN,
+                    reference_id=transfer.id,
+                    reference_type="transaction",
                     notes=f"Transfer from {transfer.from_branch_id}"
                 )
                 
                 # Release reserved balance
                 await self.balance_service.release_reserved_balance(
-                    transaction_id=transfer.id
+                    branch_id=transfer.from_branch_id,
+                    currency_id=transfer.currency_id,
+                    amount=transfer.amount,
+                    reference_id=transfer.id
                 )
                 
                 # Update transfer status
@@ -1120,26 +1131,31 @@ class TransactionService:
                         branch_id=transaction.branch_id,
                         currency_id=transaction.currency_id,
                         amount=-transaction.amount,
-                        transaction_id=transaction.id,
-                        change_type="cancellation",
+                        change_type=BalanceChangeType.ADJUSTMENT,
+                        reference_id=transaction.id,
+                        reference_type="cancellation",
                         notes=f"Cancelled income: {reason}"
                     )
-                
+
                 elif isinstance(transaction, ExpenseTransaction):
                     # Reverse expense (add amount back)
                     await self.balance_service.update_balance(
                         branch_id=transaction.branch_id,
                         currency_id=transaction.currency_id,
                         amount=transaction.amount,
-                        transaction_id=transaction.id,
-                        change_type="cancellation",
+                        change_type=BalanceChangeType.ADJUSTMENT,
+                        reference_id=transaction.id,
+                        reference_type="cancellation",
                         notes=f"Cancelled expense: {reason}"
                     )
                 
                 elif isinstance(transaction, TransferTransaction):
                     # Release reserved balance
                     await self.balance_service.release_reserved_balance(
-                        transaction_id=transaction.id
+                        branch_id=transaction.from_branch_id,
+                        currency_id=transaction.currency_id,
+                        amount=transaction.amount,
+                        reference_id=transaction.id
                     )
                 
                 # Update transaction status
