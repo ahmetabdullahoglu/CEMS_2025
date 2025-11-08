@@ -103,7 +103,7 @@ class Transaction(Base):
         comment="Unique transaction number: TRX-20250109-00001"
     )
     transaction_type = Column(
-        SQLEnum(TransactionType),
+        SQLEnum(TransactionType, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True,
         comment="Discriminator for Single Table Inheritance"
@@ -111,7 +111,7 @@ class Transaction(Base):
     
     # ========== Status & State Management ==========
     status = Column(
-        SQLEnum(TransactionStatus),
+        SQLEnum(TransactionStatus, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=TransactionStatus.PENDING,
         index=True
@@ -313,7 +313,7 @@ class IncomeTransaction(Transaction):
     
     # ========== Income Specific Fields ==========
     income_category = Column(
-        SQLEnum(IncomeCategory),
+        SQLEnum(IncomeCategory, values_callable=lambda x: [e.value for e in x]),
         nullable=True,
         comment="Category of income"
     )
@@ -350,7 +350,7 @@ class ExpenseTransaction(Transaction):
     
     # ========== Expense Specific Fields ==========
     expense_category = Column(
-        SQLEnum(ExpenseCategory),
+        SQLEnum(ExpenseCategory, values_callable=lambda x: [e.value for e in x]),
         nullable=True,
         comment="Category of expense"
     )
@@ -535,7 +535,7 @@ class TransferTransaction(Transaction):
     )
     
     transfer_type = Column(
-        SQLEnum(TransferType),
+        SQLEnum(TransferType, values_callable=lambda x: [e.value for e in x]),
         nullable=True,
         comment="Type of transfer operation"
     )
