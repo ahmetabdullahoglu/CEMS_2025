@@ -36,14 +36,14 @@ class VaultType(str, PyEnum):
     BRANCH = "branch"  # Branch vault
 
 
-class TransferType(str, PyEnum):
+class VaultTransferType(str, PyEnum):
     """Types of vault transfers"""
     VAULT_TO_VAULT = "vault_to_vault"  # Between vaults
     VAULT_TO_BRANCH = "vault_to_branch"  # From vault to branch
     BRANCH_TO_VAULT = "branch_to_vault"  # From branch to vault
 
 
-class TransferStatus(str, PyEnum):
+class VaultTransferStatus(str, PyEnum):
     """Transfer workflow statuses"""
     PENDING = "pending"  # Created, waiting approval if needed
     APPROVED = "approved"  # Approved by manager/admin
@@ -281,17 +281,17 @@ class VaultTransfer(BaseModel):
     )
     
     transfer_type = Column(
-        Enum(TransferType, name="transfer_type_enum"),
+        Enum(VaultTransferType, name="vault_transfer_type_enum"),
         nullable=False,
         index=True,
         comment="Type of transfer"
     )
-    
+
     # Status and Workflow
     status = Column(
-        Enum(TransferStatus, name="transfer_status_enum"),
+        Enum(VaultTransferStatus, name="vault_transfer_status_enum"),
         nullable=False,
-        default=TransferStatus.PENDING,
+        default=VaultTransferStatus.PENDING,
         index=True,
         comment="Current transfer status"
     )
@@ -382,19 +382,19 @@ class VaultTransfer(BaseModel):
     
     initiator = relationship(
         "User",
-        backref="initiated_transfers",
+        backref="initiated_vault_transfers",
         foreign_keys=[initiated_by]
     )
-    
+
     approver = relationship(
         "User",
-        backref="approved_transfers",
+        backref="approved_vault_transfers",
         foreign_keys=[approved_by]
     )
-    
+
     receiver = relationship(
         "User",
-        backref="received_transfers",
+        backref="received_vault_transfers",
         foreign_keys=[received_by]
     )
     

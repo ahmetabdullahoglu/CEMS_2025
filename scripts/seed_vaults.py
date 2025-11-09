@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db.base import AsyncSessionLocal
-from app.db.models.vault import Vault, VaultBalance, VaultTransfer, VaultType, TransferType, TransferStatus
+from app.db.models.vault import Vault, VaultBalance, VaultTransfer, VaultType, VaultTransferType, VaultTransferStatus
 from app.db.models.branch import Branch
 from app.db.models.currency import Currency
 from app.db.models.user import User
@@ -205,8 +205,8 @@ async def create_sample_transfers(
             to_branch_id=branches["BR001"].id,
             currency_id=currencies["USD"].id,
             amount=Decimal("50000.00"),
-            transfer_type=TransferType.VAULT_TO_BRANCH,
-            status=TransferStatus.COMPLETED,
+            transfer_type=VaultTransferType.VAULT_TO_BRANCH,
+            status=VaultTransferStatus.COMPLETED,
             initiated_by=admin.id,
             approved_by=admin.id,
             received_by=admin.id,
@@ -227,8 +227,8 @@ async def create_sample_transfers(
             to_branch_id=branches["BR002"].id,
             currency_id=currencies["EUR"].id,
             amount=Decimal("30000.00"),
-            transfer_type=TransferType.VAULT_TO_BRANCH,
-            status=TransferStatus.COMPLETED,
+            transfer_type=VaultTransferType.VAULT_TO_BRANCH,
+            status=VaultTransferStatus.COMPLETED,
             initiated_by=admin.id,
             approved_by=admin.id,
             received_by=admin.id,
@@ -249,8 +249,8 @@ async def create_sample_transfers(
             to_branch_id=branches["BR003"].id,
             currency_id=currencies["USD"].id,
             amount=Decimal("75000.00"),  # Large amount - requires approval
-            transfer_type=TransferType.VAULT_TO_BRANCH,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_BRANCH,
+            status=VaultTransferStatus.PENDING,
             initiated_by=admin.id,
             approved_by=None,
             received_by=None,
@@ -271,8 +271,8 @@ async def create_sample_transfers(
             to_branch_id=None,
             currency_id=currencies["TRY"].id,
             amount=Decimal("100000.00"),
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.IN_TRANSIT,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.IN_TRANSIT,
             initiated_by=admin.id,
             approved_by=admin.id,
             received_by=None,
@@ -313,9 +313,9 @@ async def show_summary(db: AsyncSession):
     result = await db.execute(select(VaultTransfer))
     transfers = result.scalars().all()
     
-    completed = len([t for t in transfers if t.status == TransferStatus.COMPLETED])
-    pending = len([t for t in transfers if t.status == TransferStatus.PENDING])
-    in_transit = len([t for t in transfers if t.status == TransferStatus.IN_TRANSIT])
+    completed = len([t for t in transfers if t.status == VaultTransferStatus.COMPLETED])
+    pending = len([t for t in transfers if t.status == VaultTransferStatus.PENDING])
+    in_transit = len([t for t in transfers if t.status == VaultTransferStatus.IN_TRANSIT])
     
     print(f"\n🔄 Transfers Created: {len(transfers)}")
     print(f"   Completed: {completed}")

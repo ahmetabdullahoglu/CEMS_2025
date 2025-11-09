@@ -51,8 +51,8 @@ from app.db.models.vault import (
     VaultBalance,
     VaultTransfer,
     VaultType,
-    TransferType,
-    TransferStatus,
+    VaultTransferType,
+    VaultTransferStatus,
     VaultTransferNumberGenerator
 )
 # Phase 8: Document Management
@@ -120,8 +120,8 @@ __all__ = [
     "VaultBalance",
     "VaultTransfer",
     "VaultType",
-    "TransferType",
-    "TransferStatus",
+    "VaultTransferType",
+    "VaultTransferStatus",
     "VaultTransferNumberGenerator",
     # Document Management
     # "Document",
