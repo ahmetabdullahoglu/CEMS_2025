@@ -1,19 +1,41 @@
 """
-CEMS Reports API Endpoints
+CEMS Report API Endpoints
+=========================
+Phase 8.2: Complete Report API with Export & Dashboard
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from datetime import date, datetime, timedelta
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import date
-from decimal import Decimal
+import io
+import os
 
-from app.api.deps import get_db, get_current_user
-from app.db.models.user import User
+#from app.core.security import get_current_user, require_permission
+from app.api.deps import (
+    get_async_db,
+    get_current_user,
+    get_current_active_user,
+    require_roles
+)
+from app.db.base import get_db
 from app.services.report_service import ReportService
-from app.services.report_export_service import ReportExportService, get_export_filename
-from app.core.permissions import check_permission
+from app.services.report_export_service import ReportExportService
+from app.schemas.report import (
+    DailySummaryResponse,
+    MonthlyRevenueResponse,
+    BranchPerformanceResponse,
+    ExchangeTrendResponse,
+    BalanceSnapshotResponse,
+    BalanceMovementResponse,
+    LowBalanceAlertResponse,
+    UserActivityResponse,
+    AuditTrailResponse,
+    ReportExportRequest,
+    ReportExportResponse
+)
+from app.db.models.user import User
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -22,151 +44,129 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 @router.get("/daily-summary")
 async def get_daily_summary(
-    branch_id: Optional[str] = None,
-    target_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    branch_id: Optional[str] = Query(None, description="Branch ID (optional)"),
+    target_date: Optional[date] = Query(None, description="Target date (default: today)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Get daily transaction summary"""
-    # Permission check
-    if not check_permission(current_user, "reports:view_branch"):
-        raise HTTPException(status_code=403, detail="Permission denied")
+    """📊 Daily Transaction Summary Report"""
+    require_permission(current_user, "view_reports")
     
-    service = ReportService(db)
-    report = service.daily_transaction_summary(
-        branch_id=branch_id,
-        target_date=target_date
-    )
+    if current_user.role.name == "branch_manager" and not branch_id:
+        branch_id = current_user.branch_id
     
-    return report
+    report_service = ReportService(db)
+    
+    try:
+        summary = report_service.daily_transaction_summary(
+            branch_id=branch_id,
+            target_date=target_date or date.today()
+        )
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 @router.get("/monthly-revenue")
 async def get_monthly_revenue(
-    branch_id: Optional[str] = None,
-    year: Optional[int] = None,
-    month: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    branch_id: Optional[str] = Query(None),
+    year: int = Query(..., description="Year (e.g., 2025)"),
+    month: int = Query(..., ge=1, le=12, description="Month (1-12)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Get monthly revenue report"""
-    service = ReportService(db)
-    report = service.monthly_revenue_report(
-        branch_id=branch_id,
-        year=year,
-        month=month
-    )
+    """💰 Monthly Revenue Report"""
+    require_permission(current_user, "view_reports")
     
-    return report
+    if current_user.role.name == "branch_manager" and not branch_id:
+        branch_id = current_user.branch_id
+    
+    report_service = ReportService(db)
+    
+    try:
+        revenue = report_service.monthly_revenue_report(
+            branch_id=branch_id,
+            year=year,
+            month=month
+        )
+        return revenue
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 @router.get("/branch-performance")
 async def get_branch_performance(
-    start_date: date = Query(...),
-    end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    start_date: date = Query(..., description="Start date"),
+    end_date: date = Query(..., description="End date"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Compare branch performance"""
-    # Requires admin permission
-    if not check_permission(current_user, "reports:view_all"):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """🏢 Branch Performance Comparison"""
+    require_permission(current_user, "view_all_reports")
     
-    service = ReportService(db)
-    report = service.branch_performance_comparison(
-        start_date=start_date,
-        end_date=end_date
-    )
+    report_service = ReportService(db)
     
-    return report
+    try:
+        performance = report_service.branch_performance_comparison(
+            date_range=(start_date, end_date)
+        )
+        return performance
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 @router.get("/exchange-trends")
 async def get_exchange_trends(
-    from_currency: str = Query(...),
-    to_currency: str = Query(...),
+    from_currency: str = Query(..., description="From currency code (e.g., USD)"),
+    to_currency: str = Query(..., description="To currency code (e.g., YER)"),
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Analyze currency exchange trends"""
-    service = ReportService(db)
-    report = service.currency_exchange_trends(
-        currency_pair=(from_currency, to_currency),
-        start_date=start_date,
-        end_date=end_date
-    )
+    """📈 Currency Exchange Rate Trends"""
+    require_permission(current_user, "view_reports")
     
-    return report
-
-
-@router.get("/customer-analysis/{customer_id}")
-async def get_customer_analysis(
-    customer_id: str,
-    start_date: date = Query(...),
-    end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Analyze customer transactions"""
-    service = ReportService(db)
-    report = service.customer_transaction_analysis(
-        customer_id=customer_id,
-        start_date=start_date,
-        end_date=end_date
-    )
+    report_service = ReportService(db)
     
-    return report
+    try:
+        trends = report_service.currency_exchange_trends(
+            currency_pair=(from_currency, to_currency),
+            date_range=(start_date, end_date)
+        )
+        return trends
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 # ==================== BALANCE REPORTS ====================
 
-@router.get("/balance-snapshot/{branch_id}")
+@router.get("/balance-snapshot")
 async def get_balance_snapshot(
-    branch_id: str,
-    snapshot_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    branch_id: Optional[str] = Query(None),
+    snapshot_date: Optional[date] = Query(None, description="Snapshot date (default: today)"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Get branch balance snapshot"""
-    service = ReportService(db)
-    report = service.branch_balance_snapshot(
-        branch_id=branch_id,
-        snapshot_date=snapshot_date
-    )
+    """💵 Branch Balance Snapshot"""
+    require_permission(current_user, "view_balances")
     
-    return report
-
-
-@router.get("/vault-summary")
-async def get_vault_summary(
-    snapshot_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get vault balance summary"""
-    # Requires vault access
-    if not check_permission(current_user, "vault:read"):
-        raise HTTPException(status_code=403, detail="Vault access required")
+    if current_user.role.name == "branch_manager" and not branch_id:
+        branch_id = current_user.branch_id
     
-    service = ReportService(db)
-    report = service.vault_balance_summary(snapshot_date)
+    if not branch_id:
+        raise HTTPException(status_code=400, detail="branch_id is required")
     
-    return report
-
-
-@router.get("/low-balance-alerts")
-async def get_low_balance_alerts(
-    threshold_percentage: float = Query(20.0),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get low balance alerts"""
-    service = ReportService(db)
-    report = service.low_balance_alert_report(threshold_percentage)
+    report_service = ReportService(db)
     
-    return report
+    try:
+        snapshot = report_service.branch_balance_snapshot(
+            branch_id=branch_id,
+            target_date=snapshot_date or date.today()
+        )
+        return snapshot
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 @router.get("/balance-movement")
@@ -175,222 +175,162 @@ async def get_balance_movement(
     currency_code: str = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Track balance movements"""
-    service = ReportService(db)
-    report = service.balance_movement_report(
-        branch_id=branch_id,
-        currency_code=currency_code,
-        start_date=start_date,
-        end_date=end_date
-    )
+    """📊 Balance Movement Report"""
+    require_permission(current_user, "view_balances")
     
-    return report
+    if current_user.role.name == "branch_manager" and branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this branch")
+    
+    report_service = ReportService(db)
+    
+    try:
+        movement = report_service.balance_movement_report(
+            branch_id=branch_id,
+            currency_code=currency_code,
+            date_range=(start_date, end_date)
+        )
+        return movement
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+
+
+@router.get("/low-balance-alerts")
+async def get_low_balance_alerts(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """⚠️ Low Balance Alerts"""
+    require_permission(current_user, "view_balances")
+    
+    report_service = ReportService(db)
+    
+    try:
+        alerts = report_service.low_balance_alert_report()
+        return alerts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 # ==================== USER ACTIVITY REPORTS ====================
 
-@router.get("/user-activity/{user_id}")
+@router.get("/user-activity")
 async def get_user_activity(
-    user_id: str,
+    user_id: str = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Get user activity log"""
-    # Users can see their own activity, admins can see all
-    if user_id != str(current_user.id) and not check_permission(current_user, "reports:view_all"):
-        raise HTTPException(status_code=403, detail="Permission denied")
+    """👤 User Activity Report"""
+    if current_user.id != user_id:
+        require_permission(current_user, "view_all_reports")
     
-    service = ReportService(db)
-    report = service.user_activity_log(
-        user_id=user_id,
-        start_date=start_date,
-        end_date=end_date
-    )
+    report_service = ReportService(db)
     
-    return report
+    try:
+        activity = report_service.user_activity_log(
+            user_id=user_id,
+            date_range=(start_date, end_date)
+        )
+        return activity
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
-@router.get("/user-transactions/{user_id}")
-async def get_user_transactions(
-    user_id: str,
-    start_date: date = Query(...),
-    end_date: date = Query(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get transactions by user"""
-    service = ReportService(db)
-    report = service.transaction_by_user(
-        user_id=user_id,
-        start_date=start_date,
-        end_date=end_date
-    )
-    
-    return report
-
-
-@router.get("/audit-trail/{entity_type}/{entity_id}")
+@router.get("/audit-trail")
 async def get_audit_trail(
-    entity_type: str,
-    entity_id: str,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    entity_type: str = Query(..., description="Entity type (e.g., transaction, branch, user)"),
+    entity_id: str = Query(..., description="Entity ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Get entity audit trail"""
-    # Requires admin access
-    if not check_permission(current_user, "reports:view_all"):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """📋 Audit Trail Report"""
+    require_permission(current_user, "view_audit_logs")
     
-    service = ReportService(db)
-    report = service.audit_trail_report(
-        entity_type=entity_type,
-        entity_id=entity_id,
-        start_date=start_date,
-        end_date=end_date
-    )
+    report_service = ReportService(db)
     
-    return report
+    try:
+        audit_trail = report_service.audit_trail_report(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            date_range=None
+        )
+        return audit_trail
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
-# ==================== ANALYTICS ====================
-
-@router.get("/commission-earned")
-async def get_commission_earned(
-    branch_id: Optional[str] = None,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Calculate commission earned"""
-    service = ReportService(db)
-    report = service.calculate_commission_earned(
-        branch_id=branch_id,
-        start_date=start_date,
-        end_date=end_date
-    )
-    
-    return report
-
-
-@router.get("/high-value-customers")
-async def get_high_value_customers(
-    branch_id: Optional[str] = None,
-    min_transaction_value: Decimal = Query(Decimal("10000")),
-    period_days: int = Query(90),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Identify high-value customers"""
-    service = ReportService(db)
-    report = service.identify_high_value_customers(
-        branch_id=branch_id,
-        min_transaction_value=min_transaction_value,
-        period_days=period_days
-    )
-    
-    return report
-
-
-@router.get("/volume-trends")
-async def get_volume_trends(
-    branch_id: Optional[str] = None,
-    period: str = Query("daily", regex="^(daily|weekly|monthly)$"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Analyze transaction volume trends"""
-    service = ReportService(db)
-    report = service.transaction_volume_trends(
-        branch_id=branch_id,
-        period=period
-    )
-    
-    return report
-
-
-@router.get("/rate-volatility")
-async def get_rate_volatility(
-    from_currency: str = Query(...),
-    to_currency: str = Query(...),
-    period_days: int = Query(30),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Analyze exchange rate volatility"""
-    service = ReportService(db)
-    report = service.exchange_rate_volatility_analysis(
-        currency_pair=(from_currency, to_currency),
-        period_days=period_days
-    )
-    
-    return report
-
-
-# ==================== EXPORT ENDPOINT ====================
-
-from pydantic import BaseModel
-
-class ExportRequest(BaseModel):
-    report_type: str
-    format: str  # json, xlsx, pdf
-    filters: dict
-
+# ==================== REPORT EXPORT ====================
 
 @router.post("/export")
 async def export_report(
-    request: ExportRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    report_type: str,
+    format: str,
+    filters: dict = {},
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    """Export report in specified format"""
-    service = ReportService(db)
+    """📥 Export Report to File (JSON/Excel/PDF)"""
+    require_permission(current_user, "export_reports")
+    
+    report_service = ReportService(db)
     export_service = ReportExportService()
     
-    # Generate report based on type
-    report_data = None
-    
-    if request.report_type == "daily_summary":
-        report_data = service.daily_transaction_summary(**request.filters)
-    elif request.report_type == "monthly_revenue":
-        report_data = service.monthly_revenue_report(**request.filters)
-    elif request.report_type == "branch_performance":
-        report_data = service.branch_performance_comparison(**request.filters)
-    # ... handle other types
-    else:
-        raise HTTPException(status_code=400, detail="Invalid report type")
-    
-    # Export in requested format
-    if request.format == "json":
-        output = export_service.export_to_json(report_data)
-        return {"content": output, "mime_type": "application/json"}
-    
-    elif request.format == "xlsx":
-        output = export_service.export_to_excel(report_data, template='standard')
-        filename = get_export_filename(request.report_type, 'xlsx')
+    try:
+        # Generate report data
+        if report_type == "daily_summary":
+            report_data = report_service.daily_transaction_summary(
+                branch_id=filters.get("branch_id"),
+                target_date=filters.get("date")
+            )
+        elif report_type == "monthly_revenue":
+            report_data = report_service.monthly_revenue_report(
+                branch_id=filters.get("branch_id"),
+                year=filters.get("year"),
+                month=filters.get("month")
+            )
+        elif report_type == "branch_performance":
+            report_data = report_service.branch_performance_comparison(
+                date_range=(filters.get("start_date"), filters.get("end_date"))
+            )
+        elif report_type == "balance_snapshot":
+            report_data = report_service.branch_balance_snapshot(
+                branch_id=filters.get("branch_id"),
+                target_date=filters.get("date")
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")
         
+        # Export to format
+        filename = f"{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        if format == "json":
+            content = export_service.export_to_json(report_data, pretty=True)
+            filename += ".json"
+            media_type = "application/json"
+            
+        elif format == "excel":
+            content = export_service.export_to_excel(report_data)
+            filename += ".xlsx"
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            
+        elif format == "pdf":
+            content = export_service.export_to_pdf(report_data)
+            filename += ".pdf"
+            media_type = "application/pdf"
+            
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+        
+        # Return file
         return StreamingResponse(
-            output,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            io.BytesIO(content if isinstance(content, bytes) else content.encode()),
+            media_type=media_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
-    
-    elif request.format == "pdf":
-        output = export_service.export_to_pdf(report_data)
-        filename = get_export_filename(request.report_type, 'pdf')
         
-        return StreamingResponse(
-            output,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
-    
-    else:
-        raise HTTPException(status_code=400, detail="Invalid export format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
