@@ -15,7 +15,7 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator,ConfigDict
 from enum import Enum
 
 
@@ -88,8 +88,7 @@ class VaultBalanceInfo(BaseModel):
     balance: Decimal
     last_updated: datetime
     
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)  # بدل orm_mode
 
 
 class VaultResponse(BaseModel):
@@ -106,9 +105,10 @@ class VaultResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        orm_mode = True
-        use_enum_values = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        use_enum_values=True,
+    )
 
 
 class VaultListResponse(BaseModel):
@@ -135,8 +135,8 @@ class VaultBalanceResponse(BaseModel):
     balance: Decimal
     last_updated: datetime
     
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)  # بدل orm_mode
+
 
 
 class VaultBalanceUpdate(BaseModel):
@@ -250,10 +250,10 @@ class VaultTransferResponse(BaseModel):
     notes: Optional[str] = None
     rejection_reason: Optional[str] = None
     
-    class Config:
-        orm_mode = True
-        use_enum_values = True
-
+    model_config = ConfigDict(
+        from_attributes=True,
+        use_enum_values=True,
+    )
 
 class VaultTransferListResponse(BaseModel):
     """List of transfers"""
@@ -328,8 +328,7 @@ class VaultStatistics(BaseModel):
     last_transfer_date: Optional[datetime]
     last_reconciliation_date: Optional[datetime]
     
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)  # بدل orm_mode
 
 
 class VaultTransferSummary(BaseModel):

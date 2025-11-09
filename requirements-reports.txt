@@ -1,0 +1,35 @@
+# CEMS Reporting Dependencies
+# ===========================
+# Additional requirements for Phase 8: Reporting System
+
+# Excel Support
+openpyxl==3.1.2              # Excel file generation and manipulation
+
+# PDF Support
+reportlab==4.0.7             # PDF generation and styling
+pypdf==3.17.4               # PDF manipulation (optional, for merging/splitting)
+
+# Template Engine
+Jinja2==3.1.2               # HTML template rendering
+
+# Data Validation & Serialization
+pydantic==2.5.3             # Data validation (already in main requirements)
+
+# Testing
+pytest==7.4.3               # Testing framework
+pytest-asyncio==0.21.1      # Async testing support
+pytest-cov==4.1.0           # Code coverage
+faker==20.1.0               # Fake data generation for tests
+
+# Performance Testing (optional)
+locust==2.19.1              # Load testing
+pytest-benchmark==4.0.0     # Performance benchmarking
+
+# Development Tools
+black==23.12.1              # Code formatting
+isort==5.13.2               # Import sorting
+mypy==1.7.1                 # Type checking
+
+# Documentation
+mkdocs==1.5.3               # Documentation generation
+mkdocs-material==9.5.2      # Material theme for docs

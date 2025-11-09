@@ -5,7 +5,7 @@ Aggregates all API endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, currencies, branches,customers,transactions,vault
+from app.api.v1.endpoints import auth, currencies, branches,customers,transactions,vault,reports
 
 
 # Create main API router
@@ -48,8 +48,7 @@ api_router.include_router(
 )
 # api_router.include_router(vault.router, prefix="/vault", tags=["Vault"])
 api_router.include_router(vault.router)
-# api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
-
+api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 
 # ==================== Health Check Endpoints ====================
 

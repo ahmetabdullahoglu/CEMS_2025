@@ -16,5 +16,4 @@ __all__ = [
     "auth",
     "currencies", 
     "branches",
-    "customers"
 ]

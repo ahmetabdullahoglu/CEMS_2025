@@ -137,6 +137,12 @@ ALL_PERMISSIONS: Dict[str, List[str]] = {
         "restore",         # Restore from backup
         "maintenance",     # System maintenance mode
     ],
+    "reports": [
+        "view_branch",      # View own branch reports
+        "view_all",         # View all branch reports
+        "export",           # Export reports
+        "generate",         # Generate custom reports
+    ]
 }
 
 
@@ -173,6 +179,10 @@ ROLE_PERMISSIONS: Dict[str, List[str]] = {
         
         "system:view_logs", "system:manage_settings", "system:backup",
         "system:restore", "system:maintenance",
+        "reports:view_all",
+        "reports:export",
+        "reports:generate",
+        
     ],
     
     "manager": [
@@ -196,6 +206,9 @@ ROLE_PERMISSIONS: Dict[str, List[str]] = {
         
         "documents:upload", "documents:read", "documents:update",
         "documents:verify", "documents:download",
+        "reports:view_branch",
+        "reports:export",
+        "reports:generate",
     ],
     
     "teller": [
@@ -209,6 +222,8 @@ ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "customers:create", "customers:read", "customers:view_branch",
         
         "documents:upload", "documents:read",
+        "reports:view_branch",  # Can view own branch reports only
+
     ],
 }
 
