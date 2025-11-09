@@ -426,33 +426,38 @@ class VaultTransferNumberGenerator:
     """
     
     @staticmethod
-    def generate(session, date: Optional[datetime] = None) -> str:
+    async def generate(session, date: Optional[datetime] = None) -> str:
         """
         Generate next transfer number for the given date
-        
+
         Args:
-            session: Database session
+            session: Async database session
             date: Date for transfer (default: today)
-            
+
         Returns:
             Unique transfer number
         """
+        from sqlalchemy import select
+
         if date is None:
             date = datetime.utcnow()
-        
+
         date_str = date.strftime("%Y%m%d")
         prefix = f"VTR-{date_str}-"
-        
+
         # Get last transfer number for today
-        last_transfer = session.query(VaultTransfer).filter(
-            VaultTransfer.transfer_number.like(f"{prefix}%")
-        ).order_by(VaultTransfer.transfer_number.desc()).first()
-        
+        result = await session.execute(
+            select(VaultTransfer).filter(
+                VaultTransfer.transfer_number.like(f"{prefix}%")
+            ).order_by(VaultTransfer.transfer_number.desc()).limit(1)
+        )
+        last_transfer = result.scalar_one_or_none()
+
         if last_transfer:
             # Extract sequence number and increment
             last_seq = int(last_transfer.transfer_number.split('-')[-1])
             next_seq = last_seq + 1
         else:
             next_seq = 1
-        
+
         return f"{prefix}{next_seq:05d}"

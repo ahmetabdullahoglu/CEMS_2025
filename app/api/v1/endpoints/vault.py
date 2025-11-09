@@ -38,14 +38,14 @@ async def get_main_vault(
 ):
     """
     Get main vault details and balances
-    
+
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    vault = vault_service.get_main_vault()
-    
+    vault = await vault_service.get_main_vault()
+
     # Load balances
-    balances = vault_service.get_vault_balance(vault.id)
+    balances = await vault_service.get_vault_balance(vault.id)
     
     return VaultResponse(
         id=vault.id,
@@ -86,8 +86,8 @@ async def get_vault(
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    vault = vault_service.get_vault_by_id(vault_id)
-    balances = vault_service.get_vault_balance(vault.id)
+    vault = await vault_service.get_vault_by_id(vault_id)
+    balances = await vault_service.get_vault_balance(vault.id)
     
     return VaultResponse(
         id=vault.id,
@@ -131,7 +131,7 @@ async def create_vault(
     **Note:** Only one main vault allowed
     """
     vault_service = VaultService(db)
-    vault = vault_service.create_vault(vault_data)
+    vault = await vault_service.create_vault(vault_data)
     
     return VaultResponse(
         id=vault.id,
@@ -166,8 +166,8 @@ async def update_vault(
     **Permissions:** Admin only
     """
     vault_service = VaultService(db)
-    vault = vault_service.update_vault(vault_id, vault_data)
-    balances = vault_service.get_vault_balance(vault.id)
+    vault = await vault_service.update_vault(vault_id, vault_data)
+    balances = await vault_service.get_vault_balance(vault.id)
     
     return VaultResponse(
         id=vault.id,
@@ -210,14 +210,14 @@ async def get_vault_balances(
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    
+
     if vault_id:
-        vault = vault_service.get_vault_by_id(vault_id)
-        balances = vault_service.get_vault_balance(vault_id)
+        vault = await vault_service.get_vault_by_id(vault_id)
+        balances = await vault_service.get_vault_balance(vault_id)
     else:
         # Get main vault balances
-        vault = vault_service.get_main_vault()
-        balances = vault_service.get_vault_balance(vault.id)
+        vault = await vault_service.get_main_vault()
+        balances = await vault_service.get_vault_balance(vault.id)
     
     return [
         VaultBalanceResponse(
@@ -250,13 +250,13 @@ async def get_vault_balance_by_currency(
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    
+
     if vault_id:
-        vault = vault_service.get_vault_by_id(vault_id)
+        vault = await vault_service.get_vault_by_id(vault_id)
     else:
-        vault = vault_service.get_main_vault()
-    
-    balances = vault_service.get_vault_balance(vault.id, currency_id)
+        vault = await vault_service.get_main_vault()
+
+    balances = await vault_service.get_vault_balance(vault.id, currency_id)
     
     if not balances:
         raise HTTPException(
@@ -295,22 +295,22 @@ async def adjust_vault_balance(
     **Warning:** This is for corrections only, not regular operations
     """
     vault_service = VaultService(db)
-    
-    vault = vault_service.get_vault_by_id(balance_data.vault_id)
-    
+
+    vault = await vault_service.get_vault_by_id(balance_data.vault_id)
+
     # Get current balance
-    current_balances = vault_service.get_vault_balance(
+    current_balances = await vault_service.get_vault_balance(
         balance_data.vault_id,
         balance_data.currency_id
     )
     current_balance = current_balances[0] if current_balances else None
-    
+
     if current_balance:
         difference = balance_data.new_balance - current_balance.balance
         operation = 'add' if difference > 0 else 'subtract'
         amount = abs(difference)
-        
-        updated_balance = vault_service.update_vault_balance(
+
+        updated_balance = await vault_service.update_vault_balance(
             balance_data.vault_id,
             balance_data.currency_id,
             amount,
@@ -318,7 +318,7 @@ async def adjust_vault_balance(
         )
     else:
         # Create new balance
-        updated_balance = vault_service.update_vault_balance(
+        updated_balance = await vault_service.update_vault_balance(
             balance_data.vault_id,
             balance_data.currency_id,
             balance_data.new_balance,
@@ -357,7 +357,7 @@ async def transfer_vault_to_vault(
     **Approval:** Required if amount >= threshold
     """
     vault_service = VaultService(db)
-    transfer = vault_service.transfer_vault_to_vault(transfer_data, current_user)
+    transfer = await vault_service.transfer_vault_to_vault(transfer_data, current_user)
     
     return VaultTransferResponse(
         id=transfer.id,
@@ -398,7 +398,7 @@ async def transfer_to_branch(
     **Approval:** Required if amount >= threshold
     """
     vault_service = VaultService(db)
-    transfer = vault_service.transfer_to_branch(transfer_data, current_user)
+    transfer = await vault_service.transfer_to_branch(transfer_data, current_user)
     
     return VaultTransferResponse(
         id=transfer.id,
@@ -438,7 +438,7 @@ async def transfer_from_branch(
     **Permissions:** Manager or Admin
     """
     vault_service = VaultService(db)
-    transfer = vault_service.transfer_from_branch(transfer_data, current_user)
+    transfer = await vault_service.transfer_from_branch(transfer_data, current_user)
     
     return VaultTransferResponse(
         id=transfer.id,
@@ -480,7 +480,7 @@ async def approve_transfer(
     **Permissions:** Manager or Admin only
     """
     vault_service = VaultService(db)
-    transfer = vault_service.approve_transfer(transfer_id, approval_data, current_user)
+    transfer = await vault_service.approve_transfer(transfer_id, approval_data, current_user)
     
     return VaultTransferResponse(
         id=transfer.id,
@@ -520,7 +520,7 @@ async def complete_transfer(
     **Permissions:** Any user with vault:receive permission
     """
     vault_service = VaultService(db)
-    transfer = vault_service.complete_transfer(transfer_id, current_user)
+    transfer = await vault_service.complete_transfer(transfer_id, current_user)
     
     return VaultTransferResponse(
         id=transfer.id,
@@ -560,7 +560,7 @@ async def cancel_transfer(
     **Permissions:** Manager or Admin
     """
     vault_service = VaultService(db)
-    transfer = vault_service.cancel_transfer(transfer_id, reason, current_user)
+    transfer = await vault_service.cancel_transfer(transfer_id, reason, current_user)
     
     return VaultTransferResponse(
         id=transfer.id,
@@ -608,8 +608,8 @@ async def get_transfers(
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    
-    transfers, total = vault_service.get_transfer_history(
+
+    transfers, total = await vault_service.get_transfer_history(
         vault_id=vault_id,
         branch_id=branch_id,
         status=status,
@@ -714,7 +714,7 @@ async def reconcile_vault(
     **Purpose:** Compare system balance with physical count
     """
     vault_service = VaultService(db)
-    result = vault_service.reconcile_vault_balance(reconciliation_data, current_user)
+    result = await vault_service.reconcile_vault_balance(reconciliation_data, current_user)
     
     return VaultReconciliationReport(**result)
 
@@ -737,13 +737,13 @@ async def get_reconciliation_report(
     """
     # In production, this would fetch from a reconciliation_records table
     vault_service = VaultService(db)
-    
+
     # For now, return current state as "reconciliation"
     reconciliation_data = VaultReconciliationRequest(
         vault_id=vault_id,
         notes="Current state report"
     )
-    result = vault_service.reconcile_vault_balance(reconciliation_data, current_user)
+    result = await vault_service.reconcile_vault_balance(reconciliation_data, current_user)
     
     return VaultReconciliationReport(**result)
 
@@ -766,13 +766,13 @@ async def get_vault_statistics(
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    
+
     if vault_id:
-        stats = vault_service.get_vault_statistics(vault_id)
+        stats = await vault_service.get_vault_statistics(vault_id)
     else:
         # Get main vault stats
-        main_vault = vault_service.get_main_vault()
-        stats = vault_service.get_vault_statistics(main_vault.id)
+        main_vault = await vault_service.get_main_vault()
+        stats = await vault_service.get_vault_statistics(main_vault.id)
     
     return VaultStatistics(**stats)
 
@@ -794,11 +794,11 @@ async def get_transfer_statistics(
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
-    
+
     period_start = datetime.utcnow() - timedelta(days=period_days)
     period_end = datetime.utcnow()
-    
-    summary = vault_service.get_transfer_summary(
+
+    summary = await vault_service.get_transfer_summary(
         vault_id=vault_id,
         period_start=period_start,
         period_end=period_end
