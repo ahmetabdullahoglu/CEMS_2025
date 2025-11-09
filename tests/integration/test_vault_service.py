@@ -40,7 +40,7 @@ async def test_currency(db_session: AsyncSession):
         name_en="US Dollar",
         name_ar="الدولار الأمريكي",
         symbol="$",
-        is_base=True,
+        is_base_currency=True,
         is_active=True
     )
     db_session.add(currency)
@@ -95,7 +95,7 @@ async def test_branch(db_session: AsyncSession):
     from app.db.models.branch import RegionEnum
 
     branch = Branch(
-        branch_code="BR-001",
+        code="BR-001",
         name_en="Test Branch",
         name_ar="فرع تجريبي",
         region=RegionEnum.ISTANBUL_EUROPEAN,

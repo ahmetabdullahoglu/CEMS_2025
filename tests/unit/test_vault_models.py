@@ -33,7 +33,7 @@ async def test_currency(db_session: AsyncSession):
         name_en="US Dollar",
         name_ar="الدولار الأمريكي",
         symbol="$",
-        is_base=True,
+        is_base_currency=True,
         is_active=True
     )
     db_session.add(currency)
@@ -45,10 +45,13 @@ async def test_currency(db_session: AsyncSession):
 @pytest.fixture
 async def test_branch(db_session: AsyncSession):
     """Create a test branch"""
+    from app.db.models.branch import RegionEnum
+
     branch = Branch(
-        branch_code="BR001",
+        code="BR001",
         name_en="Test Branch",
         name_ar="فرع تجريبي",
+        region=RegionEnum.ISTANBUL_EUROPEAN,
         is_active=True
     )
     db_session.add(branch)
@@ -104,7 +107,7 @@ class TestVaultModel:
     async def test_create_branch_vault(self, db_session, test_branch):
         """Test creating a branch vault"""
         vault = Vault(
-            vault_code=f"VLT-{test_branch.branch_code}",
+            vault_code=f"VLT-{test_branch.code}",
             name=f"{test_branch.name_en} Vault",
             vault_type=VaultType.BRANCH,
             branch_id=test_branch.id,
