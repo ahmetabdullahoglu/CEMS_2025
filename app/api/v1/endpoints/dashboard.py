@@ -18,7 +18,7 @@ from app.db.models.transaction import Transaction, TransactionStatus, Transactio
 from app.db.models.branch import Branch, BranchBalance
 from app.db.models.currency import Currency
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter()
 
 
 @router.get("/overview")

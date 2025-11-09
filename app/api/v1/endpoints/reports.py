@@ -37,7 +37,7 @@ from app.schemas.report import (
 )
 from app.db.models.user import User
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+router = APIRouter()
 
 
 # ==================== FINANCIAL REPORTS ====================
