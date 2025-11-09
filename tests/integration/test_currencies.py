@@ -27,7 +27,7 @@ def admin_token(client):
         "/api/v1/auth/login",
         json={
             "username": "admin",
-            "password": "admin123"
+            "password": "Admin@123"
         }
     )
     return response.json()["access_token"]

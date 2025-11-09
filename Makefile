@@ -302,7 +302,7 @@ setup: dev-install
 	@echo ""
 	@echo "🔑 Default Login:"
 	@echo "   • Username: admin"
-	@echo "   • Password: admin123"
+	@echo "   • Password: Admin@123"
 	@echo ""
 	@echo "📚 Useful Commands:"
 	@echo "   • make run          - Start development server"

@@ -300,8 +300,10 @@ After running `make setup` or `make seed-all`:
 
 ```
 Username: admin
-Password: admin123
+Password: Admin@123
 ```
+
+**⚠️ IMPORTANT:** Change this password immediately after first login!
 
 ---
 
