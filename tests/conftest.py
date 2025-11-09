@@ -97,16 +97,23 @@ async def test_engine(setup_test_database):
 
 @pytest.fixture(scope="function")
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create a new database session for each test"""
+    """Create a new database session for each test with transaction rollback"""
+    connection = await test_engine.connect()
+    transaction = await connection.begin()
+
     async_session = async_sessionmaker(
-        test_engine,
+        bind=connection,
         class_=AsyncSession,
         expire_on_commit=False,
+        join_transaction_mode="create_savepoint"
     )
-    
+
     async with async_session() as session:
         yield session
-        await session.rollback()
+
+        # Rollback the transaction to undo all changes
+        await transaction.rollback()
+        await connection.close()
 
 
 @pytest.fixture(scope="function")

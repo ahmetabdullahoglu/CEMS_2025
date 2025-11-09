@@ -98,7 +98,7 @@ async def test_branch(db_session: AsyncSession):
         branch_code="BR-001",
         name_en="Test Branch",
         name_ar="فرع تجريبي",
-        region=RegionEnum.BAGHDAD,
+        region=RegionEnum.ISTANBUL_EUROPEAN,
         is_active=True
     )
     db_session.add(branch)
