@@ -45,7 +45,16 @@ from app.db.models.transaction import (
 )
 # Phase 7: Vault Management
 # from app.db.models.vault import Vault, VaultBalance, VaultTransfer
-
+# ==================== Vault Management ====================
+from app.db.models.vault import (
+    Vault,
+    VaultBalance,
+    VaultTransfer,
+    VaultType,
+    TransferType,
+    TransferStatus,
+    VaultTransferNumberGenerator
+)
 # Phase 8: Document Management
 # from app.db.models.document import Document
 
@@ -107,7 +116,13 @@ __all__ = [
     # "Vault",
     # "VaultBalance",
     # "VaultTransfer",
-    
+    "Vault",
+    "VaultBalance",
+    "VaultTransfer",
+    "VaultType",
+    "TransferType",
+    "TransferStatus",
+    "VaultTransferNumberGenerator",
     # Document Management
     # "Document",
     

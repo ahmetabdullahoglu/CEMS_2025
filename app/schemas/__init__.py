@@ -142,7 +142,48 @@ from app.schemas.transaction import (
 #     VaultTransferCreate,
 #     VaultTransferResponse,
 # )
-
+# ==================== Vault Schemas ====================
+from app.schemas.vault import (
+    # Enums
+    VaultTypeEnum,
+    TransferTypeEnum,
+    TransferStatusEnum,
+    
+    # Vault
+    VaultBase,
+    VaultCreate,
+    VaultUpdate,
+    VaultResponse,
+    VaultListResponse,
+    VaultBalanceInfo,
+    
+    # Vault Balance
+    VaultBalanceQuery,
+    VaultBalanceResponse,
+    VaultBalanceUpdate,
+    
+    # Vault Transfer
+    VaultTransferBase,
+    VaultToVaultTransferCreate,
+    VaultToBranchTransferCreate,
+    BranchToVaultTransferCreate,
+    VaultTransferApprove,
+    VaultTransferReject,
+    VaultTransferComplete,
+    VaultTransferCancel,
+    VaultTransferResponse,
+    VaultTransferListResponse,
+    VaultTransferFilter,
+    
+    # Reconciliation
+    VaultReconciliationRequest,
+    VaultReconciliationResult,
+    VaultReconciliationReport,
+    
+    # Statistics
+    VaultStatistics,
+    VaultTransferSummary,
+)
 # ==================== Common/Shared Schemas ====================
 from app.schemas.common import (
     PaginationParams,
@@ -282,7 +323,37 @@ __all__ = [
     "ReconciliationHistory",
     "CurrencyBalanceSummary",
     "ReconciliationRequest",
-    "ReconciliationResponse"
+    "ReconciliationResponse",
+     # Vault Management
+    "VaultTypeEnum",
+    "TransferTypeEnum",
+    "TransferStatusEnum",
+    "VaultBase",
+    "VaultCreate",
+    "VaultUpdate",
+    "VaultResponse",
+    "VaultListResponse",
+    "VaultBalanceInfo",
+    "VaultBalanceQuery",
+    "VaultBalanceResponse",
+    "VaultBalanceUpdate",
+    "VaultTransferBase",
+    "VaultToVaultTransferCreate",
+    "VaultToBranchTransferCreate",
+    "BranchToVaultTransferCreate",
+    "VaultTransferApprove",
+    "VaultTransferReject",
+    "VaultTransferComplete",
+    "VaultTransferCancel",
+    "VaultTransferResponse",
+    "VaultTransferListResponse",
+    "VaultTransferFilter",
+    "VaultReconciliationRequest",
+    "VaultReconciliationResult",
+    "VaultReconciliationReport",
+    "VaultStatistics",
+    "VaultTransferSummary"
+
 ]
 
 
