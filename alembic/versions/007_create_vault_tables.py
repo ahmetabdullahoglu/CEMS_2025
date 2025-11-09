@@ -102,13 +102,13 @@ def upgrade() -> None:
     op.create_index('idx_vault_branch', 'vaults', ['branch_id', 'is_active'])
     
     # ==================== CREATE VAULT_BALANCES TABLE ====================
-    
+
     op.create_table(
         'vault_balances',
-        
+
         # Primary Key
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True, default=sa.text('gen_random_uuid()')),
-        
+
         # Foreign Keys
         sa.Column('vault_id', postgresql.UUID(as_uuid=True),
                   sa.ForeignKey('vaults.id', ondelete='CASCADE'),
@@ -118,23 +118,27 @@ def upgrade() -> None:
                   sa.ForeignKey('currencies.id', ondelete='RESTRICT'),
                   nullable=False, index=True,
                   comment='Reference to currency'),
-        
+
         # Balance
         sa.Column('balance', sa.Numeric(precision=15, scale=2), nullable=False, server_default='0',
                   comment='Current balance'),
-        
+
         # Tracking
         sa.Column('last_updated', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP'),
                   comment='Last balance update timestamp'),
-        
+
+        # Status
+        sa.Column('is_active', sa.Boolean, nullable=False, server_default='true',
+                  comment='Whether balance is active'),
+
         # Timestamps
         sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
-        
+
         # Constraints
         sa.UniqueConstraint('vault_id', 'currency_id', name='uq_vault_currency'),
         sa.CheckConstraint('balance >= 0', name='vault_balance_positive'),
-        
+
         comment='Vault balances by currency'
     )
     
