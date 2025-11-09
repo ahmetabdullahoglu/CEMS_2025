@@ -13,12 +13,17 @@ from sqlalchemy.pool import NullPool
 from app.main import app
 from app.db.base import Base, get_db
 from app.core.config import settings
+import os
 
 # Test database URL (use a separate test database)
-TEST_DATABASE_URL = settings.DATABASE_URL.replace(
-    settings.POSTGRES_DB, 
-    f"{settings.POSTGRES_DB}_test"
-)
+# Use environment variable or fallback to localhost for tests
+TEST_POSTGRES_SERVER = os.getenv("TEST_POSTGRES_SERVER", "localhost")
+TEST_POSTGRES_PORT = os.getenv("TEST_POSTGRES_PORT", "5432")
+TEST_POSTGRES_USER = os.getenv("TEST_POSTGRES_USER", settings.POSTGRES_USER if hasattr(settings, 'POSTGRES_USER') else "postgres")
+TEST_POSTGRES_PASSWORD = os.getenv("TEST_POSTGRES_PASSWORD", settings.POSTGRES_PASSWORD if hasattr(settings, 'POSTGRES_PASSWORD') else "postgres")
+TEST_POSTGRES_DB = os.getenv("TEST_POSTGRES_DB", f"{settings.POSTGRES_DB if hasattr(settings, 'POSTGRES_DB') else 'cems'}_test")
+
+TEST_DATABASE_URL = f"postgresql+asyncpg://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_SERVER}:{TEST_POSTGRES_PORT}/{TEST_POSTGRES_DB}"
 
 
 # ==================== Database Fixtures ====================
