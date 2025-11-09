@@ -214,11 +214,15 @@ def upgrade() -> None:
                   comment='Transfer notes/reason'),
         sa.Column('rejection_reason', sa.Text, nullable=True,
                   comment='Reason for rejection'),
-        
+
+        # Status
+        sa.Column('is_active', sa.Boolean, nullable=False, server_default='true',
+                  comment='Whether transfer is active'),
+
         # Timestamps
         sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
-        
+
         # Constraints
         sa.CheckConstraint('amount > 0', name='transfer_amount_positive'),
         sa.CheckConstraint(
@@ -234,6 +238,7 @@ def upgrade() -> None:
     op.create_index('idx_transfer_from_vault', 'vault_transfers', ['from_vault_id', 'initiated_at'])
     op.create_index('idx_transfer_to_vault', 'vault_transfers', ['to_vault_id', 'initiated_at'])
     op.create_index('idx_transfer_to_branch', 'vault_transfers', ['to_branch_id', 'initiated_at'])
+    op.create_index('idx_vault_transfers_active', 'vault_transfers', ['is_active'])
     
     # ==================== CREATE TRIGGER FOR UPDATED_AT ====================
     
