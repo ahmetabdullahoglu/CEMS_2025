@@ -286,11 +286,12 @@ setup: dev-install
 	@echo "Step 3/5: Waiting for database to be ready..."
 	@sleep 5
 	@echo ""
-	@echo "Step 4/5: Running migrations..."
-	@make db-upgrade
+	@echo "Step 4/5: Running migrations (inside Docker)..."
+	docker compose exec app alembic upgrade head
 	@echo ""
-	@echo "Step 5/5: Seeding database with sample data..."
-	@make seed-all
+	@echo "Step 5/5: Seeding database with sample data (inside Docker)..."
+	@chmod +x scripts/SEED_USAGE_3.sh
+	docker compose exec app bash scripts/SEED_USAGE_3.sh
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "✅ Setup complete!"
