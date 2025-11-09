@@ -12,11 +12,11 @@ from sqlalchemy.orm import Session
 import io
 import os
 
-#from app.core.security import get_current_user, require_permission
 from app.api.deps import (
     get_async_db,
     get_current_user,
     get_current_active_user,
+    check_permission,
     require_roles
 )
 from app.db.base import get_db
@@ -50,7 +50,7 @@ async def get_daily_summary(
     db: Session = Depends(get_db)
 ):
     """📊 Daily Transaction Summary Report"""
-    require_permission(current_user, "view_reports")
+    check_permission(current_user, "view_reports")
     
     if current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
@@ -76,7 +76,7 @@ async def get_monthly_revenue(
     db: Session = Depends(get_db)
 ):
     """💰 Monthly Revenue Report"""
-    require_permission(current_user, "view_reports")
+    check_permission(current_user, "view_reports")
     
     if current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
@@ -102,7 +102,7 @@ async def get_branch_performance(
     db: Session = Depends(get_db)
 ):
     """🏢 Branch Performance Comparison"""
-    require_permission(current_user, "view_all_reports")
+    check_permission(current_user, "view_all_reports")
     
     report_service = ReportService(db)
     
@@ -125,7 +125,7 @@ async def get_exchange_trends(
     db: Session = Depends(get_db)
 ):
     """📈 Currency Exchange Rate Trends"""
-    require_permission(current_user, "view_reports")
+    check_permission(current_user, "view_reports")
     
     report_service = ReportService(db)
     
@@ -149,7 +149,7 @@ async def get_balance_snapshot(
     db: Session = Depends(get_db)
 ):
     """💵 Branch Balance Snapshot"""
-    require_permission(current_user, "view_balances")
+    check_permission(current_user, "view_balances")
     
     if current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
@@ -179,7 +179,7 @@ async def get_balance_movement(
     db: Session = Depends(get_db)
 ):
     """📊 Balance Movement Report"""
-    require_permission(current_user, "view_balances")
+    check_permission(current_user, "view_balances")
     
     if current_user.role.name == "branch_manager" and branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
@@ -203,7 +203,7 @@ async def get_low_balance_alerts(
     db: Session = Depends(get_db)
 ):
     """⚠️ Low Balance Alerts"""
-    require_permission(current_user, "view_balances")
+    check_permission(current_user, "view_balances")
     
     report_service = ReportService(db)
     
@@ -226,7 +226,7 @@ async def get_user_activity(
 ):
     """👤 User Activity Report"""
     if current_user.id != user_id:
-        require_permission(current_user, "view_all_reports")
+        check_permission(current_user, "view_all_reports")
     
     report_service = ReportService(db)
     
@@ -248,7 +248,7 @@ async def get_audit_trail(
     db: Session = Depends(get_db)
 ):
     """📋 Audit Trail Report"""
-    require_permission(current_user, "view_audit_logs")
+    check_permission(current_user, "view_audit_logs")
     
     report_service = ReportService(db)
     
@@ -274,7 +274,7 @@ async def export_report(
     db: Session = Depends(get_db)
 ):
     """📥 Export Report to File (JSON/Excel/PDF)"""
-    require_permission(current_user, "export_reports")
+    check_permission(current_user, "export_reports")
     
     report_service = ReportService(db)
     export_service = ReportExportService()

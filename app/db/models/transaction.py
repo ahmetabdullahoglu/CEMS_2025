@@ -234,7 +234,56 @@ class Transaction(Base):
     def is_mutable(self) -> bool:
         """Check if transaction can be modified"""
         return self.status == TransactionStatus.PENDING
-    
+
+    # ========== Compatibility Properties (for report service) ==========
+    @property
+    def source_amount(self):
+        """Compatibility property: returns from_amount for exchange, amount for others"""
+        if self.transaction_type == TransactionType.EXCHANGE:
+            return getattr(self, 'from_amount', None) or self.amount
+        return self.amount
+
+    @property
+    def target_amount(self):
+        """Compatibility property: returns to_amount for exchange transactions"""
+        if self.transaction_type == TransactionType.EXCHANGE:
+            return getattr(self, 'to_amount', None)
+        return None
+
+    @property
+    def source_currency(self):
+        """Compatibility property: returns from_currency for exchange, currency for others"""
+        if self.transaction_type == TransactionType.EXCHANGE:
+            return getattr(self, 'from_currency', None) or self.currency
+        return self.currency
+
+    @property
+    def target_currency(self):
+        """Compatibility property: returns to_currency for exchange transactions"""
+        if self.transaction_type == TransactionType.EXCHANGE:
+            return getattr(self, 'to_currency', None)
+        return None
+
+    @property
+    def source_currency_code(self):
+        """Compatibility property: returns currency code"""
+        curr = self.source_currency
+        return curr.code if curr else None
+
+    @property
+    def exchange_rate(self):
+        """Compatibility property: returns exchange_rate_used for exchange transactions"""
+        if self.transaction_type == TransactionType.EXCHANGE:
+            return getattr(self, 'exchange_rate_used', None)
+        return None
+
+    @property
+    def commission(self):
+        """Compatibility property: returns commission_amount"""
+        if self.transaction_type == TransactionType.EXCHANGE:
+            return getattr(self, 'commission_amount', None)
+        return None
+
     # ========== Validation ==========
     @validates("status")
     def validate_status_transition(self, key, new_status):

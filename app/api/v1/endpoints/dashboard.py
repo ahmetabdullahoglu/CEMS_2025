@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
-from app.core.security import get_current_user, require_permission
+from app.api.deps import get_current_user, check_permission
 from app.db.base import get_db
 from app.services.report_service import ReportService
 from app.db.models.user import User
@@ -277,26 +277,34 @@ async def get_currency_distribution_chart(
     
     start_date = date.today() - timedelta(days=days)
     
-    # Query transactions
-    query = db.query(
-        Transaction.source_currency_code,
-        func.count(Transaction.id).label('count'),
-        func.sum(Transaction.source_amount).label('total_amount')
-    ).filter(
+    # Query transactions - get all and process in Python due to properties
+    query = db.query(Transaction).filter(
         Transaction.transaction_date >= start_date,
         Transaction.status == TransactionStatus.COMPLETED
     )
-    
+
     if branch_id:
         query = query.filter(Transaction.branch_id == branch_id)
-    
-    results = query.group_by(Transaction.source_currency_code).all()
+
+    transactions = query.all()
+
+    # Group by currency in Python
+    currency_counts = {}
+    for txn in transactions:
+        code = txn.source_currency_code
+        if code:
+            if code not in currency_counts:
+                currency_counts[code] = {'count': 0, 'total_amount': 0}
+            currency_counts[code]['count'] += 1
+            currency_counts[code]['total_amount'] += float(txn.source_amount or 0)
+
+    results = [(code, data['count'], data['total_amount']) for code, data in currency_counts.items()]
     
     # Format for pie chart
     data = [
         {
-            "currency": row.source_currency_code,
-            "count": row.count,
+            "currency": row[0],  # currency code
+            "count": row[1],     # count
             "percentage": 0  # Will calculate below
         }
         for row in results
@@ -335,7 +343,7 @@ async def get_branch_comparison_chart(
     **Permissions:** Admin only
     """
     
-    require_permission(current_user, "view_all_reports")
+    check_permission(current_user, "view_all_reports")
     
     start_date = date.today() - timedelta(days=period_days)
     

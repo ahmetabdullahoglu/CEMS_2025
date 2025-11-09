@@ -315,6 +315,32 @@ def require_roles(role_names: List[str]):
     """
     return require_any_role(role_names)
 
+# ==================== Direct Permission Check (for use inside function body) ====================
+
+def check_permission(user: User, permission: str) -> None:
+    """
+    Check if user has a specific permission (use inside function body).
+    Raises HTTPException if permission is denied.
+
+    Args:
+        user: Current user
+        permission: Required permission string
+
+    Raises:
+        HTTPException: 403 if user lacks permission
+
+    Example:
+        check_permission(current_user, "view_reports")
+    """
+    if user.is_superuser:
+        return
+
+    if not user.has_permission(permission):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing required permission: {permission}",
+        )
+
 # ==================== Utility ====================
 
 async def verify_admin_or_owner(
@@ -347,12 +373,13 @@ __all__ = [
     "require_permission",
     "require_permissions",
     "require_any_permission",
+    "check_permission",  # Direct permission check
     # Roles
     "require_role",
     "require_any_role",
     "require_all_roles",
     "require_role_and_permission",
-    "require_roles",  # <-- أضف هذا
+    "require_roles",
     # Utils
     "verify_admin_or_owner",
 ]

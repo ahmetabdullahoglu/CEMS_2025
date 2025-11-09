@@ -257,13 +257,14 @@ class ReportService:
             from_currency_code, to_currency_code = currency_pair
             
             # Get exchange transactions
-            transactions = self.db.query(Transaction).join(
-                Currency, Transaction.source_currency_id == Currency.id
+            from app.db.models.transaction import ExchangeTransaction
+
+            transactions = self.db.query(ExchangeTransaction).join(
+                Currency, ExchangeTransaction.from_currency_id == Currency.id
             ).filter(
-                Transaction.transaction_type == TransactionType.EXCHANGE,
-                Transaction.transaction_date >= start_date,
-                Transaction.transaction_date <= end_date,
-                Transaction.status == TransactionStatus.COMPLETED,
+                ExchangeTransaction.transaction_date >= start_date,
+                ExchangeTransaction.transaction_date <= end_date,
+                ExchangeTransaction.status == TransactionStatus.COMPLETED,
                 Currency.code == from_currency_code
             ).all()
             
@@ -566,7 +567,7 @@ class ReportService:
         try:
             # Get transactions affecting this balance
             transactions = self.db.query(Transaction).join(
-                Currency, Transaction.source_currency_id == Currency.id
+                Currency, Transaction.currency_id == Currency.id
             ).filter(
                 Transaction.branch_id == branch_id,
                 Transaction.transaction_date >= start_date,
@@ -983,12 +984,13 @@ class ReportService:
             cutoff_date = date.today() - timedelta(days=period_days)
             
             # Get exchange rates history
-            rates = self.db.query(ExchangeRate).join(
-                Currency, ExchangeRate.source_currency_id == Currency.id
+            from app.db.models.currency import ExchangeRate as ER
+            rates = self.db.query(ER).join(
+                Currency, ER.from_currency_id == Currency.id
             ).filter(
-                ExchangeRate.effective_date >= cutoff_date,
+                ER.effective_from >= cutoff_date,
                 Currency.code == from_currency
-            ).order_by(ExchangeRate.effective_date).all()
+            ).order_by(ER.effective_from).all()
             
             # Filter for target currency
             relevant_rates = [

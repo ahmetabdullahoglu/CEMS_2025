@@ -59,7 +59,7 @@ from app.db.models.vault import (
 # from app.db.models.document import Document
 
 # Phase 9: Audit & Logging
-# from app.db.models.audit import AuditLog, SecurityLog
+from app.db.models.audit import AuditLog
 
 # ==================== Export All Models ====================
 __all__ = [
@@ -127,8 +127,7 @@ __all__ = [
     # "Document",
     
     # Audit & Logging
-    # "AuditLog",
-    # "SecurityLog",
+    "AuditLog",
 ]
 
 
