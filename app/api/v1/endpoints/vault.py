@@ -3,7 +3,7 @@ Vault API Endpoints
 Handles all vault-related API operations
 """
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -59,7 +59,7 @@ async def get_main_vault(
         balances=[
             {
                 'currency_code': b.currency.code,
-                'currency_name': b.currency.name,
+                'currency_name': b.currency.name_en,
                 'balance': b.balance,
                 'last_updated': b.last_updated
             }
@@ -101,7 +101,7 @@ async def get_vault(
         balances=[
             {
                 'currency_code': b.currency.code,
-                'currency_name': b.currency.name,
+                'currency_name': b.currency.name_en,
                 'balance': b.balance,
                 'last_updated': b.last_updated
             }
@@ -181,7 +181,7 @@ async def update_vault(
         balances=[
             {
                 'currency_code': b.currency.code,
-                'currency_name': b.currency.name,
+                'currency_name': b.currency.name_en,
                 'balance': b.balance,
                 'last_updated': b.last_updated
             }
