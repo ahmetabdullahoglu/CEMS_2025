@@ -315,6 +315,9 @@ setup: dev-install
 
 # Complete reset (DANGER!)
 reset-all: docker-down clean
-	docker volume rm cems_postgres_dev_data cems_redis_dev_data || true
+	@echo "🗑️  Removing Docker volumes..."
+	docker volume rm cems_2025_postgres_dev_data cems_2025_redis_dev_data 2>/dev/null || \
+	docker volume rm cems_postgres_dev_data cems_redis_dev_data 2>/dev/null || \
+	docker compose down -v
 	rm -rf uploads/* logs/*
 	@echo "⚠️  All data has been deleted!"

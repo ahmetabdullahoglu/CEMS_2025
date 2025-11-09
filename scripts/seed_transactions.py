@@ -11,7 +11,8 @@ Transaction Types:
 - Transfer: Between branches
 
 Usage:
-    python scripts/seed_transactions.py          # Seed transactions
+    python scripts/seed_transactions.py          # Seed transactions (skip if exist)
+    python scripts/seed_transactions.py --force  # Force seed even if exist
     python scripts/seed_transactions.py --show   # Show transactions summary
 """
 
@@ -431,31 +432,28 @@ async def create_transfer_transactions(
     return created
 
 
-async def seed_transactions(db: AsyncSession):
+async def seed_transactions(db: AsyncSession, force: bool = False):
     """Main seeding function for transactions"""
-    
+
     print("💳 Seeding transactions...")
     print()
-    
+
     # Check if transactions already exist
     result = await db.execute(select(func.count(Transaction.id)))
     existing_count = result.scalar_one()
-    
+
     if existing_count > 0:
-        print(f"⚠️  {existing_count} transactions already exist.")
-        response = input("Do you want to add more transactions? (y/N): ")
-        if response.lower() != 'y':
-            print("Skipping transaction seeding.")
-            return
-        print()
-    
+        print(f"  ℹ️  {existing_count} transactions already exist, skipping seeding.")
+        print(f"     (Use --force flag to add more transactions)")
+        return
+
     # Get required data
     try:
         data = await get_required_data(db)
     except Exception as e:
         print(f"❌ {str(e)}")
         return
-    
+
     print(f"✓ Found {len(data['branches'])} branches")
     print(f"✓ Found {len(data['currencies'])} currencies")
     print(f"✓ Found {len(data['customers'])} customers")
@@ -579,5 +577,8 @@ if __name__ == "__main__":
     # Check command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--show":
         asyncio.run(show_transactions())
+    elif len(sys.argv) > 1 and sys.argv[1] == "--force":
+        print("⚠️  Force mode: Will add transactions even if they exist")
+        asyncio.run(main())
     else:
         asyncio.run(main())
