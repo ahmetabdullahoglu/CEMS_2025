@@ -2,7 +2,7 @@
 
 ## 🚀 Quick Start Workflows
 
-### First Time Setup
+### First Time Setup (Docker - Recommended)
 ```bash
 make setup
 ```
@@ -14,6 +14,24 @@ This will:
 5. Seed database with sample data
 
 **After setup, the system is ready to use!**
+
+### First Time Setup (Local - Without Docker)
+```bash
+# 1. Create .env file
+make check-env
+
+# 2. Create PostgreSQL database (requires PostgreSQL installed)
+make init-db
+
+# 3. Apply migrations
+make db-upgrade
+
+# 4. Seed data
+make seed-all
+
+# 5. Run application
+make run
+```
 
 ---
 
@@ -43,6 +61,35 @@ make docker-shell     # Access container shell
 ---
 
 ## 🗄️ Database Management
+
+### Environment Verification
+```bash
+make check-env
+```
+Verifies that:
+- `.env` file exists (creates it if missing)
+- `DATABASE_URL` is configured correctly
+- Shows warnings if configuration is incomplete
+
+**Automatically runs before:**
+- `make run`
+- `make db-upgrade`
+
+### Local Database Initialization (Non-Docker)
+```bash
+make init-db
+```
+Creates PostgreSQL database, user, and grants privileges for **local development** (not needed for Docker).
+
+**⚠️ Prerequisites:**
+- PostgreSQL must be installed and running locally
+- `postgres` superuser must be accessible
+
+This creates:
+- User: `cems_user` with password `cems_password_2025`
+- Database: `cems_db` owned by `cems_user`
+
+**For Docker users:** Skip this command - Docker Compose handles database creation automatically.
 
 ### Fresh Database
 ```bash

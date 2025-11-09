@@ -1,4 +1,4 @@
-.PHONY: help install dev-install clean test run docker-up docker-down migrate db-upgrade db-downgrade seed-all seed-vaults docker-reset db-fresh
+.PHONY: help install dev-install clean test run docker-up docker-down migrate db-upgrade db-downgrade seed-all seed-vaults docker-reset db-fresh check-env init-db
 
 # Default target
 help:
@@ -8,8 +8,10 @@ help:
 	@echo "  make install        - Install production dependencies"
 	@echo "  make dev-install    - Install development dependencies"
 	@echo "  make setup          - Complete initial setup (Docker + DB + Migrations)"
+	@echo "  make check-env      - Verify .env file exists and is configured"
 	@echo ""
 	@echo "🗄️  Database:"
+	@echo "  make init-db        - Create PostgreSQL database (local setup only)"
 	@echo "  make db-upgrade     - Apply migrations"
 	@echo "  make db-downgrade   - Rollback last migration"
 	@echo "  make db-reset       - Reset database (downgrade + upgrade)"
@@ -79,7 +81,7 @@ test-integration:
 	pytest tests/integration/ -v
 
 # Running
-run:
+run: check-env
 	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 run-prod:
@@ -111,12 +113,35 @@ docker-prod-down:
 docker-prod-build:
 	docker-compose build
 
+# Database initialization (local setup only, not needed for Docker)
+init-db:
+	@echo "🔨 Creating PostgreSQL database..."
+	@echo ""
+	@echo "⚠️  This command is for LOCAL setup only (not Docker)"
+	@echo "⚠️  Make sure PostgreSQL is installed and running"
+	@echo ""
+	@echo "Creating user and database with credentials from .env.example:"
+	@echo "  User: cems_user"
+	@echo "  Password: cems_password_2025"
+	@echo "  Database: cems_db"
+	@echo ""
+	@-psql -U postgres -c "CREATE USER cems_user WITH PASSWORD 'cems_password_2025';" 2>/dev/null || echo "User may already exist"
+	@-psql -U postgres -c "CREATE DATABASE cems_db OWNER cems_user;" 2>/dev/null || echo "Database may already exist"
+	@-psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE cems_db TO cems_user;" 2>/dev/null
+	@echo ""
+	@echo "✅ Database initialization complete!"
+	@echo "📝 Next steps:"
+	@echo "   1. Verify your .env file has: DATABASE_URL=postgresql+asyncpg://cems_user:cems_password_2025@localhost:5432/cems_db"
+	@echo "   2. Run: make db-upgrade"
+	@echo "   3. Run: make seed-all"
+	@echo ""
+
 # Database migrations
 migrate:
 	@read -p "Enter migration message: " msg; \
 	alembic revision --autogenerate -m "$$msg"
 
-db-upgrade:
+db-upgrade: check-env
 	alembic upgrade head
 
 db-downgrade:
@@ -128,6 +153,35 @@ db-reset:
 
 db-history:
 	alembic history
+
+# Environment verification
+check-env:
+	@if [ ! -f .env ]; then \
+		echo "⚠️  Error: .env file not found!"; \
+		echo ""; \
+		echo "Creating .env from .env.example..."; \
+		cp .env.example .env; \
+		echo "✅ .env file created!"; \
+		echo ""; \
+		echo "⚠️  IMPORTANT: Please review .env file and update settings if needed:"; \
+		echo "   - DATABASE_URL should match your environment"; \
+		echo "   - For Docker: use 'db' as host"; \
+		echo "   - For local: use 'localhost' as host"; \
+		echo ""; \
+	else \
+		echo "✅ .env file exists"; \
+		if grep -q "^DATABASE_URL=$$" .env || ! grep -q "^DATABASE_URL=" .env; then \
+			echo "⚠️  WARNING: DATABASE_URL is empty or missing in .env!"; \
+			echo ""; \
+			echo "Expected format:"; \
+			echo "  DATABASE_URL=postgresql+asyncpg://cems_user:cems_password_2025@localhost:5432/cems_db"; \
+			echo ""; \
+			echo "See ENV_SETUP_NOTES.md for detailed instructions."; \
+			echo ""; \
+		else \
+			echo "✅ DATABASE_URL is configured"; \
+		fi \
+	fi
 
 # Database seeding
 seed-all:
