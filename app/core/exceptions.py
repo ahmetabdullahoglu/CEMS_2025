@@ -338,6 +338,12 @@ class ReportError(CEMSException):
         super().__init__(message, status_code=500)
 
 
+class ReportGenerationError(ReportError):
+    """Exception raised when report generation fails"""
+    def __init__(self, message: str = "Report generation failed"):
+        super().__init__(message)
+
+
 class AuditError(CEMSException):
     """Exception raised for audit log errors"""
     def __init__(self, message: str = "Audit logging failed"):
@@ -605,6 +611,7 @@ ALL_EXCEPTIONS = [
     
     # Report & Audit
     "ReportError",
+    "ReportGenerationError",
     "AuditError",
     "ReportNotFoundError",
     
