@@ -416,11 +416,11 @@ def get_dashboard_alerts(
     
     # Low balance alerts
     low_balances = report_service.low_balance_alert_report()
-    for alert in low_balances:
+    for alert in low_balances.get('alerts', []):
         severity = alert.get('severity', 'warning')
         alerts[severity].append({
             "type": "low_balance",
-            "message": f"Low balance in {alert['branch_name']} - {alert['currency_code']}: {alert['current_balance']}",
+            "message": f"Low balance in {alert['branch']['name']} - {alert['currency']['code']}: {alert['current_balance']}",
             "timestamp": datetime.now().isoformat()
         })
     
