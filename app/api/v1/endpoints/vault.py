@@ -70,48 +70,6 @@ async def get_main_vault(
     )
 
 
-@router.get(
-    "/{vault_id}",
-    response_model=VaultResponse,
-    summary="Get vault by ID"
-)
-async def get_vault(
-    vault_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Get specific vault details
-    
-    **Permissions:** Any authenticated user
-    """
-    vault_service = VaultService(db)
-    vault = await vault_service.get_vault_by_id(vault_id)
-    balances = await vault_service.get_vault_balance(vault.id)
-    
-    return VaultResponse(
-        id=vault.id,
-        vault_code=vault.vault_code,
-        name=vault.name,
-        vault_type=vault.vault_type,
-        branch_id=vault.branch_id,
-        is_active=vault.is_active,
-        description=vault.description,
-        location=vault.location,
-        balances=[
-            {
-                'currency_code': b.currency.code,
-                'currency_name': b.currency.name_en,
-                'balance': b.balance,
-                'last_updated': b.last_updated
-            }
-            for b in balances
-        ],
-        created_at=vault.created_at,
-        updated_at=vault.updated_at
-    )
-
-
 @router.post(
     "",
     response_model=VaultResponse,
@@ -143,50 +101,6 @@ async def create_vault(
         description=vault.description,
         location=vault.location,
         balances=[],
-        created_at=vault.created_at,
-        updated_at=vault.updated_at
-    )
-
-
-@router.put(
-    "/{vault_id}",
-    response_model=VaultResponse,
-    summary="Update vault",
-    dependencies=[Depends(require_permissions(["vault:update"]))]
-)
-async def update_vault(
-    vault_id: UUID,
-    vault_data: VaultUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Update vault information
-    
-    **Permissions:** Admin only
-    """
-    vault_service = VaultService(db)
-    vault = await vault_service.update_vault(vault_id, vault_data)
-    balances = await vault_service.get_vault_balance(vault.id)
-    
-    return VaultResponse(
-        id=vault.id,
-        vault_code=vault.vault_code,
-        name=vault.name,
-        vault_type=vault.vault_type,
-        branch_id=vault.branch_id,
-        is_active=vault.is_active,
-        description=vault.description,
-        location=vault.location,
-        balances=[
-            {
-                'currency_code': b.currency.code,
-                'currency_name': b.currency.name_en,
-                'balance': b.balance,
-                'last_updated': b.last_updated
-            }
-            for b in balances
-        ],
         created_at=vault.created_at,
         updated_at=vault.updated_at
     )
@@ -803,5 +717,95 @@ async def get_transfer_statistics(
         period_start=period_start,
         period_end=period_end
     )
-    
+
     return VaultTransferSummary(**summary)
+
+
+# ==================== PARAMETRIC ROUTES (MUST BE LAST) ====================
+# These routes use path parameters and must come AFTER all specific routes
+# to avoid catching specific paths like /balances, /transfers, /statistics
+
+@router.get(
+    "/{vault_id}",
+    response_model=VaultResponse,
+    summary="Get vault by ID"
+)
+async def get_vault(
+    vault_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get specific vault details
+
+    **Permissions:** Any authenticated user
+    """
+    vault_service = VaultService(db)
+    vault = await vault_service.get_vault_by_id(vault_id)
+    balances = await vault_service.get_vault_balance(vault.id)
+
+    return VaultResponse(
+        id=vault.id,
+        vault_code=vault.vault_code,
+        name=vault.name,
+        vault_type=vault.vault_type,
+        branch_id=vault.branch_id,
+        is_active=vault.is_active,
+        description=vault.description,
+        location=vault.location,
+        balances=[
+            {
+                'currency_code': b.currency.code,
+                'currency_name': b.currency.name_en,
+                'balance': b.balance,
+                'last_updated': b.last_updated
+            }
+            for b in balances
+        ],
+        created_at=vault.created_at,
+        updated_at=vault.updated_at
+    )
+
+
+@router.put(
+    "/{vault_id}",
+    response_model=VaultResponse,
+    summary="Update vault",
+    dependencies=[Depends(require_permissions(["vault:update"]))]
+)
+async def update_vault(
+    vault_id: UUID,
+    vault_data: VaultUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update vault information
+
+    **Permissions:** Admin only
+    """
+    vault_service = VaultService(db)
+    vault = await vault_service.update_vault(vault_id, vault_data)
+    balances = await vault_service.get_vault_balance(vault.id)
+
+    return VaultResponse(
+        id=vault.id,
+        vault_code=vault.vault_code,
+        name=vault.name,
+        vault_type=vault.vault_type,
+        branch_id=vault.branch_id,
+        is_active=vault.is_active,
+        description=vault.description,
+        location=vault.location,
+        balances=[
+            {
+                'currency_code': b.currency.code,
+                'currency_name': b.currency.name_en,
+                'balance': b.balance,
+                'last_updated': b.last_updated
+            }
+            for b in balances
+        ],
+        created_at=vault.created_at,
+        updated_at=vault.updated_at
+    )
