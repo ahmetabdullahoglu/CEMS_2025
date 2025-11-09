@@ -52,7 +52,7 @@ async def get_daily_summary(
     """📊 Daily Transaction Summary Report"""
     check_permission(current_user, "view_reports")
     
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     report_service = ReportService(db)
@@ -78,7 +78,7 @@ async def get_monthly_revenue(
     """💰 Monthly Revenue Report"""
     check_permission(current_user, "view_reports")
     
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     report_service = ReportService(db)
@@ -151,7 +151,7 @@ async def get_balance_snapshot(
     """💵 Branch Balance Snapshot"""
     check_permission(current_user, "view_balances")
     
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     if not branch_id:
@@ -181,7 +181,7 @@ async def get_balance_movement(
     """📊 Balance Movement Report"""
     check_permission(current_user, "view_balances")
     
-    if current_user.role.name == "branch_manager" and branch_id != current_user.branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
     
     report_service = ReportService(db)

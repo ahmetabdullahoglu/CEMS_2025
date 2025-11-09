@@ -125,8 +125,42 @@ def upgrade() -> None:
     
     op.execute("CREATE INDEX idx_branch_alerts_active ON branch_alerts(branch_id, is_resolved, severity)")
 
+    # Add foreign key constraint to user_branches table (now that branches table exists)
+    op.execute("""
+        ALTER TABLE user_branches
+        ADD CONSTRAINT fk_user_branches_branch_id
+        FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+    """)
+
+    # Add primary_branch_id to users table for quick access
+    op.add_column('users', sa.Column(
+        'primary_branch_id',
+        postgresql.UUID(as_uuid=True),
+        nullable=True
+    ))
+
+    op.create_foreign_key(
+        'fk_users_primary_branch',
+        'users',
+        'branches',
+        ['primary_branch_id'],
+        ['id'],
+        ondelete='SET NULL'
+    )
+
+    op.create_index('idx_users_primary_branch', 'users', ['primary_branch_id'])
+
 
 def downgrade() -> None:
+    # Drop primary_branch_id from users
+    op.drop_index('idx_users_primary_branch', 'users')
+    op.drop_constraint('fk_users_primary_branch', 'users', type_='foreignkey')
+    op.drop_column('users', 'primary_branch_id')
+
+    # Drop foreign key from user_branches
+    op.execute("ALTER TABLE user_branches DROP CONSTRAINT IF EXISTS fk_user_branches_branch_id")
+
+    # Drop branch tables
     op.execute("DROP TABLE IF EXISTS branch_alerts CASCADE")
     op.execute("DROP TABLE IF EXISTS branch_balance_history CASCADE")
     op.execute("DROP TABLE IF EXISTS branch_balances CASCADE")

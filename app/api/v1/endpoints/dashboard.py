@@ -40,7 +40,7 @@ async def get_dashboard_overview(
     """
     
     # Branch managers can only see their branch
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     today = date.today()
@@ -159,7 +159,7 @@ async def get_transaction_volume_chart(
     Chart data ready for frontend visualization
     """
     
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     today = date.today()
@@ -204,7 +204,7 @@ async def get_revenue_trend_chart(
     Monthly or yearly revenue trends
     """
     
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     report_service = ReportService(db)
@@ -272,7 +272,7 @@ async def get_currency_distribution_chart(
     Transaction volume distribution by currency
     """
     
-    if current_user.role.name == "branch_manager" and not branch_id:
+    if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
     
     start_date = date.today() - timedelta(days=days)
