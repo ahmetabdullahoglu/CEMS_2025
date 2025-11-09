@@ -158,7 +158,15 @@ class Transaction(Base):
         comment="External reference number"
     )
     notes = Column(Text, nullable=True)
-    
+
+    # ========== Commission (primarily for Exchange transactions) ==========
+    commission_amount = Column(
+        Numeric(15, 2),
+        nullable=True,
+        default=Decimal("0.00"),
+        comment="Commission charged (mainly for exchange transactions)"
+    )
+
     # ========== Timestamps ==========
     transaction_date = Column(
         DateTime(timezone=True),
@@ -279,10 +287,8 @@ class Transaction(Base):
 
     @property
     def commission(self):
-        """Compatibility property: returns commission_amount"""
-        if self.transaction_type == TransactionType.EXCHANGE:
-            return getattr(self, 'commission_amount', None)
-        return None
+        """Alias for commission_amount for backward compatibility"""
+        return self.commission_amount or Decimal("0.00")
 
     # ========== Validation ==========
     @validates("status")
@@ -502,21 +508,15 @@ class ExchangeTransaction(Transaction):
         nullable=True,
         comment="Actual exchange rate used (snapshot at transaction time)"
     )
-    
-    # ========== Commission ==========
-    commission_amount = Column(
-        Numeric(15, 2),
-        nullable=True,
-        default=Decimal("0.00"),
-        comment="Commission charged for exchange"
-    )
+
+    # ========== Commission Percentage (for Exchange) ==========
     commission_percentage = Column(
         Numeric(5, 2),
         nullable=True,
         default=Decimal("0.00"),
         comment="Commission percentage applied"
     )
-    
+
     # ========== Polymorphic Configuration ==========
     __mapper_args__ = {
         "polymorphic_identity": "exchange"  # Must match enum value exactly
@@ -537,7 +537,7 @@ class ExchangeTransaction(Transaction):
     @hybrid_property
     def total_cost(self) -> Decimal:
         """Total cost including commission"""
-        return self.from_amount + self.commission_amount
+        return self.from_amount + (self.commission_amount or Decimal("0.00"))
     
     # ========== Business Methods ==========
     def calculate_commission(self, rate: Decimal) -> Decimal:
