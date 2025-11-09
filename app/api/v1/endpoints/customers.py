@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base import get_db
+from app.db.base import get_async_db as get_db
 from app.db.models.user import User
 from app.db.models.customer import CustomerType, RiskLevel, DocumentType
 from app.api.deps import get_current_active_user, get_current_superuser

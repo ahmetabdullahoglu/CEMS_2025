@@ -43,7 +43,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 # ==================== FINANCIAL REPORTS ====================
 
 @router.get("/daily-summary")
-async def get_daily_summary(
+def get_daily_summary(
     branch_id: Optional[str] = Query(None, description="Branch ID (optional)"),
     target_date: Optional[date] = Query(None, description="Target date (default: today)"),
     current_user: User = Depends(get_current_user),
@@ -68,7 +68,7 @@ async def get_daily_summary(
 
 
 @router.get("/monthly-revenue")
-async def get_monthly_revenue(
+def get_monthly_revenue(
     branch_id: Optional[str] = Query(None),
     year: int = Query(..., description="Year (e.g., 2025)"),
     month: int = Query(..., ge=1, le=12, description="Month (1-12)"),
@@ -95,7 +95,7 @@ async def get_monthly_revenue(
 
 
 @router.get("/branch-performance")
-async def get_branch_performance(
+def get_branch_performance(
     start_date: date = Query(..., description="Start date"),
     end_date: date = Query(..., description="End date"),
     current_user: User = Depends(get_current_user),
@@ -116,7 +116,7 @@ async def get_branch_performance(
 
 
 @router.get("/exchange-trends")
-async def get_exchange_trends(
+def get_exchange_trends(
     from_currency: str = Query(..., description="From currency code (e.g., USD)"),
     to_currency: str = Query(..., description="To currency code (e.g., YER)"),
     start_date: date = Query(...),
@@ -142,7 +142,7 @@ async def get_exchange_trends(
 # ==================== BALANCE REPORTS ====================
 
 @router.get("/balance-snapshot")
-async def get_balance_snapshot(
+def get_balance_snapshot(
     branch_id: Optional[str] = Query(None),
     snapshot_date: Optional[date] = Query(None, description="Snapshot date (default: today)"),
     current_user: User = Depends(get_current_user),
@@ -170,7 +170,7 @@ async def get_balance_snapshot(
 
 
 @router.get("/balance-movement")
-async def get_balance_movement(
+def get_balance_movement(
     branch_id: str = Query(...),
     currency_code: str = Query(...),
     start_date: date = Query(...),
@@ -198,7 +198,7 @@ async def get_balance_movement(
 
 
 @router.get("/low-balance-alerts")
-async def get_low_balance_alerts(
+def get_low_balance_alerts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -217,7 +217,7 @@ async def get_low_balance_alerts(
 # ==================== USER ACTIVITY REPORTS ====================
 
 @router.get("/user-activity")
-async def get_user_activity(
+def get_user_activity(
     user_id: str = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
@@ -241,7 +241,7 @@ async def get_user_activity(
 
 
 @router.get("/audit-trail")
-async def get_audit_trail(
+def get_audit_trail(
     entity_type: str = Query(..., description="Entity type (e.g., transaction, branch, user)"),
     entity_id: str = Query(..., description="Entity ID"),
     current_user: User = Depends(get_current_user),
@@ -266,7 +266,7 @@ async def get_audit_trail(
 # ==================== REPORT EXPORT ====================
 
 @router.post("/export")
-async def export_report(
+def export_report(
     report_type: str,
     format: str,
     filters: dict = {},

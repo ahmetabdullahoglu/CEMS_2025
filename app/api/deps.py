@@ -13,7 +13,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.db.base import get_db
+from app.db.base import get_async_db as get_db  # Import async version as get_db for backward compatibility
 from app.db.models.user import User
 from app.core.security import decode_token
 from app.core.exceptions import (
@@ -23,10 +23,12 @@ from app.core.exceptions import (
 
 # ==================== Database ====================
 
+# get_db is already async from base.py, so no need for wrapper
+# Just re-export it for backward compatibility
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Async DB session wrapper (from first version).
-    Use this if you prefer `get_async_db` as a dependency.
+    Async DB session (re-exported from base).
+    This is the same as get_db for backward compatibility.
     """
     async for session in get_db():
         yield session

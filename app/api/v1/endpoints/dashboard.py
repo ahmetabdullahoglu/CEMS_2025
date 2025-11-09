@@ -22,7 +22,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/overview")
-async def get_dashboard_overview(
+def get_dashboard_overview(
     branch_id: Optional[str] = Query(None, description="Branch ID (optional)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -141,7 +141,7 @@ async def get_dashboard_overview(
 
 
 @router.get("/charts/transaction-volume")
-async def get_transaction_volume_chart(
+def get_transaction_volume_chart(
     period: str = Query("daily", description="daily, weekly, or monthly"),
     branch_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -191,7 +191,7 @@ async def get_transaction_volume_chart(
 
 
 @router.get("/charts/revenue-trend")
-async def get_revenue_trend_chart(
+def get_revenue_trend_chart(
     period: str = Query("monthly", description="monthly or yearly"),
     branch_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -259,7 +259,7 @@ async def get_revenue_trend_chart(
 
 
 @router.get("/charts/currency-distribution")
-async def get_currency_distribution_chart(
+def get_currency_distribution_chart(
     branch_id: Optional[str] = Query(None),
     days: int = Query(30, ge=1, le=90, description="Number of days to analyze (1-90)"),
     current_user: User = Depends(get_current_user),
@@ -326,7 +326,7 @@ async def get_currency_distribution_chart(
 
 
 @router.get("/charts/branch-comparison")
-async def get_branch_comparison_chart(
+def get_branch_comparison_chart(
     metric: str = Query("transactions", description="transactions, revenue, or efficiency"),
     period_days: int = Query(30, ge=7, le=90),
     current_user: User = Depends(get_current_user),
@@ -393,7 +393,7 @@ async def get_branch_comparison_chart(
 
 
 @router.get("/alerts")
-async def get_dashboard_alerts(
+def get_dashboard_alerts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
