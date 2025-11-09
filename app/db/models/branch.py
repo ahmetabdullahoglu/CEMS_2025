@@ -204,7 +204,12 @@ class Branch(BaseModel, UserTrackingMixin):
         Index('idx_branch_region_active', 'region', 'is_active'),
         Index('idx_branch_main', 'is_main_branch', 'is_active'),
     )
-    
+
+    @property
+    def name(self) -> str:
+        """Backward compatibility property - returns English name by default"""
+        return self.name_en
+
     def __repr__(self) -> str:
         return f"<Branch(code='{self.code}', name='{self.name_en}')>"
 
