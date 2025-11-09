@@ -36,25 +36,62 @@ def event_loop() -> Generator:
     loop.close()
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def setup_test_database():
+    """Create test database if it doesn't exist"""
+    from sqlalchemy import text
+
+    # Connect to default postgres database to create test database
+    default_db_url = f"postgresql+asyncpg://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_SERVER}:{TEST_POSTGRES_PORT}/postgres"
+
+    engine = create_async_engine(default_db_url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+
+    try:
+        async with engine.connect() as conn:
+            # Check if test database exists
+            result = await conn.execute(
+                text(f"SELECT 1 FROM pg_database WHERE datname = '{TEST_POSTGRES_DB}'")
+            )
+            exists = result.scalar()
+
+            if not exists:
+                # Create test database
+                await conn.execute(text(f'CREATE DATABASE "{TEST_POSTGRES_DB}"'))
+                print(f"\nCreated test database: {TEST_POSTGRES_DB}")
+    finally:
+        await engine.dispose()
+
+    yield
+
+    # Optional: Drop test database after all tests
+    # Uncomment if you want to clean up the test database after tests
+    # engine = create_async_engine(default_db_url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+    # try:
+    #     async with engine.connect() as conn:
+    #         await conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_POSTGRES_DB}"'))
+    # finally:
+    #     await engine.dispose()
+
+
 @pytest.fixture(scope="session")
-async def test_engine():
+async def test_engine(setup_test_database):
     """Create test database engine"""
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
         poolclass=NullPool,
     )
-    
+
     # Create all tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield engine
-    
+
     # Drop all tables after tests
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
 
 
