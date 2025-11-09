@@ -171,14 +171,22 @@ class VaultToVaultTransferCreate(VaultTransferBase):
 
 class VaultToBranchTransferCreate(VaultTransferBase):
     """Create transfer from vault to branch"""
-    from_vault_id: UUID
-    to_branch_id: UUID
+    vault_id: UUID
+    branch_id: UUID
 
 
 class BranchToVaultTransferCreate(VaultTransferBase):
     """Create transfer from branch to vault"""
-    from_branch_id: UUID
-    to_vault_id: UUID
+    branch_id: UUID
+    vault_id: UUID
+
+
+# ==================== TRANSFER APPROVAL SCHEMAS (FIXED) ====================
+
+class TransferApproval(BaseModel):
+    """Approve or reject transfer"""
+    approved: bool
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 class VaultTransferApprove(BaseModel):
@@ -213,34 +221,34 @@ class VaultTransferResponse(BaseModel):
     status: TransferStatusEnum
     
     from_vault_id: UUID
-    from_vault_code: Optional[str]
+    from_vault_code: Optional[str] = None
     
-    to_vault_id: Optional[UUID]
-    to_vault_code: Optional[str]
+    to_vault_id: Optional[UUID] = None
+    to_vault_code: Optional[str] = None
     
-    to_branch_id: Optional[UUID]
-    to_branch_code: Optional[str]
+    to_branch_id: Optional[UUID] = None
+    to_branch_code: Optional[str] = None
     
     currency_id: UUID
-    currency_code: str
+    currency_code: Optional[str] = None
     amount: Decimal
     
     initiated_by: UUID
-    initiated_by_name: Optional[str]
+    initiated_by_name: Optional[str] = None
     initiated_at: datetime
     
-    approved_by: Optional[UUID]
-    approved_by_name: Optional[str]
-    approved_at: Optional[datetime]
+    approved_by: Optional[UUID] = None
+    approved_by_name: Optional[str] = None
+    approved_at: Optional[datetime] = None
     
-    received_by: Optional[UUID]
-    received_by_name: Optional[str]
-    completed_at: Optional[datetime]
+    received_by: Optional[UUID] = None
+    received_by_name: Optional[str] = None
+    completed_at: Optional[datetime] = None
     
-    cancelled_at: Optional[datetime]
+    cancelled_at: Optional[datetime] = None
     
-    notes: Optional[str]
-    rejection_reason: Optional[str]
+    notes: Optional[str] = None
+    rejection_reason: Optional[str] = None
     
     class Config:
         orm_mode = True
@@ -253,7 +261,7 @@ class VaultTransferListResponse(BaseModel):
     transfers: List[VaultTransferResponse]
 
 
-class VaultTransferFilter(BaseModel):
+class TransferQuery(BaseModel):
     """Filter parameters for transfer queries"""
     vault_id: Optional[UUID] = None
     branch_id: Optional[UUID] = None
@@ -337,5 +345,8 @@ class VaultTransferSummary(BaseModel):
     total_amount_transferred: Decimal
     average_transfer_amount: Decimal
     
-    by_currency: List[dict]
-    by_type: List[dict]
+    by_currency: List[dict] = []
+    by_type: List[dict] = []
+    
+    
+VaultTransferFilter = TransferQuery 
