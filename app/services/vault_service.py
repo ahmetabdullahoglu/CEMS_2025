@@ -12,7 +12,7 @@ from fastapi import HTTPException, status
 
 from app.db.models.vault import (
     Vault, VaultBalance, VaultTransfer,
-    VaultType, TransferType, TransferStatus,
+    VaultType, VaultTransferType, VaultTransferStatus,
     VaultTransferNumberGenerator
 )
 from app.db.models.branch import Branch, BranchBalance
@@ -288,18 +288,18 @@ class VaultService:
             to_vault_id=to_vault.id,
             currency_id=currency.id,
             amount=transfer_data.amount,
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=user.id,
             notes=transfer_data.notes
         )
         
         # Check if approval needed
         if transfer_data.amount >= TRANSFER_APPROVAL_THRESHOLD:
-            transfer.status = TransferStatus.PENDING
+            transfer.status = VaultTransferStatus.PENDING
         else:
             # Auto-approve small transfers
-            transfer.status = TransferStatus.IN_TRANSIT
+            transfer.status = VaultTransferStatus.IN_TRANSIT
             transfer.approved_by = user.id
             transfer.approved_at = datetime.utcnow()
         
@@ -308,7 +308,7 @@ class VaultService:
         self.db.refresh(transfer)
         
         # Execute transfer if approved
-        if transfer.status == TransferStatus.IN_TRANSIT:
+        if transfer.status == VaultTransferStatus.IN_TRANSIT:
             self._execute_vault_transfer(transfer)
         
         return transfer
@@ -364,17 +364,17 @@ class VaultService:
             to_branch_id=branch.id,
             currency_id=currency.id,
             amount=transfer_data.amount,
-            transfer_type=TransferType.VAULT_TO_BRANCH,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_BRANCH,
+            status=VaultTransferStatus.PENDING,
             initiated_by=user.id,
             notes=transfer_data.notes
         )
         
         # Check approval requirement
         if transfer_data.amount >= TRANSFER_APPROVAL_THRESHOLD:
-            transfer.status = TransferStatus.PENDING
+            transfer.status = VaultTransferStatus.PENDING
         else:
-            transfer.status = TransferStatus.IN_TRANSIT
+            transfer.status = VaultTransferStatus.IN_TRANSIT
             transfer.approved_by = user.id
             transfer.approved_at = datetime.utcnow()
         
@@ -443,8 +443,8 @@ class VaultService:
             to_vault_id=vault.id,
             currency_id=currency.id,
             amount=transfer_data.amount,
-            transfer_type=TransferType.BRANCH_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.BRANCH_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=user.id,
             notes=transfer_data.notes
         )
@@ -474,7 +474,7 @@ class VaultService:
                 detail="Transfer not found"
             )
         
-        if transfer.status != TransferStatus.PENDING:
+        if transfer.status != VaultTransferStatus.PENDING:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Transfer is not pending (current status: {transfer.status})"
@@ -488,14 +488,14 @@ class VaultService:
             )
         
         if approval_data.approved:
-            transfer.status = TransferStatus.IN_TRANSIT
+            transfer.status = VaultTransferStatus.IN_TRANSIT
             transfer.approved_by = user.id
             transfer.approved_at = datetime.utcnow()
             
             # Execute the transfer
             self._execute_vault_transfer(transfer)
         else:
-            transfer.status = TransferStatus.CANCELLED
+            transfer.status = VaultTransferStatus.CANCELLED
             transfer.rejection_reason = approval_data.notes
             transfer.cancelled_at = datetime.utcnow()
         
@@ -520,13 +520,13 @@ class VaultService:
                 detail="Transfer not found"
             )
         
-        if transfer.status != TransferStatus.IN_TRANSIT:
+        if transfer.status != VaultTransferStatus.IN_TRANSIT:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Transfer is not in transit"
             )
         
-        transfer.status = TransferStatus.COMPLETED
+        transfer.status = VaultTransferStatus.COMPLETED
         transfer.received_by = user.id
         transfer.completed_at = datetime.utcnow()
         
@@ -552,17 +552,17 @@ class VaultService:
                 detail="Transfer not found"
             )
         
-        if transfer.status not in [TransferStatus.PENDING, TransferStatus.IN_TRANSIT]:
+        if transfer.status not in [VaultTransferStatus.PENDING, VaultTransferStatus.IN_TRANSIT]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Can only cancel pending or in-transit transfers"
             )
         
         # Reverse balance changes if already executed
-        if transfer.status == TransferStatus.IN_TRANSIT:
+        if transfer.status == VaultTransferStatus.IN_TRANSIT:
             self._reverse_vault_transfer(transfer)
         
-        transfer.status = TransferStatus.CANCELLED
+        transfer.status = VaultTransferStatus.CANCELLED
         transfer.rejection_reason = reason
         transfer.cancelled_at = datetime.utcnow()
         
@@ -642,7 +642,7 @@ class VaultService:
         self,
         vault_id: Optional[UUID] = None,
         branch_id: Optional[UUID] = None,
-        status: Optional[TransferStatus] = None,
+        status: Optional[VaultTransferStatus] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
         skip: int = 0,
@@ -749,16 +749,16 @@ class VaultService:
         pending_in = self.db.query(VaultTransfer).filter(
             VaultTransfer.to_vault_id == vault_id,
             VaultTransfer.status.in_([
-                TransferStatus.PENDING,
-                TransferStatus.IN_TRANSIT
+                VaultTransferStatus.PENDING,
+                VaultTransferStatus.IN_TRANSIT
             ])
         ).count()
         
         pending_out = self.db.query(VaultTransfer).filter(
             VaultTransfer.from_vault_id == vault_id,
             VaultTransfer.status.in_([
-                TransferStatus.PENDING,
-                TransferStatus.IN_TRANSIT
+                VaultTransferStatus.PENDING,
+                VaultTransferStatus.IN_TRANSIT
             ])
         ).count()
         
@@ -809,11 +809,11 @@ class VaultService:
         transfers = query.all()
         
         total_count = len(transfers)
-        completed = sum(1 for t in transfers if t.status == TransferStatus.COMPLETED)
-        pending = sum(1 for t in transfers if t.status == TransferStatus.PENDING)
-        cancelled = sum(1 for t in transfers if t.status == TransferStatus.CANCELLED)
+        completed = sum(1 for t in transfers if t.status == VaultTransferStatus.COMPLETED)
+        pending = sum(1 for t in transfers if t.status == VaultTransferStatus.PENDING)
+        cancelled = sum(1 for t in transfers if t.status == VaultTransferStatus.CANCELLED)
         
-        total_amount = sum(t.amount for t in transfers if t.status == TransferStatus.COMPLETED)
+        total_amount = sum(t.amount for t in transfers if t.status == VaultTransferStatus.COMPLETED)
         avg_amount = total_amount / completed if completed > 0 else Decimal('0.00')
         
         return {

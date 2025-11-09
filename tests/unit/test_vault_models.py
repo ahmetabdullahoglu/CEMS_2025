@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.vault import (
     Vault, VaultBalance, VaultTransfer,
-    VaultType, TransferType, TransferStatus,
+    VaultType, VaultTransferType, VaultTransferStatus,
     VaultTransferNumberGenerator
 )
 from app.db.models.branch import Branch
@@ -288,8 +288,8 @@ class TestVaultTransferModel:
             to_branch_id=None,
             currency_id=test_currency.id,
             amount=Decimal('5000.00'),
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id,
             initiated_at=datetime.utcnow(),
             notes="Test transfer"
@@ -301,7 +301,7 @@ class TestVaultTransferModel:
         assert transfer.id is not None
         assert transfer.transfer_number == "VTR-20250109-00001"
         assert transfer.amount == Decimal('5000.00')
-        assert transfer.status == TransferStatus.PENDING
+        assert transfer.status == VaultTransferStatus.PENDING
     
     def test_create_vault_to_branch_transfer(self, db_session, test_currency, test_branch, test_user):
         """Test creating a vault-to-branch transfer"""
@@ -321,8 +321,8 @@ class TestVaultTransferModel:
             to_branch_id=test_branch.id,
             currency_id=test_currency.id,
             amount=Decimal('3000.00'),
-            transfer_type=TransferType.VAULT_TO_BRANCH,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_BRANCH,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id,
             initiated_at=datetime.utcnow()
         )
@@ -350,8 +350,8 @@ class TestVaultTransferModel:
             to_vault_id=vault.id,
             currency_id=test_currency.id,
             amount=Decimal('-100.00'),  # Negative amount
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id
         )
         
@@ -379,8 +379,8 @@ class TestVaultTransferModel:
             to_branch_id=None,
             currency_id=test_currency.id,
             amount=Decimal('1000.00'),
-            transfer_type=TransferType.VAULT_TO_BRANCH,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_BRANCH,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id
         )
         
@@ -406,8 +406,8 @@ class TestVaultTransferModel:
             to_vault_id=vault.id,
             currency_id=test_currency.id,
             amount=Decimal('1000.00'),
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id
         )
         transfer2 = VaultTransfer(
@@ -416,8 +416,8 @@ class TestVaultTransferModel:
             to_vault_id=vault.id,
             currency_id=test_currency.id,
             amount=Decimal('2000.00'),
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id
         )
         
@@ -464,8 +464,8 @@ class TestVaultTransferNumberGenerator:
             to_vault_id=vault.id,
             currency_id=test_currency.id,
             amount=Decimal('1000.00'),
-            transfer_type=TransferType.VAULT_TO_VAULT,
-            status=TransferStatus.PENDING,
+            transfer_type=VaultTransferType.VAULT_TO_VAULT,
+            status=VaultTransferStatus.PENDING,
             initiated_by=test_user.id
         )
         db_session.add(transfer1)

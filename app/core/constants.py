@@ -141,7 +141,7 @@ class VaultType(str, Enum):
     BRANCH = "branch"
 
 
-class TransferType(str, Enum):
+class VaultTransferType(str, Enum):
     """Types of vault/branch transfers"""
     VAULT_TO_BRANCH = "vault_to_branch"
     BRANCH_TO_VAULT = "branch_to_vault"
@@ -149,7 +149,7 @@ class TransferType(str, Enum):
     VAULT_TO_VAULT = "vault_to_vault"
 
 
-class TransferStatus(str, Enum):
+class VaultTransferStatus(str, Enum):
     """Transfer workflow states"""
     PENDING = "pending"
     APPROVED = "approved"

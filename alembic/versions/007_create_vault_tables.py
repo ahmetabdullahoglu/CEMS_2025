@@ -36,21 +36,21 @@ def upgrade() -> None:
     )
     vault_type_enum.create(op.get_bind(), checkfirst=True)
     
-    # Transfer Type Enum
-    transfer_type_enum = postgresql.ENUM(
+    # Vault Transfer Type Enum
+    vault_transfer_type_enum = postgresql.ENUM(
         'vault_to_vault', 'vault_to_branch', 'branch_to_vault',
-        name='transfer_type_enum',
+        name='vault_transfer_type_enum',
         create_type=False
     )
-    transfer_type_enum.create(op.get_bind(), checkfirst=True)
-    
-    # Transfer Status Enum
-    transfer_status_enum = postgresql.ENUM(
+    vault_transfer_type_enum.create(op.get_bind(), checkfirst=True)
+
+    # Vault Transfer Status Enum
+    vault_transfer_status_enum = postgresql.ENUM(
         'pending', 'approved', 'in_transit', 'completed', 'cancelled', 'rejected',
-        name='transfer_status_enum',
+        name='vault_transfer_status_enum',
         create_type=False
     )
-    transfer_status_enum.create(op.get_bind(), checkfirst=True)
+    vault_transfer_status_enum.create(op.get_bind(), checkfirst=True)
     
     # ==================== CREATE VAULTS TABLE ====================
     
@@ -174,11 +174,11 @@ def upgrade() -> None:
                   comment='Currency being transferred'),
         sa.Column('amount', sa.Numeric(precision=15, scale=2), nullable=False,
                   comment='Transfer amount'),
-        sa.Column('transfer_type', transfer_type_enum, nullable=False,
+        sa.Column('transfer_type', vault_transfer_type_enum, nullable=False,
                   comment='Type of transfer'),
-        
+
         # Status and Workflow
-        sa.Column('status', transfer_status_enum, nullable=False, server_default='pending',
+        sa.Column('status', vault_transfer_status_enum, nullable=False, server_default='pending',
                   comment='Current transfer status'),
         
         # Users
@@ -272,6 +272,6 @@ def downgrade() -> None:
     op.drop_table('vaults')
     
     # Drop enums
-    op.execute("DROP TYPE IF EXISTS transfer_status_enum;")
-    op.execute("DROP TYPE IF EXISTS transfer_type_enum;")
+    op.execute("DROP TYPE IF EXISTS vault_transfer_status_enum;")
+    op.execute("DROP TYPE IF EXISTS vault_transfer_type_enum;")
     op.execute("DROP TYPE IF EXISTS vault_type_enum;")

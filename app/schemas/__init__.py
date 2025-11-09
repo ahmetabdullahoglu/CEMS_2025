@@ -146,8 +146,8 @@ from app.schemas.transaction import (
 from app.schemas.vault import (
     # Enums
     VaultTypeEnum,
-    TransferTypeEnum,
-    TransferStatusEnum,
+    VaultTransferTypeEnum,
+    VaultTransferStatusEnum,
     
     # Vault
     VaultBase,
@@ -326,8 +326,8 @@ __all__ = [
     "ReconciliationResponse",
      # Vault Management
     "VaultTypeEnum",
-    "TransferTypeEnum",
-    "TransferStatusEnum",
+    "VaultTransferTypeEnum",
+    "VaultTransferStatusEnum",
     "VaultBase",
     "VaultCreate",
     "VaultUpdate",

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user, require_permissions
 from app.db.models.user import User
-from app.db.models.vault import TransferStatus, TransferType
+from app.db.models.vault import VaultTransferStatus, VaultTransferType
 from app.services.vault_service import VaultService
 from app.schemas.vault import (
     VaultCreate, VaultUpdate, VaultResponse, VaultListResponse,
@@ -593,8 +593,8 @@ async def cancel_transfer(
 async def get_transfers(
     vault_id: Optional[UUID] = Query(None),
     branch_id: Optional[UUID] = Query(None),
-    status: Optional[TransferStatus] = Query(None),
-    transfer_type: Optional[TransferType] = Query(None),
+    status: Optional[VaultTransferStatus] = Query(None),
+    transfer_type: Optional[VaultTransferType] = Query(None),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     skip: int = Query(0, ge=0),

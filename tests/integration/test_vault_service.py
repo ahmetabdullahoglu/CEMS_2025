@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from app.services.vault_service import VaultService
 from app.db.models.vault import (
     Vault, VaultBalance, VaultTransfer,
-    VaultType, TransferType, TransferStatus
+    VaultType, VaultTransferType, VaultTransferStatus
 )
 from app.db.models.branch import Branch, BranchBalance
 from app.db.models.currency import Currency
@@ -284,8 +284,8 @@ class TestVaultTransfers:
         
         transfer = vault_service.transfer_vault_to_vault(transfer_data, test_user)
         
-        assert transfer.transfer_type == TransferType.VAULT_TO_VAULT
-        assert transfer.status == TransferStatus.IN_TRANSIT  # Auto-approved
+        assert transfer.transfer_type == VaultTransferType.VAULT_TO_VAULT
+        assert transfer.status == VaultTransferStatus.IN_TRANSIT  # Auto-approved
         assert transfer.amount == Decimal('5000.00')
         assert transfer.approved_by == test_user.id
         
@@ -321,7 +321,7 @@ class TestVaultTransfers:
         
         transfer = vault_service.transfer_vault_to_vault(transfer_data, test_user)
         
-        assert transfer.status == TransferStatus.PENDING  # Needs approval
+        assert transfer.status == VaultTransferStatus.PENDING  # Needs approval
         assert transfer.approved_by is None
         
         # Balances should not change yet
@@ -373,7 +373,7 @@ class TestVaultTransfers:
         
         transfer = vault_service.transfer_to_branch(transfer_data, test_user)
         
-        assert transfer.transfer_type == TransferType.VAULT_TO_BRANCH
+        assert transfer.transfer_type == VaultTransferType.VAULT_TO_BRANCH
         assert transfer.to_branch_id == test_branch.id
         assert transfer.amount == Decimal('10000.00')
 
@@ -401,7 +401,7 @@ class TestTransferWorkflow:
         )
         
         transfer = vault_service.transfer_vault_to_vault(transfer_data, test_user)
-        assert transfer.status == TransferStatus.PENDING
+        assert transfer.status == VaultTransferStatus.PENDING
         
         # Approve it
         approval_data = TransferApproval(
@@ -415,7 +415,7 @@ class TestTransferWorkflow:
             test_user
         )
         
-        assert approved_transfer.status == TransferStatus.IN_TRANSIT
+        assert approved_transfer.status == VaultTransferStatus.IN_TRANSIT
         assert approved_transfer.approved_by == test_user.id
         assert approved_transfer.approved_at is not None
         
@@ -462,7 +462,7 @@ class TestTransferWorkflow:
             test_user
         )
         
-        assert rejected_transfer.status == TransferStatus.CANCELLED
+        assert rejected_transfer.status == VaultTransferStatus.CANCELLED
         assert rejected_transfer.rejection_reason == "Insufficient justification"
         
         # Balance should remain unchanged
@@ -490,12 +490,12 @@ class TestTransferWorkflow:
         )
         
         transfer = vault_service.transfer_vault_to_vault(transfer_data, test_user)
-        assert transfer.status == TransferStatus.IN_TRANSIT
+        assert transfer.status == VaultTransferStatus.IN_TRANSIT
         
         # Complete it
         completed_transfer = vault_service.complete_transfer(transfer.id, test_user)
         
-        assert completed_transfer.status == TransferStatus.COMPLETED
+        assert completed_transfer.status == VaultTransferStatus.COMPLETED
         assert completed_transfer.received_by == test_user.id
         assert completed_transfer.completed_at is not None
     
@@ -518,7 +518,7 @@ class TestTransferWorkflow:
         )
         
         transfer = vault_service.transfer_vault_to_vault(transfer_data, test_user)
-        assert transfer.status == TransferStatus.PENDING
+        assert transfer.status == VaultTransferStatus.PENDING
         
         # Cancel it
         cancelled_transfer = vault_service.cancel_transfer(
@@ -527,7 +527,7 @@ class TestTransferWorkflow:
             test_user
         )
         
-        assert cancelled_transfer.status == TransferStatus.CANCELLED
+        assert cancelled_transfer.status == VaultTransferStatus.CANCELLED
         assert cancelled_transfer.rejection_reason == "No longer needed"
     
     def test_cancel_in_transit_transfer_reverses_balance(
@@ -549,7 +549,7 @@ class TestTransferWorkflow:
         )
         
         transfer = vault_service.transfer_vault_to_vault(transfer_data, test_user)
-        assert transfer.status == TransferStatus.IN_TRANSIT
+        assert transfer.status == VaultTransferStatus.IN_TRANSIT
         
         # Verify balance changed
         source_balance_before = vault_service.get_vault_balance(
@@ -645,11 +645,11 @@ class TestTransferHistory:
         vault_service.complete_transfer(transfer.id, test_user)
         
         transfers, total = vault_service.get_transfer_history(
-            status=TransferStatus.COMPLETED
+            status=VaultTransferStatus.COMPLETED
         )
         
         assert total >= 1
-        assert all(t.status == TransferStatus.COMPLETED for t in transfers)
+        assert all(t.status == VaultTransferStatus.COMPLETED for t in transfers)
 
 
 class TestReconciliation:

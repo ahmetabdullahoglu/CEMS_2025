@@ -27,15 +27,15 @@ class VaultTypeEnum(str, Enum):
     BRANCH = "branch"
 
 
-class TransferTypeEnum(str, Enum):
-    """Transfer types"""
+class VaultTransferTypeEnum(str, Enum):
+    """Vault transfer types"""
     VAULT_TO_VAULT = "vault_to_vault"
     VAULT_TO_BRANCH = "vault_to_branch"
     BRANCH_TO_VAULT = "branch_to_vault"
 
 
-class TransferStatusEnum(str, Enum):
-    """Transfer statuses"""
+class VaultTransferStatusEnum(str, Enum):
+    """Vault transfer statuses"""
     PENDING = "pending"
     APPROVED = "approved"
     IN_TRANSIT = "in_transit"
@@ -217,8 +217,8 @@ class VaultTransferResponse(BaseModel):
     """Transfer response"""
     id: UUID
     transfer_number: str
-    transfer_type: TransferTypeEnum
-    status: TransferStatusEnum
+    transfer_type: VaultTransferTypeEnum
+    status: VaultTransferStatusEnum
     
     from_vault_id: UUID
     from_vault_code: Optional[str] = None
@@ -265,8 +265,8 @@ class TransferQuery(BaseModel):
     """Filter parameters for transfer queries"""
     vault_id: Optional[UUID] = None
     branch_id: Optional[UUID] = None
-    status: Optional[TransferStatusEnum] = None
-    transfer_type: Optional[TransferTypeEnum] = None
+    status: Optional[VaultTransferStatusEnum] = None
+    transfer_type: Optional[VaultTransferTypeEnum] = None
     currency_id: Optional[UUID] = None
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
