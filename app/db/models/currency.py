@@ -88,12 +88,14 @@ class Currency(BaseModel):
     
     exchange_from = relationship(
         "ExchangeTransaction",
-        foreign_keys="ExchangeTransaction.from_currency_id"
+        foreign_keys="ExchangeTransaction.from_currency_id",
+        overlaps="from_currency"
     )
-    
+
     exchange_to = relationship(
         "ExchangeTransaction",
-        foreign_keys="ExchangeTransaction.to_currency_id"
+        foreign_keys="ExchangeTransaction.to_currency_id",
+        overlaps="to_currency"
     )
     # Table constraints
     __table_args__ = (

@@ -81,7 +81,7 @@ class Vault(BaseModel):
     )
     
     vault_type = Column(
-        Enum(VaultType, name="vault_type_enum"),
+        Enum(VaultType, name="vault_type_enum", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=VaultType.BRANCH,
         index=True,
@@ -281,7 +281,7 @@ class VaultTransfer(BaseModel):
     )
     
     transfer_type = Column(
-        Enum(VaultTransferType, name="vault_transfer_type_enum"),
+        Enum(VaultTransferType, name="vault_transfer_type_enum", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         index=True,
         comment="Type of transfer"
@@ -289,7 +289,7 @@ class VaultTransfer(BaseModel):
 
     # Status and Workflow
     status = Column(
-        Enum(VaultTransferStatus, name="vault_transfer_status_enum"),
+        Enum(VaultTransferStatus, name="vault_transfer_status_enum", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=VaultTransferStatus.PENDING,
         index=True,

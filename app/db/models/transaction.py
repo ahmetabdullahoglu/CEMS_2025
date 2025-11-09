@@ -199,10 +199,10 @@ class Transaction(Base):
     
     # ========== SQLAlchemy Relationships ==========
     branch = relationship("Branch", foreign_keys=[branch_id], back_populates="transactions")
-    user = relationship("User", foreign_keys=[user_id])
+    user = relationship("User", foreign_keys=[user_id], back_populates="transactions")
     customer = relationship("Customer", foreign_keys=[customer_id])
     currency = relationship("Currency", foreign_keys=[currency_id])
-    cancelled_by = relationship("User", foreign_keys=[cancelled_by_id])
+    cancelled_by = relationship("User", foreign_keys=[cancelled_by_id], overlaps="cancelled_transactions")
     
     # ========== Constraints ==========
     __table_args__ = (
@@ -380,7 +380,7 @@ class ExpenseTransaction(Transaction):
     }
     
     # ========== Relationships ==========
-    approved_by = relationship("User", foreign_keys=[approved_by_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_id], overlaps="approved_expenses")
     
     # ========== Properties ==========
     @hybrid_property
@@ -474,8 +474,8 @@ class ExchangeTransaction(Transaction):
     }
     
     # ========== Relationships ==========
-    from_currency = relationship("Currency", foreign_keys=[from_currency_id])
-    to_currency = relationship("Currency", foreign_keys=[to_currency_id])
+    from_currency = relationship("Currency", foreign_keys=[from_currency_id], overlaps="exchange_from")
+    to_currency = relationship("Currency", foreign_keys=[to_currency_id], overlaps="exchange_to")
     
     # ========== Properties ==========
     @hybrid_property
@@ -561,7 +561,7 @@ class TransferTransaction(Transaction):
     # ========== Relationships ==========
     from_branch = relationship("Branch", foreign_keys=[from_branch_id])
     to_branch = relationship("Branch", foreign_keys=[to_branch_id])
-    received_by = relationship("User", foreign_keys=[received_by_id])
+    received_by = relationship("User", foreign_keys=[received_by_id], overlaps="received_transfers")
     
     # ========== Properties ==========
     @hybrid_property

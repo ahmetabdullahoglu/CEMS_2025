@@ -139,25 +139,27 @@ class User(BaseModel):
     transactions = relationship(
         "Transaction",
         back_populates="user",
-        foreign_keys="Transaction.user_id"
+        foreign_keys="Transaction.user_id",
+        overlaps="user"
     )
-    
+
     approved_expenses = relationship(
         "ExpenseTransaction",
-        foreign_keys="ExpenseTransaction.approved_by_id"
+        foreign_keys="ExpenseTransaction.approved_by_id",
+        overlaps="approved_by"
     )
-    
+
     cancelled_transactions = relationship(
         "Transaction",
-        foreign_keys="Transaction.cancelled_by_id"
+        foreign_keys="Transaction.cancelled_by_id",
+        overlaps="cancelled_by"
     )
-    
+
     received_transfers = relationship(
         "TransferTransaction",
-        foreign_keys="TransferTransaction.received_by_id"
+        foreign_keys="TransferTransaction.received_by_id",
+        overlaps="received_by"
     )
-    # Back references (will be populated by related models)
-    # transactions = relationship("Transaction", back_populates="user")
     # created_customers = relationship("Customer", back_populates="created_by_user")
     
     def __repr__(self) -> str:
