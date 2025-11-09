@@ -99,6 +99,9 @@ async def test_branch(db_session: AsyncSession):
         name_en="Test Branch",
         name_ar="فرع تجريبي",
         region=RegionEnum.ISTANBUL_EUROPEAN,
+        address="Test Address 123",
+        city="Istanbul",
+        phone="+90 555 123 4567",
         is_active=True
     )
     db_session.add(branch)
