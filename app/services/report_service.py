@@ -83,10 +83,10 @@ class ReportService:
                 if currency_code not in volume_by_currency:
                     volume_by_currency[currency_code] = Decimal('0')
                 volume_by_currency[currency_code] += txn.source_amount or Decimal('0')
-                
+
                 # Revenue tracking
-                if txn.commission:
-                    revenue_by_type[txn.transaction_type.value] += txn.commission
+                if txn.commission_amount:
+                    revenue_by_type[txn.transaction_type.value] += txn.commission_amount
                 
                 # Type breakdown
                 type_breakdown[txn.transaction_type] += 1
@@ -153,10 +153,10 @@ class ReportService:
                         'revenue': Decimal('0'),
                         'count': 0
                     }
-                
-                if txn.commission:
-                    daily_revenue[day]['revenue'] += txn.commission
-                    total_revenue += txn.commission
+
+                if txn.commission_amount:
+                    daily_revenue[day]['revenue'] += txn.commission_amount
+                    total_revenue += txn.commission_amount
                 daily_revenue[day]['count'] += 1
             
             # Calculate statistics
@@ -209,7 +209,7 @@ class ReportService:
                     Transaction.status == TransactionStatus.COMPLETED
                 ).all()
                 
-                total_revenue = sum(txn.commission or Decimal('0') for txn in transactions)
+                total_revenue = sum(txn.commission_amount or Decimal('0') for txn in transactions)
                 total_count = len(transactions)
                 
                 comparison_data.append({
@@ -823,23 +823,23 @@ class ReportService:
                 Transaction.transaction_date >= start_date,
                 Transaction.transaction_date <= end_date,
                 Transaction.status == TransactionStatus.COMPLETED,
-                Transaction.commission.isnot(None)
+                Transaction.commission_amount.isnot(None)
             )
-            
+
             if branch_id:
                 query = query.filter(Transaction.branch_id == branch_id)
-            
+
             transactions = query.all()
-            
-            total_commission = sum(txn.commission for txn in transactions)
-            
+
+            total_commission = sum(txn.commission_amount for txn in transactions)
+
             # By transaction type
             by_type = {}
             for txn in transactions:
                 txn_type = txn.transaction_type.value
                 if txn_type not in by_type:
                     by_type[txn_type] = Decimal('0')
-                by_type[txn_type] += txn.commission
+                by_type[txn_type] += txn.commission_amount
             
             return {
                 'branch_id': branch_id,
