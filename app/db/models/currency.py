@@ -102,7 +102,12 @@ class Currency(BaseModel):
         CheckConstraint('LENGTH(code) = 3', name='currency_code_length_check'),
         CheckConstraint('decimal_places >= 0', name='currency_decimal_places_positive'),
     )
-    
+
+    @property
+    def name(self) -> str:
+        """Backward compatibility property - returns English name by default"""
+        return self.name_en
+
     def __repr__(self) -> str:
         return f"<Currency(code='{self.code}', name='{self.name_en}')>"
 
