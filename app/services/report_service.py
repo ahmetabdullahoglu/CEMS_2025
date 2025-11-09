@@ -214,8 +214,8 @@ class ReportService:
                 
                 comparison_data.append({
                     'branch_id': str(branch.id),
-                    'branch_code': branch.branch_code,
-                    'branch_name': branch.branch_name,
+                    'branch_code': branch.code,
+                    'branch_name': branch.name,
                     'total_transactions': total_count,
                     'total_revenue': float(total_revenue),
                     'avg_transaction_value': float(total_revenue / total_count) if total_count > 0 else 0
@@ -451,8 +451,8 @@ class ReportService:
             return {
                 'branch': {
                     'id': str(branch.id),
-                    'code': branch.branch_code,
-                    'name': branch.branch_name
+                    'code': branch.code,
+                    'name': branch.name
                 },
                 'snapshot_date': snapshot_date.isoformat(),
                 'balances': balance_data,
@@ -533,8 +533,8 @@ class ReportService:
                         alerts.append({
                             'branch': {
                                 'id': str(branch.id),
-                                'code': branch.branch_code,
-                                'name': branch.branch_name
+                                'code': branch.code,
+                                'name': branch.name
                             },
                             'currency': {
                                 'code': balance.currency.code,
