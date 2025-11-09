@@ -118,7 +118,15 @@ class User(BaseModel):
         nullable=True,
         comment="Account lock expiration timestamp"
     )
-    
+
+    # Primary Branch (for quick access)
+    primary_branch_id = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey('branches.id', ondelete='SET NULL'),
+        nullable=True,
+        comment="User's primary branch for quick access"
+    )
+
     # Relationships
     # branches = relationship(
     #     "Branch",
@@ -130,11 +138,18 @@ class User(BaseModel):
     roles = relationship(
         "Role",
         secondary=user_roles,
-        primaryjoin="User.id == user_roles.c.user_id",  # ← تحديد واضح
+        primaryjoin="User.id == user_roles.c.user_id",
         secondaryjoin="Role.id == user_roles.c.role_id",
         back_populates="users",
         lazy="selectin"
     )
+
+    primary_branch = relationship(
+        "Branch",
+        foreign_keys=[primary_branch_id],
+        lazy="joined"
+    )
+
     # Add these relationships
     transactions = relationship(
         "Transaction",
@@ -171,7 +186,17 @@ class User(BaseModel):
         if self.locked_until is None:
             return False
         return datetime.utcnow() < self.locked_until
-    
+
+    @property
+    def role(self):
+        """Get primary role (first role) for compatibility"""
+        return self.roles[0] if self.roles else None
+
+    @property
+    def branch_id(self):
+        """Get primary branch ID for compatibility"""
+        return self.primary_branch_id
+
     def has_role(self, role_name: str) -> bool:
         """Check if user has a specific role"""
         return any(role.name == role_name for role in self.roles)
