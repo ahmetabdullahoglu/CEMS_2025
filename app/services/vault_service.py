@@ -30,6 +30,9 @@ from app.core.constants import (
     MAX_TRANSFER_AMOUNT,
     MIN_VAULT_BALANCE
 )
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class VaultService:
@@ -242,27 +245,22 @@ class VaultService:
                 # Get exchange rate to USD
                 from app.services.currency_service import CurrencyService
                 currency_service = CurrencyService(self.db)
-                rate = await currency_service.get_exchange_rate(
-                    currency.id,
-                    await self._get_usd_currency_id()
-                )
-                total_usd += balance.balance * rate
+                try:
+                    rate_response = await currency_service.get_latest_rate(
+                        currency.code,
+                        'USD'
+                    )
+                    total_usd += balance.balance * rate_response.rate
+                except Exception:
+                    # If no rate found, skip this currency
+                    logger.warning(
+                        f"No exchange rate found for {currency.code} to USD, "
+                        f"skipping balance calculation"
+                    )
+                    continue
 
         return total_usd
 
-    async def _get_usd_currency_id(self) -> UUID:
-        """Helper to get USD currency ID"""
-        result = await self.db.execute(
-            select(Currency).filter(Currency.code == 'USD')
-        )
-        usd = result.scalar_one_or_none()
-        if not usd:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="USD currency not found"
-            )
-        return usd.id
-    
     # ==================== TRANSFER OPERATIONS ====================
     
     async def transfer_vault_to_vault(
