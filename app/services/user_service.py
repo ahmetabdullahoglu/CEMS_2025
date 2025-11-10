@@ -11,7 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.db.models.user import User, Role
+from app.db.models.user import User
+from app.db.models.role import Role
 from app.core.security import get_password_hash, verify_password
 from app.core.exceptions import (
     ValidationError,
