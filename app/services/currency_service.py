@@ -321,6 +321,9 @@ class CurrencyService:
                     effective_to=inverse_rate.effective_to,
                     set_by=inverse_rate.set_by,
                     notes=f"Calculated from inverse rate",
+                    is_current=inverse_rate.is_current,  # Inherit from inverse rate
+                    created_at=inverse_rate.created_at,
+                    updated_at=inverse_rate.updated_at,
                     from_currency=from_currency,
                     to_currency=to_currency
                 )
@@ -529,6 +532,7 @@ class CurrencyService:
         )
 
         # Create calculated rate object
+        current_time = datetime.utcnow()
         calculated_rate = ExchangeRate(
             id=UUID('00000000-0000-0000-0000-000000000000'),  # Dummy ID for calculated rate
             from_currency_id=from_currency.id,
@@ -536,10 +540,13 @@ class CurrencyService:
             rate=cross_rate,
             buy_rate=cross_buy_rate,
             sell_rate=cross_sell_rate,
-            effective_from=datetime.utcnow(),
+            effective_from=current_time,
             effective_to=None,
             set_by=UUID('00000000-0000-0000-0000-000000000000'),  # System
             notes=f"Calculated via USD: {from_currency_code}->USD ({from_to_usd_rate}) * USD->{to_currency_code} ({usd_to_to_rate})",
+            is_current=True,  # Calculated rates are always current
+            created_at=current_time,
+            updated_at=current_time,
             from_currency=from_currency,
             to_currency=to_currency
         )
