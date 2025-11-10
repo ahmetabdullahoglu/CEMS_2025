@@ -1,7 +1,29 @@
 """
-User Service
-Business logic for user management operations
-Phase 2: User & Role Management
+User Service - Core Business Logic
+===================================
+Comprehensive user management operations:
+- User CRUD operations (create, read, update, delete)
+- User authentication and password management
+- Role assignment and management
+- Branch assignment (primary and additional branches)
+- User search and filtering
+- User activation/deactivation
+
+Features:
+- Email and username uniqueness validation
+- Secure password hashing
+- Role-based access control integration
+- Multi-branch user support
+- Comprehensive error handling
+- Complete audit trail
+
+Business Rules:
+1. Email must be unique (case-insensitive)
+2. Username must be unique
+3. Password must meet security requirements
+4. Users can have multiple roles
+5. Users can be assigned to multiple branches
+6. Superuser flag grants all permissions
 """
 
 from typing import List, Optional, Dict, Any
@@ -39,7 +61,37 @@ class UserService:
         user_data: Dict[str, Any],
         current_user: Optional[User] = None
     ) -> User:
-        """Create new user"""
+        """
+        Create new user with validation and role assignment
+
+        Steps:
+        1. Validate required fields (email, username, password)
+        2. Check for existing email/username
+        3. Hash password
+        4. Create user record
+        5. Assign roles if provided
+        6. Commit transaction
+
+        Args:
+            user_data: Dictionary containing user data:
+                - email (required): User's email address
+                - username (required): Unique username
+                - password (required): Plain text password (will be hashed)
+                - full_name (optional): User's full name
+                - phone (optional): Phone number
+                - is_active (optional): Active status (default: True)
+                - is_superuser (optional): Superuser flag (default: False)
+                - primary_branch_id (optional): Primary branch UUID
+                - role_ids (optional): List of role UUIDs to assign
+            current_user: User performing the operation (for audit trail)
+
+        Returns:
+            Created User object with assigned roles
+
+        Raises:
+            ValidationError: If required fields missing or user exists
+            DatabaseOperationError: If user creation fails
+        """
         logger.info(f"Creating user {user_data.get('email')}")
 
         # Validate required fields
@@ -91,19 +143,43 @@ class UserService:
             raise DatabaseOperationError(f"User creation failed: {str(e)}")
 
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
-        """Get user by ID"""
+        """
+        Get user by UUID
+
+        Args:
+            user_id: User's unique identifier
+
+        Returns:
+            User object if found, None otherwise
+        """
         query = select(User).where(User.id == user_id)
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
-        """Get user by email"""
+        """
+        Get user by email address (case-insensitive)
+
+        Args:
+            email: User's email address
+
+        Returns:
+            User object if found, None otherwise
+        """
         query = select(User).where(User.email == email.lower())
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_user_by_username(self, username: str) -> Optional[User]:
-        """Get user by username"""
+        """
+        Get user by username
+
+        Args:
+            username: User's unique username
+
+        Returns:
+            User object if found, None otherwise
+        """
         query = select(User).where(User.username == username)
         result = await self.db.execute(query)
         return result.scalar_one_or_none()

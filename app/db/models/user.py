@@ -22,8 +22,8 @@ user_branches = Table(
     Column('branch_id', PGUUID(as_uuid=True), ForeignKey('branches.id', ondelete='CASCADE'), nullable=False),
     Column('is_primary', Boolean, default=False, nullable=False),
     Column('assigned_at', DateTime, default=datetime.utcnow, nullable=False),
-    #Column('assigned_by', PGUUID(as_uuid=True), ForeignKey('users.id'), nullable=True),
-    Column('assigned_by', PGUUID(as_uuid=True), nullable=True)  # بدون FK
+    # assigned_by without FK to avoid circular reference
+    Column('assigned_by', PGUUID(as_uuid=True), nullable=True)
 
 )
 

@@ -1,6 +1,30 @@
 """
-Authentication Service
-Handles user authentication, registration, and session management
+Authentication Service - Core Business Logic
+============================================
+Comprehensive authentication and authorization operations:
+- User authentication (username/email + password)
+- JWT token generation and validation (access + refresh)
+- User registration and account setup
+- Session management
+- Login attempt tracking
+- Account lockout management
+- Token refresh workflow
+
+Features:
+- Secure password verification
+- JWT-based authentication
+- Failed login attempt tracking
+- Automatic account lockout after threshold
+- Token expiration and refresh
+- IP-based logging for security audit
+- Role and permission loading
+
+Security:
+- Passwords are never stored in plain text
+- Failed login attempts trigger lockout
+- Tokens have expiration times
+- Refresh tokens for secure session extension
+- Complete audit trail of authentication events
 """
 
 from datetime import datetime, timedelta

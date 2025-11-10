@@ -1,6 +1,27 @@
 """
-Vault Service
-Handles all vault operations including transfers, approvals, and reconciliation
+Vault Service - Core Business Logic
+====================================
+Handles all vault operations with comprehensive transfer management:
+- Vault creation and management (main vault and branch vaults)
+- Vault balance management and tracking
+- Vault-to-vault transfers
+- Vault-to-branch transfers
+- Branch-to-vault transfers
+- Transfer approval workflow
+- Balance reconciliation
+
+Business Rules:
+1. Only ONE main vault allowed (vault_type=MAIN)
+2. Transfers exceeding threshold require approval
+3. Balance cannot go negative
+4. All transfers are atomic with proper rollback
+5. Complete audit trail for all operations
+
+Critical Operations:
+- All transfer operations are atomic (commit or rollback)
+- Balance updates happen in same transaction
+- Approval workflow enforced for large amounts
+- Comprehensive logging and error handling
 """
 from typing import Optional, List, Dict, Tuple
 from datetime import datetime, timedelta
