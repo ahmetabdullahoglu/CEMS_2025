@@ -186,7 +186,7 @@ class TransactionValidationService:
                 ExchangeRate.to_currency_id == to_currency_id,
                 ExchangeRate.is_active == True
             )
-        ).order_by(ExchangeRate.effective_date.desc()).limit(1)
+        ).order_by(ExchangeRate.effective_from.desc()).limit(1)
         
         result = await self.db.execute(stmt)
         rate = result.scalar_one_or_none()
@@ -197,18 +197,18 @@ class TransactionValidationService:
             )
         
         # Check staleness
-        age = datetime.utcnow() - rate.effective_date
+        age = datetime.utcnow() - rate.effective_from
         age_hours = age.total_seconds() / 3600
-        
+
         if age_hours > max_age:
             raise ValidationError(
                 f"Exchange rate is stale (age: {age_hours:.1f} hours, "
                 f"max: {max_age} hours). Please update rate."
             )
-        
+
         return {
             'rate': float(rate.rate),
-            'effective_date': rate.effective_date.isoformat(),
+            'effective_date': rate.effective_from.isoformat(),
             'age_hours': age_hours,
             'is_fresh': age_hours <= max_age
         }

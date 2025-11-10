@@ -71,7 +71,7 @@ def get_dashboard_overview(
     
     # Low balance alerts
     report_service = ReportService(db)
-    low_balance_alerts = len(report_service.low_balance_alert_report())
+    low_balance_alerts = report_service.low_balance_alert_report().get('alert_count', 0)
     
     # Pending approvals (transactions requiring approval)
     pending_approvals = db.query(Transaction).filter(

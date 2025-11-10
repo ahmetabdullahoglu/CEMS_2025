@@ -105,10 +105,11 @@ def get_branch_performance(
     check_permission(current_user, "view_all_reports")
     
     report_service = ReportService(db)
-    
+
     try:
         performance = report_service.branch_performance_comparison(
-            date_range=(start_date, end_date)
+            start_date=start_date,
+            end_date=end_date
         )
         return performance
     except Exception as e:
@@ -128,11 +129,12 @@ def get_exchange_trends(
     check_permission(current_user, "view_reports")
     
     report_service = ReportService(db)
-    
+
     try:
         trends = report_service.currency_exchange_trends(
             currency_pair=(from_currency, to_currency),
-            date_range=(start_date, end_date)
+            start_date=start_date,
+            end_date=end_date
         )
         return trends
     except Exception as e:
@@ -185,12 +187,13 @@ def get_balance_movement(
         raise HTTPException(status_code=403, detail="Access denied to this branch")
     
     report_service = ReportService(db)
-    
+
     try:
         movement = report_service.balance_movement_report(
             branch_id=branch_id,
             currency_code=currency_code,
-            date_range=(start_date, end_date)
+            start_date=start_date,
+            end_date=end_date
         )
         return movement
     except Exception as e:
@@ -229,11 +232,12 @@ def get_user_activity(
         check_permission(current_user, "view_all_reports")
     
     report_service = ReportService(db)
-    
+
     try:
         activity = report_service.user_activity_log(
             user_id=user_id,
-            date_range=(start_date, end_date)
+            start_date=start_date,
+            end_date=end_date
         )
         return activity
     except Exception as e:
@@ -251,12 +255,13 @@ def get_audit_trail(
     check_permission(current_user, "view_audit_logs")
     
     report_service = ReportService(db)
-    
+
     try:
         audit_trail = report_service.audit_trail_report(
             entity_type=entity_type,
             entity_id=entity_id,
-            date_range=None
+            start_date=None,
+            end_date=None
         )
         return audit_trail
     except Exception as e:
@@ -294,7 +299,8 @@ def export_report(
             )
         elif report_type == "branch_performance":
             report_data = report_service.branch_performance_comparison(
-                date_range=(filters.get("start_date"), filters.get("end_date"))
+                start_date=filters.get("start_date"),
+                end_date=filters.get("end_date")
             )
         elif report_type == "balance_snapshot":
             report_data = report_service.branch_balance_snapshot(

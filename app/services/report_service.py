@@ -386,7 +386,7 @@ class ReportService:
                 'customer': {
                     'id': str(customer.id),
                     'full_name': customer.full_name,
-                    'customer_code': customer.customer_code
+                    'customer_number': customer.customer_number
                 },
                 'date_range': {
                     'start': start_date.isoformat(),
@@ -490,8 +490,8 @@ class ReportService:
             balance_data = []
             for balance in balances:
                 balance_data.append({
-                    'currency_code': balance.currency.code,
-                    'currency_name': balance.currency.name,
+                    'currency_code': balance.currency.code if balance.currency else 'UNK',
+                    'currency_name': balance.currency.name if balance.currency else 'Unknown',
                     'balance': float(balance.balance),
                     'last_updated': balance.last_updated.isoformat() if balance.last_updated else None
                 })
@@ -537,8 +537,8 @@ class ReportService:
                                 'name': branch.name
                             },
                             'currency': {
-                                'code': balance.currency.code,
-                                'name': balance.currency.name
+                                'code': balance.currency.code if balance.currency else 'UNK',
+                                'name': balance.currency.name if balance.currency else 'Unknown'
                             },
                             'current_balance': float(balance.balance),
                             'severity': 'high' if balance.balance < Decimal('500') else 'medium'
@@ -704,7 +704,7 @@ class ReportService:
                 raise ReportGenerationError("User not found")
             
             transactions = self.db.query(Transaction).filter(
-                Transaction.created_by == user_id,
+                Transaction.user_id == user_id,
                 Transaction.transaction_date >= start_date,
                 Transaction.transaction_date <= end_date
             ).all()
@@ -994,8 +994,8 @@ class ReportService:
             
             # Filter for target currency
             relevant_rates = [
-                rate for rate in rates 
-                if rate.target_currency and rate.target_currency.code == to_currency
+                rate for rate in rates
+                if rate.to_currency and rate.to_currency.code == to_currency
             ]
             
             if not relevant_rates:
@@ -1022,7 +1022,7 @@ class ReportService:
                 curr_rate = relevant_rates[i].rate
                 change = ((curr_rate - prev_rate) / prev_rate) * 100
                 daily_changes.append({
-                    'date': relevant_rates[i].effective_date.isoformat(),
+                    'date': relevant_rates[i].effective_from.isoformat(),
                     'rate': float(curr_rate),
                     'change_percent': float(change)
                 })

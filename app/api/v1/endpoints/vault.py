@@ -6,9 +6,9 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, require_permissions
+from app.api.deps import get_async_db, get_current_user, require_permissions
 from app.db.models.user import User
 from app.db.models.vault import VaultTransferStatus, VaultTransferType
 from app.services.vault_service import VaultService
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/vault", tags=["vault"])
     summary="Get main vault details"
 )
 async def get_main_vault(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -79,7 +79,7 @@ async def get_main_vault(
 )
 async def create_vault(
     vault_data: VaultCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -115,7 +115,7 @@ async def create_vault(
 )
 async def get_vault_balances(
     vault_id: Optional[UUID] = Query(None, description="Specific vault ID"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -155,7 +155,7 @@ async def get_vault_balances(
 async def get_vault_balance_by_currency(
     currency_id: UUID,
     vault_id: Optional[UUID] = Query(None, description="Specific vault ID"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -199,7 +199,7 @@ async def get_vault_balance_by_currency(
 )
 async def adjust_vault_balance(
     balance_data: VaultBalanceUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -261,7 +261,7 @@ async def adjust_vault_balance(
 )
 async def transfer_vault_to_vault(
     transfer_data: VaultToVaultTransferCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -302,7 +302,7 @@ async def transfer_vault_to_vault(
 )
 async def transfer_to_branch(
     transfer_data: VaultToBranchTransferCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -343,7 +343,7 @@ async def transfer_to_branch(
 )
 async def transfer_from_branch(
     transfer_data: BranchToVaultTransferCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -385,7 +385,7 @@ async def transfer_from_branch(
 async def approve_transfer(
     transfer_id: UUID,
     approval_data: TransferApproval,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -425,7 +425,7 @@ async def approve_transfer(
 )
 async def complete_transfer(
     transfer_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -465,7 +465,7 @@ async def complete_transfer(
 async def cancel_transfer(
     transfer_id: UUID,
     reason: str = Query(..., min_length=10, description="Cancellation reason"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -513,7 +513,7 @@ async def get_transfers(
     date_to: Optional[datetime] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -567,7 +567,7 @@ async def get_transfers(
 )
 async def get_transfer(
     transfer_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -618,7 +618,7 @@ async def get_transfer(
 )
 async def reconcile_vault(
     reconciliation_data: VaultReconciliationRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -640,7 +640,7 @@ async def reconcile_vault(
 )
 async def get_reconciliation_report(
     vault_id: UUID = Query(...),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -671,7 +671,7 @@ async def get_reconciliation_report(
 )
 async def get_vault_statistics(
     vault_id: Optional[UUID] = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -699,7 +699,7 @@ async def get_vault_statistics(
 async def get_transfer_statistics(
     vault_id: Optional[UUID] = Query(None),
     period_days: int = Query(30, ge=1, le=365, description="Period in days"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -732,7 +732,7 @@ async def get_transfer_statistics(
 )
 async def get_vault(
     vault_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -776,7 +776,7 @@ async def get_vault(
 async def update_vault(
     vault_id: UUID,
     vault_data: VaultUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
