@@ -1,0 +1,325 @@
+# app/api/v1/endpoints/users.py
+"""
+User Management API Endpoints
+RESTful API for user CRUD operations
+Phase 2: User & Role Management
+"""
+
+from typing import List, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.base import get_async_db as get_db
+from app.db.models.user import User
+from app.api.deps import (
+    get_current_user,
+    get_current_active_user,
+    get_current_superuser,
+    require_permission
+)
+from app.services.user_service import UserService
+from app.schemas.user import (
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    PasswordChange
+)
+from app.core.exceptions import (
+    ResourceNotFoundError,
+    ValidationError,
+    AuthenticationError
+)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+router = APIRouter()
+
+
+# ==================== User CRUD ====================
+
+@router.post(
+    "",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create New User",
+    dependencies=[Depends(require_permission("user:create"))]
+)
+async def create_user(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Create a new user account
+
+    **Required Fields:**
+    - email
+    - username
+    - password
+    - full_name
+
+    **Permissions:** user:create
+    """
+    try:
+        logger.info(f"Creating user {user_data.email} by {current_user.email}")
+
+        service = UserService(db)
+        user = await service.create_user(
+            user_data=user_data.dict(exclude_unset=True),
+            current_user=current_user
+        )
+
+        logger.info(f"User {user.email} created successfully")
+        return user
+
+    except ValidationError as e:
+        logger.warning(f"Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create user"
+        )
+
+
+@router.get(
+    "",
+    response_model=List[UserResponse],
+    summary="List Users",
+    dependencies=[Depends(require_permission("user:read"))]
+)
+async def list_users(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    is_active: Optional[bool] = Query(None),
+    branch_id: Optional[UUID] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    List all users with optional filters
+
+    **Filters:**
+    - is_active: Filter by active status
+    - branch_id: Filter by primary branch
+
+    **Permissions:** user:read
+    """
+    try:
+        service = UserService(db)
+        users = await service.list_users(
+            skip=skip,
+            limit=limit,
+            is_active=is_active,
+            branch_id=branch_id
+        )
+
+        return users
+
+    except Exception as e:
+        logger.error(f"Error listing users: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list users"
+        )
+
+
+@router.get(
+    "/{user_id}",
+    response_model=UserResponse,
+    summary="Get User by ID",
+    dependencies=[Depends(require_permission("user:read"))]
+)
+async def get_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get user details by ID
+
+    **Permissions:** user:read
+    """
+    try:
+        service = UserService(db)
+        user = await service.get_user_by_id(user_id)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User {user_id} not found"
+            )
+
+        return user
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get user"
+        )
+
+
+@router.put(
+    "/{user_id}",
+    response_model=UserResponse,
+    summary="Update User",
+    dependencies=[Depends(require_permission("user:update"))]
+)
+async def update_user(
+    user_id: UUID,
+    user_data: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update user information
+
+    **Updatable Fields:**
+    - full_name
+    - phone
+    - is_active
+    - primary_branch_id
+    - role_ids
+
+    **Permissions:** user:update
+    """
+    try:
+        service = UserService(db)
+        user = await service.update_user(
+            user_id=user_id,
+            user_data=user_data.dict(exclude_unset=True),
+            current_user=current_user
+        )
+
+        logger.info(f"User {user.email} updated by {current_user.email}")
+        return user
+
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error updating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user"
+        )
+
+
+@router.post(
+    "/{user_id}/change-password",
+    status_code=status.HTTP_200_OK,
+    summary="Change Password"
+)
+async def change_password(
+    user_id: UUID,
+    password_data: PasswordChange,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Change user password
+
+    **Note:** Users can only change their own password unless they are superuser
+    """
+    # Check if user is changing their own password or is superuser
+    if user_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only change your own password"
+        )
+
+    try:
+        service = UserService(db)
+        await service.change_password(
+            user_id=user_id,
+            old_password=password_data.old_password,
+            new_password=password_data.new_password
+        )
+
+        return {"message": "Password changed successfully"}
+
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except AuthenticationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error changing password: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to change password"
+        )
+
+
+@router.post(
+    "/{user_id}/deactivate",
+    status_code=status.HTTP_200_OK,
+    summary="Deactivate User",
+    dependencies=[Depends(require_permission("user:delete"))]
+)
+async def deactivate_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Deactivate user account
+
+    **Permissions:** user:delete
+    """
+    try:
+        service = UserService(db)
+        await service.deactivate_user(user_id)
+
+        logger.info(f"User {user_id} deactivated by {current_user.email}")
+        return {"message": "User deactivated successfully"}
+
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error deactivating user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to deactivate user"
+        )
+
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Get Current User"
+)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get current authenticated user information
+
+    **No special permissions required** - returns current user's own data
+    """
+    return current_user
