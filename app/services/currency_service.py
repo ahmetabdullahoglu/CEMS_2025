@@ -283,17 +283,28 @@ class CurrencyService:
     async def get_latest_rate(
         self,
         from_currency_code: str,
-        to_currency_code: str
+        to_currency_code: str,
+        use_intermediary: bool = True
     ) -> ExchangeRateResponse:
-        """Get latest exchange rate between two currencies"""
+        """
+        Get latest exchange rate between two currencies
+
+        Args:
+            from_currency_code: Source currency code
+            to_currency_code: Target currency code
+            use_intermediary: If True, try to find rate via USD if direct rate not found
+
+        Returns:
+            ExchangeRateResponse with the exchange rate
+        """
         from_currency = await self.repo.get_currency_by_code(from_currency_code)
         to_currency = await self.repo.get_currency_by_code(to_currency_code)
-        
+
         if not from_currency or not to_currency:
             raise ResourceNotFoundError("Currency", from_currency_code if not from_currency else to_currency_code)
-        
+
         rate = await self.repo.get_exchange_rate(from_currency.id, to_currency.id)
-        
+
         if not rate:
             # Try inverse rate
             inverse_rate = await self.repo.get_exchange_rate(to_currency.id, from_currency.id)
@@ -314,12 +325,26 @@ class CurrencyService:
                     to_currency=to_currency
                 )
                 return ExchangeRateResponse.model_validate(calculated_rate)
-            
+
+            # Try intermediary currency (USD) if enabled
+            if use_intermediary and from_currency_code != "USD" and to_currency_code != "USD":
+                try:
+                    cross_rate = await self._get_cross_rate_via_usd(
+                        from_currency_code,
+                        to_currency_code,
+                        from_currency,
+                        to_currency
+                    )
+                    if cross_rate:
+                        return cross_rate
+                except Exception as e:
+                    logger.debug(f"Could not calculate cross rate via USD: {e}")
+
             raise ResourceNotFoundError(
                 "ExchangeRate",
                 f"{from_currency_code}/{to_currency_code}"
             )
-        
+
         return ExchangeRateResponse.model_validate(rate)
     
     async def calculate_exchange(
@@ -402,7 +427,7 @@ class CurrencyService:
         """Get all current exchange rates in the system"""
         # Get all active currencies
         currencies = await self.repo.get_all_currencies(include_inactive=False)
-        
+
         all_rates = []
         for currency in currencies:
             rates = await self.repo.get_all_rates_for_currency(
@@ -410,7 +435,7 @@ class CurrencyService:
                 include_historical=False
             )
             all_rates.extend(rates)
-        
+
         # Remove duplicates
         seen = set()
         unique_rates = []
@@ -419,5 +444,272 @@ class CurrencyService:
             if rate_key not in seen:
                 seen.add(rate_key)
                 unique_rates.append(rate)
-        
+
         return [ExchangeRateResponse.model_validate(rate) for rate in unique_rates]
+
+    # ==================== Advanced Exchange Operations ====================
+
+    async def _get_cross_rate_via_usd(
+        self,
+        from_currency_code: str,
+        to_currency_code: str,
+        from_currency: Currency,
+        to_currency: Currency
+    ) -> Optional[ExchangeRateResponse]:
+        """
+        Calculate cross rate via USD intermediary
+        Example: AED -> USD -> EGP
+
+        Args:
+            from_currency_code: Source currency code
+            to_currency_code: Target currency code
+            from_currency: Source currency object
+            to_currency: Target currency object
+
+        Returns:
+            ExchangeRateResponse with calculated cross rate, or None if not possible
+        """
+        logger.info(
+            f"Attempting to calculate cross rate {from_currency_code}/{to_currency_code} via USD"
+        )
+
+        # Get USD currency
+        usd_currency = await self.repo.get_currency_by_code("USD")
+        if not usd_currency:
+            logger.warning("USD currency not found in system")
+            return None
+
+        # Get from_currency -> USD rate
+        from_to_usd = await self.repo.get_exchange_rate(from_currency.id, usd_currency.id)
+        if not from_to_usd:
+            # Try inverse
+            usd_to_from = await self.repo.get_exchange_rate(usd_currency.id, from_currency.id)
+            if usd_to_from:
+                from_to_usd_rate = Decimal('1') / usd_to_from.rate
+                from_to_usd_buy = Decimal('1') / usd_to_from.sell_rate if usd_to_from.sell_rate else None
+                from_to_usd_sell = Decimal('1') / usd_to_from.buy_rate if usd_to_from.buy_rate else None
+            else:
+                logger.debug(f"No rate found for {from_currency_code} -> USD")
+                return None
+        else:
+            from_to_usd_rate = from_to_usd.rate
+            from_to_usd_buy = from_to_usd.buy_rate
+            from_to_usd_sell = from_to_usd.sell_rate
+
+        # Get USD -> to_currency rate
+        usd_to_to = await self.repo.get_exchange_rate(usd_currency.id, to_currency.id)
+        if not usd_to_to:
+            # Try inverse
+            to_to_usd = await self.repo.get_exchange_rate(to_currency.id, usd_currency.id)
+            if to_to_usd:
+                usd_to_to_rate = Decimal('1') / to_to_usd.rate
+                usd_to_to_buy = Decimal('1') / to_to_usd.sell_rate if to_to_usd.sell_rate else None
+                usd_to_to_sell = Decimal('1') / to_to_usd.buy_rate if to_to_usd.buy_rate else None
+            else:
+                logger.debug(f"No rate found for USD -> {to_currency_code}")
+                return None
+        else:
+            usd_to_to_rate = usd_to_to.rate
+            usd_to_to_buy = usd_to_to.buy_rate
+            usd_to_to_sell = usd_to_to.sell_rate
+
+        # Calculate cross rate: from -> USD -> to
+        cross_rate = from_to_usd_rate * usd_to_to_rate
+        cross_buy_rate = None
+        cross_sell_rate = None
+
+        if from_to_usd_buy and usd_to_to_buy:
+            cross_buy_rate = from_to_usd_buy * usd_to_to_buy
+        if from_to_usd_sell and usd_to_to_sell:
+            cross_sell_rate = from_to_usd_sell * usd_to_to_sell
+
+        logger.info(
+            f"Calculated cross rate {from_currency_code}/{to_currency_code} = {cross_rate} "
+            f"(via USD: {from_to_usd_rate} * {usd_to_to_rate})"
+        )
+
+        # Create calculated rate object
+        calculated_rate = ExchangeRate(
+            id=UUID('00000000-0000-0000-0000-000000000000'),  # Dummy ID for calculated rate
+            from_currency_id=from_currency.id,
+            to_currency_id=to_currency.id,
+            rate=cross_rate,
+            buy_rate=cross_buy_rate,
+            sell_rate=cross_sell_rate,
+            effective_from=datetime.utcnow(),
+            effective_to=None,
+            set_by=UUID('00000000-0000-0000-0000-000000000000'),  # System
+            notes=f"Calculated via USD: {from_currency_code}->USD ({from_to_usd_rate}) * USD->{to_currency_code} ({usd_to_to_rate})",
+            from_currency=from_currency,
+            to_currency=to_currency
+        )
+
+        return ExchangeRateResponse.model_validate(calculated_rate)
+
+    async def convert_amount(
+        self,
+        amount: Decimal,
+        from_currency_code: str,
+        to_currency_code: str,
+        use_buy_rate: bool = False,
+        use_sell_rate: bool = False,
+        use_intermediary: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Convert amount from one currency to another
+        Supports cross-currency conversion via USD intermediary
+
+        Args:
+            amount: Amount to convert
+            from_currency_code: Source currency code
+            to_currency_code: Target currency code
+            use_buy_rate: Use buy rate if available
+            use_sell_rate: Use sell rate if available
+            use_intermediary: Allow conversion via USD if direct rate not found
+
+        Returns:
+            Dictionary with conversion details
+        """
+        if amount <= 0:
+            raise ValidationError("Amount must be greater than 0")
+
+        # Same currency
+        if from_currency_code.upper() == to_currency_code.upper():
+            return {
+                'from_currency': from_currency_code,
+                'to_currency': to_currency_code,
+                'from_amount': amount,
+                'rate': Decimal('1'),
+                'to_amount': amount,
+                'rate_type': 'same_currency',
+                'via_intermediary': False
+            }
+
+        # Get rate (with intermediary support)
+        rate_response = await self.get_latest_rate(
+            from_currency_code.upper(),
+            to_currency_code.upper(),
+            use_intermediary=use_intermediary
+        )
+
+        # Determine which rate to use
+        rate_used = rate_response.rate
+        rate_type = 'standard'
+
+        if use_buy_rate and rate_response.buy_rate:
+            rate_used = rate_response.buy_rate
+            rate_type = 'buy'
+        elif use_sell_rate and rate_response.sell_rate:
+            rate_used = rate_response.sell_rate
+            rate_type = 'sell'
+
+        # Calculate result
+        to_amount = (amount * rate_used).quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+
+        # Check if this was calculated via intermediary
+        via_intermediary = 'via USD' in (rate_response.notes or '')
+
+        return {
+            'from_currency': from_currency_code,
+            'to_currency': to_currency_code,
+            'from_amount': amount,
+            'rate': rate_used,
+            'to_amount': to_amount,
+            'rate_type': rate_type,
+            'via_intermediary': via_intermediary,
+            'effective_from': rate_response.effective_from,
+            'notes': rate_response.notes
+        }
+
+    async def aggregate_balances(
+        self,
+        balances: List[Dict[str, Any]],
+        target_currency_code: str = "USD",
+        use_buy_rate: bool = False,
+        use_sell_rate: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Aggregate balances from multiple currencies into a single target currency
+
+        Args:
+            balances: List of dictionaries with 'currency_code' and 'amount' keys
+            target_currency_code: Currency to convert all balances to (default: USD)
+            use_buy_rate: Use buy rates for conversion
+            use_sell_rate: Use sell rates for conversion
+
+        Returns:
+            Dictionary with aggregated balance and conversion details
+
+        Example:
+            balances = [
+                {'currency_code': 'TRY', 'amount': Decimal('100000.00')},
+                {'currency_code': 'EUR', 'amount': Decimal('5000.00')},
+                {'currency_code': 'EGP', 'amount': Decimal('50000.00')}
+            ]
+            result = await service.aggregate_balances(balances, 'USD')
+        """
+        if not balances:
+            return {
+                'target_currency': target_currency_code,
+                'total_amount': Decimal('0'),
+                'breakdown': []
+            }
+
+        # Validate target currency exists
+        target_currency = await self.repo.get_currency_by_code(target_currency_code.upper())
+        if not target_currency:
+            raise ResourceNotFoundError("Currency", target_currency_code)
+
+        total = Decimal('0')
+        breakdown = []
+
+        for balance_item in balances:
+            currency_code = balance_item.get('currency_code', '').upper()
+            amount = balance_item.get('amount', Decimal('0'))
+
+            if not currency_code or amount <= 0:
+                continue
+
+            try:
+                # Convert to target currency
+                conversion = await self.convert_amount(
+                    amount=amount,
+                    from_currency_code=currency_code,
+                    to_currency_code=target_currency_code,
+                    use_buy_rate=use_buy_rate,
+                    use_sell_rate=use_sell_rate,
+                    use_intermediary=True
+                )
+
+                total += conversion['to_amount']
+
+                breakdown.append({
+                    'currency': currency_code,
+                    'original_amount': amount,
+                    'converted_amount': conversion['to_amount'],
+                    'rate_used': conversion['rate'],
+                    'rate_type': conversion['rate_type'],
+                    'via_intermediary': conversion.get('via_intermediary', False)
+                })
+
+            except Exception as e:
+                logger.warning(
+                    f"Could not convert {currency_code} to {target_currency_code}: {e}"
+                )
+                # Add to breakdown but don't include in total
+                breakdown.append({
+                    'currency': currency_code,
+                    'original_amount': amount,
+                    'converted_amount': None,
+                    'error': str(e)
+                })
+
+        return {
+            'target_currency': target_currency_code,
+            'total_amount': total,
+            'breakdown': breakdown,
+            'rate_type': 'buy' if use_buy_rate else ('sell' if use_sell_rate else 'standard')
+        }
