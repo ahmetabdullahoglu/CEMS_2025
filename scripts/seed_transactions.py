@@ -133,6 +133,42 @@ async def create_income_transactions(
             "source": "Document verification fee",
             "reference": "DOC-001",
         },
+        # ========== ADDITIONAL INCOME SCENARIOS (DOUBLE DATA) ==========
+        {
+            "amount": Decimal("200.00"),
+            "currency": "USD",
+            "category": IncomeCategory.SERVICE_FEE,
+            "source": "Account opening fee",
+            "reference": "SVC-004",
+        },
+        {
+            "amount": Decimal("180.00"),
+            "currency": "EUR",
+            "category": IncomeCategory.COMMISSION,
+            "source": "Foreign exchange commission",
+            "reference": "COM-002",
+        },
+        {
+            "amount": Decimal("95.50"),
+            "currency": "USD",
+            "category": IncomeCategory.SERVICE_FEE,
+            "source": "Wire transfer processing fee",
+            "reference": "SVC-005",
+        },
+        {
+            "amount": Decimal("4200.00"),
+            "currency": "TRY",
+            "category": IncomeCategory.COMMISSION,
+            "source": "Monthly agent commission",
+            "reference": "COM-003",
+        },
+        {
+            "amount": Decimal("85.00"),
+            "currency": "GBP",
+            "category": IncomeCategory.SERVICE_FEE,
+            "source": "Premium service consultation fee",
+            "reference": "SVC-006",
+        },
     ]
     
     created = 0
@@ -217,6 +253,47 @@ async def create_expense_transactions(
             "category": ExpenseCategory.MAINTENANCE,
             "payee": "IT Support & Maintenance",
             "reference": "MAINT-001",
+            "requires_approval": True,
+        },
+        # ========== ADDITIONAL EXPENSE SCENARIOS (DOUBLE DATA) ==========
+        {
+            "amount": Decimal("3500.00"),
+            "currency": "TRY",
+            "category": ExpenseCategory.OTHER,
+            "payee": "Security Services Company",
+            "reference": "SEC-JAN-2025",
+            "requires_approval": True,
+        },
+        {
+            "amount": Decimal("5000.00"),
+            "currency": "TRY",
+            "category": ExpenseCategory.OTHER,
+            "payee": "Marketing & Advertising Agency",
+            "reference": "MKT-001",
+            "requires_approval": True,
+        },
+        {
+            "amount": Decimal("4500.00"),
+            "currency": "TRY",
+            "category": ExpenseCategory.OTHER,
+            "payee": "Legal & Accounting Firm",
+            "reference": "PROF-001",
+            "requires_approval": True,
+        },
+        {
+            "amount": Decimal("1200.00"),
+            "currency": "TRY",
+            "category": ExpenseCategory.UTILITIES,
+            "payee": "Internet & Phone Services",
+            "reference": "COMM-JAN-2025",
+            "requires_approval": False,
+        },
+        {
+            "amount": Decimal("2800.00"),
+            "currency": "TRY",
+            "category": ExpenseCategory.OTHER,
+            "payee": "Staff Training & Development",
+            "reference": "TRAIN-001",
             "requires_approval": True,
         },
     ]
@@ -316,6 +393,42 @@ async def create_exchange_transactions(
             "rate": Decimal("41.50"),
             "commission": Decimal("0.015"),
         },
+        # ========== ADDITIONAL EXCHANGE SCENARIOS (DOUBLE DATA) ==========
+        {
+            "from_currency": "SAR",
+            "to_currency": "TRY",
+            "from_amount": Decimal("1000.00"),
+            "rate": Decimal("8.67"),
+            "commission": Decimal("0.015"),
+        },
+        {
+            "from_currency": "AED",
+            "to_currency": "EUR",
+            "from_amount": Decimal("500.00"),
+            "rate": Decimal("0.251"),
+            "commission": Decimal("0.01"),
+        },
+        {
+            "from_currency": "JPY",
+            "to_currency": "USD",
+            "from_amount": Decimal("50000.00"),
+            "rate": Decimal("0.0067"),
+            "commission": Decimal("0.01"),
+        },
+        {
+            "from_currency": "EUR",
+            "to_currency": "GBP",
+            "from_amount": Decimal("300.00"),
+            "rate": Decimal("0.86"),
+            "commission": Decimal("0.01"),
+        },
+        {
+            "from_currency": "TRY",
+            "to_currency": "EUR",
+            "from_amount": Decimal("8000.00"),
+            "rate": Decimal("0.0283"),
+            "commission": Decimal("0.02"),
+        },
     ]
     
     created = 0
@@ -387,6 +500,25 @@ async def create_transfer_transactions(
             "currency": "EUR",
             "transfer_type": TransferType.BRANCH_TO_BRANCH,
             "notes": "EUR cash replenishment",
+        },
+        # ========== ADDITIONAL TRANSFER SCENARIOS (DOUBLE DATA) ==========
+        {
+            "amount": Decimal("15000.00"),
+            "currency": "TRY",
+            "transfer_type": TransferType.BRANCH_TO_BRANCH,
+            "notes": "Weekly branch cash balance adjustment",
+        },
+        {
+            "amount": Decimal("2500.00"),
+            "currency": "USD",
+            "transfer_type": TransferType.BRANCH_TO_BRANCH,
+            "notes": "USD reserve replenishment",
+        },
+        {
+            "amount": Decimal("1800.00"),
+            "currency": "GBP",
+            "transfer_type": TransferType.BRANCH_TO_BRANCH,
+            "notes": "GBP currency distribution",
         },
     ]
     

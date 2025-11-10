@@ -126,6 +126,92 @@ async def seed_branches(db: AsyncSession):
                 "USD": Decimal("12000.00"),
                 "EUR": Decimal("6000.00"),
             }
+        },
+        # ========== ADDITIONAL BRANCHES (DOUBLE DATA) ==========
+        {
+            "code": "BR006",
+            "name_en": "Antalya Muratpaşa Branch",
+            "name_ar": "فرع أنطاليا - موراتباشا",
+            "region": RegionEnum.ANTALYA,
+            "address": "Muratpaşa Boulevard, Lara 90",
+            "city": "Antalya",
+            "phone": "+902421234567",
+            "email": "muratpasa@cems.com",
+            "is_main_branch": False,
+            "opening_balance_date": datetime.utcnow() - timedelta(days=45),
+            "balances": {
+                "TRY": Decimal("180000.00"),
+                "USD": Decimal("18000.00"),
+                "EUR": Decimal("9000.00"),
+            }
+        },
+        {
+            "code": "BR007",
+            "name_en": "Adana Seyhan Branch",
+            "name_ar": "فرع أضنة - سيحان",
+            "region": RegionEnum.ADANA,
+            "address": "Seyhan District, İnönü Street 45",
+            "city": "Adana",
+            "phone": "+903221234567",
+            "email": "seyhan@cems.com",
+            "is_main_branch": False,
+            "opening_balance_date": datetime.utcnow() - timedelta(days=50),
+            "balances": {
+                "TRY": Decimal("170000.00"),
+                "USD": Decimal("16000.00"),
+                "EUR": Decimal("8000.00"),
+            }
+        },
+        {
+            "code": "BR008",
+            "name_en": "Gaziantep Şahinbey Branch",
+            "name_ar": "فرع غازي عنتاب - شاهين بي",
+            "region": RegionEnum.GAZIANTEP,
+            "address": "Şahinbey Center, 100.Yıl Boulevard 120",
+            "city": "Gaziantep",
+            "phone": "+903421234567",
+            "email": "sahinbey@cems.com",
+            "is_main_branch": False,
+            "opening_balance_date": datetime.utcnow() - timedelta(days=55),
+            "balances": {
+                "TRY": Decimal("160000.00"),
+                "USD": Decimal("14000.00"),
+                "EUR": Decimal("7500.00"),
+            }
+        },
+        {
+            "code": "BR009",
+            "name_en": "Konya Selçuklu Branch",
+            "name_ar": "فرع قونية - سلجوقلو",
+            "region": RegionEnum.KONYA,
+            "address": "Selçuklu Center, Mevlana Street 78",
+            "city": "Konya",
+            "phone": "+903321234567",
+            "email": "selcuklu@cems.com",
+            "is_main_branch": False,
+            "opening_balance_date": datetime.utcnow() - timedelta(days=65),
+            "balances": {
+                "TRY": Decimal("140000.00"),
+                "USD": Decimal("13000.00"),
+                "EUR": Decimal("6500.00"),
+            }
+        },
+        {
+            "code": "BR010",
+            "name_en": "Mersin Akdeniz Branch",
+            "name_ar": "فرع مرسين - أكدينيز",
+            "region": RegionEnum.MERSIN,
+            "address": "Akdeniz District, Harbour Avenue 55",
+            "city": "Mersin",
+            "phone": "+903241234567",
+            "email": "akdeniz@cems.com",
+            "is_main_branch": False,
+            "opening_balance_date": datetime.utcnow() - timedelta(days=75),
+            "balances": {
+                "TRY": Decimal("135000.00"),
+                "USD": Decimal("11000.00"),
+                "EUR": Decimal("5500.00"),
+            }
         }
     ]
     

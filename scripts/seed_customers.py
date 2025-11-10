@@ -246,6 +246,175 @@ SAMPLE_CUSTOMERS = [
                 "is_alert": True
             }
         ]
+    },
+    # ========== ADDITIONAL CUSTOMERS (DOUBLE DATA) ==========
+    {
+        "first_name": "Zeynep",
+        "last_name": "Arslan",
+        "name_ar": "زينب أرسلان",
+        "national_id": "56789012345",
+        "phone_number": "+905552345678",
+        "email": "zeynep.arslan@example.com",
+        "date_of_birth": date(1992, 6, 12),
+        "nationality": "Turkish",
+        "address": "Antalya, Muratpaşa",
+        "city": "Antalya",
+        "country": "Turkey",
+        "customer_type": "individual",
+        "is_verified": True,
+        "risk_level": "low",
+        "documents": [
+            {
+                "document_type": DocumentType.NATIONAL_ID,
+                "document_number": "56789012345",
+                "issue_date": date(2020, 7, 20),
+                "expiry_date": date(2030, 7, 20),
+                "is_verified": True,
+            }
+        ],
+        "notes": [
+            {
+                "note_text": "Tourist business owner, seasonal high volume",
+                "is_alert": False
+            }
+        ]
+    },
+    {
+        "first_name": "Hasan",
+        "last_name": "Çelik",
+        "name_ar": "حسن شليك",
+        "passport_number": "TR234567890",
+        "phone_number": "+905551234598",
+        "email": "hasan.celik@example.com",
+        "date_of_birth": date(1978, 2, 28),
+        "nationality": "Turkish",
+        "address": "Adana, Seyhan",
+        "city": "Adana",
+        "country": "Turkey",
+        "customer_type": "individual",
+        "is_verified": True,
+        "risk_level": "medium",
+        "documents": [
+            {
+                "document_type": DocumentType.PASSPORT,
+                "document_number": "TR234567890",
+                "issue_date": date(2021, 5, 10),
+                "expiry_date": date(2031, 5, 10),
+                "is_verified": True,
+            },
+            {
+                "document_type": DocumentType.DRIVING_LICENSE,
+                "document_number": "C98765432",
+                "issue_date": date(2015, 3, 15),
+                "expiry_date": date(2025, 3, 15),
+                "is_verified": True,
+            }
+        ],
+        "notes": [
+            {
+                "note_text": "International trader, frequent large transactions",
+                "is_alert": False
+            }
+        ]
+    },
+    {
+        "first_name": "Elif",
+        "last_name": "Aydın",
+        "name_ar": "إيليف أيدن",
+        "national_id": "67890123456",
+        "phone_number": "+905559876541",
+        "email": "elif.aydin@example.com",
+        "date_of_birth": date(1997, 10, 8),
+        "nationality": "Turkish",
+        "address": "Gaziantep, Şahinbey",
+        "city": "Gaziantep",
+        "country": "Turkey",
+        "customer_type": "individual",
+        "is_verified": True,
+        "risk_level": "low",
+        "documents": [
+            {
+                "document_type": DocumentType.NATIONAL_ID,
+                "document_number": "67890123456",
+                "issue_date": date(2022, 1, 5),
+                "expiry_date": date(2032, 1, 5),
+                "is_verified": True,
+            }
+        ],
+        "notes": [
+            {
+                "note_text": "University student, small regular transfers",
+                "is_alert": False
+            }
+        ]
+    },
+    {
+        "first_name": "Tech Solutions",
+        "last_name": "Ltd",
+        "name_ar": "شركة تيك سوليوشنز",
+        "national_id": "5678901234567",
+        "phone_number": "+905558765431",
+        "email": "contact@techsolutions.tr",
+        "date_of_birth": date(2015, 3, 10),
+        "nationality": "Turkish",
+        "address": "Konya, Selçuklu Technology Park",
+        "city": "Konya",
+        "country": "Turkey",
+        "customer_type": "corporate",
+        "is_verified": True,
+        "risk_level": "medium",
+        "documents": [
+            {
+                "document_type": DocumentType.COMMERCIAL_REGISTRATION,
+                "document_number": "CR987654321",
+                "issue_date": date(2015, 3, 10),
+                "is_verified": True,
+            },
+            {
+                "document_type": DocumentType.TAX_CERTIFICATE,
+                "document_number": "TAX123456789",
+                "issue_date": date(2024, 1, 1),
+                "expiry_date": date(2025, 1, 1),
+                "is_verified": True,
+            }
+        ],
+        "notes": [
+            {
+                "note_text": "IT company - monthly payroll transactions",
+                "is_alert": False
+            }
+        ]
+    },
+    {
+        "first_name": "Mustafa",
+        "last_name": "Yıldız",
+        "name_ar": "مصطفى يلدز",
+        "national_id": "78901234567",
+        "phone_number": "+905556789012",
+        "email": "mustafa.yildiz@example.com",
+        "date_of_birth": date(1986, 4, 25),
+        "nationality": "Turkish",
+        "address": "Mersin, Akdeniz",
+        "city": "Mersin",
+        "country": "Turkey",
+        "customer_type": "individual",
+        "is_verified": False,
+        "risk_level": "low",
+        "documents": [
+            {
+                "document_type": DocumentType.NATIONAL_ID,
+                "document_number": "78901234567",
+                "issue_date": date(2023, 8, 15),
+                "expiry_date": date(2033, 8, 15),
+                "is_verified": False,
+            }
+        ],
+        "notes": [
+            {
+                "note_text": "Recent applicant - pending KYC completion",
+                "is_alert": True
+            }
+        ]
     }
 ]
 
