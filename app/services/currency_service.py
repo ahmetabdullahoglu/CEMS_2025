@@ -322,7 +322,6 @@ class CurrencyService:
                     effective_to=inverse_rate.effective_to,
                     set_by=inverse_rate.set_by,
                     notes=f"Calculated from inverse rate",
-                    is_current=inverse_rate.is_current,  # Inherit from inverse rate
                     created_at=inverse_rate.created_at,
                     updated_at=inverse_rate.updated_at,
                     from_currency=from_currency,
@@ -546,7 +545,6 @@ class CurrencyService:
             effective_to=None,
             set_by=UUID('00000000-0000-0000-0000-000000000000'),  # System
             notes=f"Calculated via USD: {from_currency_code}->USD ({from_to_usd_rate}) * USD->{to_currency_code} ({usd_to_to_rate})",
-            is_current=True,  # Calculated rates are always current
             created_at=current_time,
             updated_at=current_time,
             from_currency=from_currency,
