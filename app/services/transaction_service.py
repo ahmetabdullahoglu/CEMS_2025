@@ -637,7 +637,8 @@ class TransactionService:
                     f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
                 )
 
-            exchange_rate = Decimal(str(rate_info['rate']))
+            # Access rate from Pydantic model object (not dictionary)
+            exchange_rate = Decimal(str(rate_info.rate))
 
             # Step 3: Calculate amounts
             to_amount = from_amount * exchange_rate
