@@ -567,19 +567,20 @@ class TransactionService:
     ) -> ExchangeTransaction:
         """
         Create currency exchange transaction (atomic operation)
-        
+
         Steps:
-        1. Get latest exchange rate
-        2. Calculate to_amount and commission
-        3. Check branch has from_currency balance
-        4. Generate transaction number
-        5. Start DB transaction
-        6. Create exchange record
-        7. Update branch balance (-from_amount in from_currency)
-        8. Update branch balance (+to_amount in to_currency)
-        9. Create commission income (if applicable)
-        10. Create balance_history entries
-        11. Commit or rollback
+        1. Get currency objects and their codes
+        2. Get latest exchange rate
+        3. Calculate to_amount and commission
+        4. Check branch has from_currency balance
+        5. Generate transaction number
+        6. Start DB transaction
+        7. Create exchange record
+        8. Update branch balance (-from_amount in from_currency)
+        9. Update branch balance (+to_amount in to_currency)
+        10. Create commission income (if applicable)
+        11. Create balance_history entries
+        12. Commit or rollback
         
         Args:
             branch_id: Branch executing exchange
@@ -613,27 +614,39 @@ class TransactionService:
             # Check duplicate reference
             if reference_number:
                 await self._check_duplicate_reference(reference_number)
-            
-            # Step 1: Get latest exchange rate
+
+            # Step 1: Get currency objects to retrieve their codes
+            from app.repositories.currency_repo import CurrencyRepository
+            currency_repo = CurrencyRepository(self.db)
+
+            from_currency = await currency_repo.get_currency_by_id(from_currency_id)
+            to_currency = await currency_repo.get_currency_by_id(to_currency_id)
+
+            if not from_currency:
+                raise ValidationError(f"Source currency {from_currency_id} not found")
+            if not to_currency:
+                raise ValidationError(f"Target currency {to_currency_id} not found")
+
+            # Step 2: Get latest exchange rate using currency codes
             rate_info = await self.currency_service.get_latest_rate(
-                from_currency_id, to_currency_id
+                from_currency.code, to_currency.code
             )
-            
+
             if not rate_info:
                 raise ValidationError(
-                    f"No exchange rate found for {from_currency_id} -> {to_currency_id}"
+                    f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
                 )
-            
+
             exchange_rate = Decimal(str(rate_info['rate']))
-            
-            # Step 2: Calculate amounts
+
+            # Step 3: Calculate amounts
             to_amount = from_amount * exchange_rate
             
             # Calculate commission (example: 1% of from_amount)
             commission_rate = Decimal("0.01")  # 1%
             commission_amount = from_amount * commission_rate
-            
-            # Step 3: Check balance
+
+            # Step 4: Check balance
             from_balance_info = await self.balance_service.get_balance(
                 branch_id, from_currency_id
             )
@@ -641,16 +654,16 @@ class TransactionService:
             
             if available < from_amount:
                 raise InsufficientBalanceError(
-                    f"Insufficient {from_currency_id} balance. "
+                    f"Insufficient {from_currency.code} balance. "
                     f"Available: {available}, Required: {from_amount}"
                 )
-            
-            # Step 4: Generate transaction number
+
+            # Step 5: Generate transaction number
             transaction_number = await self.transaction_generator.generate(
                 self.db
             )
-            
-            # Steps 5-11: Atomic operation
+
+            # Steps 6-12: Atomic operation
             try:
                 # Create exchange transaction
                 exchange = ExchangeTransaction(
@@ -684,7 +697,7 @@ class TransactionService:
                     change_type=BalanceChangeType.TRANSACTION,
                     reference_id=exchange.id,
                     reference_type="transaction",
-                    notes=f"Exchange out: {from_amount} to {to_currency_id}"
+                    notes=f"Exchange out: {from_amount} {from_currency.code} to {to_currency.code}"
                 )
 
                 # Add to_currency to branch
@@ -695,7 +708,7 @@ class TransactionService:
                     change_type=BalanceChangeType.TRANSACTION,
                     reference_id=exchange.id,
                     reference_type="transaction",
-                    notes=f"Exchange in: {to_amount} from {from_currency_id}"
+                    notes=f"Exchange in: {to_amount} {to_currency.code} from {from_currency.code}"
                 )
 
                 # Record commission as income
@@ -719,8 +732,8 @@ class TransactionService:
                 
                 logger.info(
                     f"Exchange transaction created: {transaction_number}, "
-                    f"Branch: {branch_id}, {from_amount} {from_currency_id} -> "
-                    f"{to_amount} {to_currency_id}"
+                    f"Branch: {branch_id}, {from_amount} {from_currency.code} -> "
+                    f"{to_amount} {to_currency.code}"
                 )
                 
                 return exchange
