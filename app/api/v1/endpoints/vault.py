@@ -70,6 +70,69 @@ async def get_main_vault(
     )
 
 
+@router.get(
+    "/all",
+    response_model=VaultListResponse,
+    summary="List all vaults"
+)
+async def list_all_vaults(
+    branch_id: Optional[UUID] = Query(None, description="Filter by branch"),
+    is_active: Optional[bool] = Query(True, description="Filter by active status"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get list of all vaults with optional filters
+
+    **Filters:**
+    - branch_id: Filter vaults by branch
+    - is_active: Show only active/inactive vaults
+
+    **Permissions:** Any authenticated user
+
+    **Returns:** Paginated list of vaults with their balances
+    """
+    vault_service = VaultService(db)
+
+    # Get vaults list
+    vaults = await vault_service.list_vaults(
+        branch_id=branch_id,
+        is_active=is_active,
+        skip=skip,
+        limit=limit
+    )
+
+    # Get total count
+    total = await vault_service.count_vaults(
+        branch_id=branch_id,
+        is_active=is_active
+    )
+
+    return VaultListResponse(
+        items=[
+            VaultResponse(
+                id=vault.id,
+                vault_code=vault.vault_code,
+                name=vault.name,
+                vault_type=vault.vault_type,
+                branch_id=vault.branch_id,
+                is_active=vault.is_active,
+                description=vault.description,
+                location=vault.location,
+                balances=[],  # Balances loaded separately if needed
+                created_at=vault.created_at,
+                updated_at=vault.updated_at
+            )
+            for vault in vaults
+        ],
+        total=total,
+        skip=skip,
+        limit=limit
+    )
+
+
 @router.post(
     "",
     response_model=VaultResponse,

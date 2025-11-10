@@ -111,12 +111,23 @@ class UserService:
         self,
         skip: int = 0,
         limit: int = 100,
+        search: Optional[str] = None,
         is_active: Optional[bool] = None,
         branch_id: Optional[UUID] = None
     ) -> List[User]:
-        """List users with filters"""
+        """List users with filters and search"""
         query = select(User)
 
+        # Apply search filter
+        if search:
+            search_term = f"%{search.lower()}%"
+            query = query.where(
+                (User.full_name.ilike(search_term)) |
+                (User.email.ilike(search_term)) |
+                (User.username.ilike(search_term))
+            )
+
+        # Apply other filters
         if is_active is not None:
             query = query.where(User.is_active == is_active)
         if branch_id:

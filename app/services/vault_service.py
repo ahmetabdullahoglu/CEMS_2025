@@ -130,7 +130,56 @@ class VaultService:
         await self.db.refresh(vault)
 
         return vault
-    
+
+    async def list_vaults(
+        self,
+        branch_id: Optional[UUID] = None,
+        is_active: Optional[bool] = True,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[Vault]:
+        """List vaults with optional filters"""
+        stmt = select(Vault).options(
+            selectinload(Vault.branch)
+        )
+
+        # Apply filters
+        filters = []
+        if branch_id is not None:
+            filters.append(Vault.branch_id == branch_id)
+        if is_active is not None:
+            filters.append(Vault.is_active == is_active)
+
+        if filters:
+            stmt = stmt.filter(and_(*filters))
+
+        # Apply pagination
+        stmt = stmt.offset(skip).limit(limit)
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_vaults(
+        self,
+        branch_id: Optional[UUID] = None,
+        is_active: Optional[bool] = True
+    ) -> int:
+        """Count vaults with optional filters"""
+        stmt = select(func.count(Vault.id))
+
+        # Apply filters
+        filters = []
+        if branch_id is not None:
+            filters.append(Vault.branch_id == branch_id)
+        if is_active is not None:
+            filters.append(Vault.is_active == is_active)
+
+        if filters:
+            stmt = stmt.filter(and_(*filters))
+
+        result = await self.db.execute(stmt)
+        return result.scalar() or 0
+
     async def update_vault(self, vault_id: UUID, vault_data: VaultUpdate) -> Vault:
         """Update vault information"""
         vault = await self.get_vault_by_id(vault_id)

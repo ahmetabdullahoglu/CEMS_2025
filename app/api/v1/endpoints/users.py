@@ -98,13 +98,16 @@ async def create_user(
 async def list_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    search: Optional[str] = Query(None, description="Search by name, email, or username"),
     is_active: Optional[bool] = Query(None),
     branch_id: Optional[UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    List all users with optional filters
+    List all users with optional filters and search
+
+    **Search:** Search in full_name, email, and username fields
 
     **Filters:**
     - is_active: Filter by active status
@@ -117,6 +120,7 @@ async def list_users(
         users = await service.list_users(
             skip=skip,
             limit=limit,
+            search=search,
             is_active=is_active,
             branch_id=branch_id
         )
