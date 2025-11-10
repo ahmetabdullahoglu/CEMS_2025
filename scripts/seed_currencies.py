@@ -92,29 +92,38 @@ DEFAULT_CURRENCIES = [
 
 # Sample exchange rates (USD as base) - EXPANDED WITH MORE PAIRS
 SAMPLE_EXCHANGE_RATES = [
-    # EUR rates
+    # ========== USD BASE RATES (USD to all currencies) ==========
+    # USD is the base currency for the system and intermediary for cross-rates
+
+    # USD → EUR (Euro)
     {"from": "USD", "to": "EUR", "rate": Decimal("0.92"), "buy_rate": Decimal("0.91"), "sell_rate": Decimal("0.93")},
     {"from": "EUR", "to": "USD", "rate": Decimal("1.087"), "buy_rate": Decimal("1.08"), "sell_rate": Decimal("1.09")},
 
-    # TRY rates
+    # USD → TRY (Turkish Lira)
     {"from": "USD", "to": "TRY", "rate": Decimal("32.50"), "buy_rate": Decimal("32.40"), "sell_rate": Decimal("32.60")},
     {"from": "TRY", "to": "USD", "rate": Decimal("0.0308"), "buy_rate": Decimal("0.0307"), "sell_rate": Decimal("0.0309")},
 
-    # GBP rates
+    # USD → GBP (British Pound)
     {"from": "USD", "to": "GBP", "rate": Decimal("0.79"), "buy_rate": Decimal("0.78"), "sell_rate": Decimal("0.80")},
     {"from": "GBP", "to": "USD", "rate": Decimal("1.266"), "buy_rate": Decimal("1.25"), "sell_rate": Decimal("1.28")},
 
-    # SAR rates
+    # USD → SAR (Saudi Riyal)
     {"from": "USD", "to": "SAR", "rate": Decimal("3.75"), "buy_rate": Decimal("3.74"), "sell_rate": Decimal("3.76")},
     {"from": "SAR", "to": "USD", "rate": Decimal("0.267"), "buy_rate": Decimal("0.265"), "sell_rate": Decimal("0.269")},
 
-    # AED rates
+    # USD → AED (UAE Dirham)
     {"from": "USD", "to": "AED", "rate": Decimal("3.67"), "buy_rate": Decimal("3.66"), "sell_rate": Decimal("3.68")},
     {"from": "AED", "to": "USD", "rate": Decimal("0.272"), "buy_rate": Decimal("0.270"), "sell_rate": Decimal("0.274")},
 
-    # JPY rates
+    # USD → JPY (Japanese Yen)
     {"from": "USD", "to": "JPY", "rate": Decimal("149.50"), "buy_rate": Decimal("149.00"), "sell_rate": Decimal("150.00")},
     {"from": "JPY", "to": "USD", "rate": Decimal("0.0067"), "buy_rate": Decimal("0.0066"), "sell_rate": Decimal("0.0068")},
+
+    # USD → EGP (Egyptian Pound)
+    {"from": "USD", "to": "EGP", "rate": Decimal("49.00"), "buy_rate": Decimal("48.80"), "sell_rate": Decimal("49.20")},
+    {"from": "EGP", "to": "USD", "rate": Decimal("0.0204"), "buy_rate": Decimal("0.0203"), "sell_rate": Decimal("0.0205")},
+
+    # ========== CROSS RATES (Non-USD pairs) ==========
 
     # EUR to other currencies
     {"from": "EUR", "to": "TRY", "rate": Decimal("35.33"), "buy_rate": Decimal("35.20"), "sell_rate": Decimal("35.50")},
@@ -154,11 +163,7 @@ SAMPLE_EXCHANGE_RATES = [
     {"from": "AED", "to": "JPY", "rate": Decimal("40.74"), "buy_rate": Decimal("40.50"), "sell_rate": Decimal("41.00")},
     {"from": "JPY", "to": "AED", "rate": Decimal("0.025"), "buy_rate": Decimal("0.024"), "sell_rate": Decimal("0.025")},
 
-    # ========== EGP (Egyptian Pound) Exchange Rates ==========
-    # EGP with USD
-    {"from": "USD", "to": "EGP", "rate": Decimal("49.00"), "buy_rate": Decimal("48.80"), "sell_rate": Decimal("49.20")},
-    {"from": "EGP", "to": "USD", "rate": Decimal("0.0204"), "buy_rate": Decimal("0.0203"), "sell_rate": Decimal("0.0205")},
-
+    # ========== EGP (Egyptian Pound) Cross Rates ==========
     # EGP with EUR
     {"from": "EUR", "to": "EGP", "rate": Decimal("53.30"), "buy_rate": Decimal("53.00"), "sell_rate": Decimal("53.60")},
     {"from": "EGP", "to": "EUR", "rate": Decimal("0.0188"), "buy_rate": Decimal("0.0186"), "sell_rate": Decimal("0.0189")},
