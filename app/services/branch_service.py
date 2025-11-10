@@ -164,10 +164,11 @@ class BranchService:
         self,
         region: Optional[RegionEnum] = None,
         is_active: bool = True,
-        include_balances: bool = False
+        include_balances: bool = False,
+        search: Optional[str] = None
     ) -> List[Branch]:
-        """Get all branches with filtering"""
-        return await self.repo.get_all_branches(region, is_active, include_balances)
+        """Get all branches with filtering and search"""
+        return await self.repo.get_all_branches(region, is_active, include_balances, search)
     
     async def get_user_branches(self, user_id: UUID) -> List[Branch]:
         """Get branches assigned to a user"""

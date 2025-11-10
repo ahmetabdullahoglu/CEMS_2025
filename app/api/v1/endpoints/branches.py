@@ -121,21 +121,34 @@ async def list_branches(
     region: Optional[RegionEnum] = Query(None),
     is_active: bool = Query(True),
     include_balances: bool = Query(False),
-    skip: int = Query(0, ge=0),  # ⬅️ أضف
-    limit: int = Query(100, ge=1, le=1000),  # ⬅️ أضف
+    search: Optional[str] = Query(None, description="Search by name, code, city, or address"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List all branches with pagination"""
+    """
+    List all branches with pagination and search
+
+    **Search:** Search in name (EN/AR), code, city, and address fields
+
+    **Filters:**
+    - region: Filter by region
+    - is_active: Filter by active status
+    - include_balances: Include currency balances
+
+    **Permissions:** Any authenticated user
+    """
     try:
-        logger.info(f"Listing branches with include_balances={include_balances}")
+        logger.info(f"Listing branches with include_balances={include_balances}, search={search}")
         service = BranchService(db)
-        
+
         # Get branches
         branches = await service.get_all_branches(
             region=region,
             is_active=is_active,
-            include_balances=include_balances
+            include_balances=include_balances,
+            search=search
         )
         
         # Apply pagination manually

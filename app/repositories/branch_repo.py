@@ -40,31 +40,46 @@ class BranchRepository:
         self,
         region: Optional[RegionEnum] = None,
         is_active: bool = True,
-        include_balances: bool = False
+        include_balances: bool = False,
+        search: Optional[str] = None
     ) -> List[Branch]:
         """
-        Get all branches with optional filtering
-        
+        Get all branches with optional filtering and search
+
         Args:
             region: Filter by region
             is_active: Filter by active status
             include_balances: Include balance relationships
-            
+            search: Search term for name, code, city, or address
+
         Returns:
             List of branches
         """
         stmt = select(Branch)
-        
+
         # Add filters
         filters = []
         if is_active is not None:
             filters.append(Branch.is_active == is_active)
         if region:
             filters.append(Branch.region == region)
-        
+
+        # Add search filter
+        if search:
+            search_term = f"%{search.lower()}%"
+            filters.append(
+                or_(
+                    Branch.name_en.ilike(search_term),
+                    Branch.name_ar.ilike(search_term),
+                    Branch.code.ilike(search_term),
+                    Branch.city.ilike(search_term),
+                    Branch.address.ilike(search_term)
+                )
+            )
+
         if filters:
             stmt = stmt.where(and_(*filters))
-        
+
         # ✅ FIX: Include currency relationship when loading balances
         if include_balances:
             stmt = stmt.options(
@@ -75,9 +90,9 @@ class BranchRepository:
             stmt = stmt.options(
                 selectinload(Branch.manager)
             )
-        
+
         stmt = stmt.order_by(Branch.code)
-        
+
         result = await self.db.execute(stmt)
         return result.scalars().all()
     

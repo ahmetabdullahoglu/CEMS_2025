@@ -26,6 +26,7 @@ from app.schemas.user import (
     UserResponse,
     PasswordChange
 )
+from app.schemas.common import BulkOperationResponse
 from app.core.exceptions import (
     ResourceNotFoundError,
     ValidationError,
@@ -132,6 +133,95 @@ async def list_users(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list users"
+        )
+
+
+@router.post(
+    "/bulk",
+    response_model=BulkOperationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk Create Users",
+    dependencies=[Depends(require_permission("user:create"))]
+)
+async def bulk_create_users(
+    users: List[UserCreate],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Create multiple users in a single request
+
+    **Required Fields for each user:**
+    - email
+    - username
+    - password
+    - full_name
+
+    **Response:**
+    Returns summary of successful and failed creations with error details
+
+    **Permissions:** user:create
+
+    **Example Request:**
+    ```json
+    [
+      {
+        "email": "user1@example.com",
+        "username": "user1",
+        "password": "SecurePass123!",
+        "full_name": "User One",
+        "phone_number": "+966501234567",
+        "role_ids": []
+      },
+      {
+        "email": "user2@example.com",
+        "username": "user2",
+        "password": "SecurePass456!",
+        "full_name": "User Two",
+        "phone_number": "+966501234568",
+        "role_ids": []
+      }
+    ]
+    ```
+    """
+    try:
+        if not users:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Users list cannot be empty"
+            )
+
+        if len(users) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot create more than 100 users at once"
+            )
+
+        logger.info(f"Bulk creating {len(users)} users by {current_user.email}")
+
+        service = UserService(db)
+        users_data = [user.dict(exclude_unset=True) for user in users]
+        results = await service.bulk_create_users(users_data, current_user)
+
+        logger.info(
+            f"Bulk user creation completed: "
+            f"{results['successful']} successful, {results['failed']} failed"
+        )
+
+        return BulkOperationResponse(
+            total=results["total"],
+            successful=results["successful"],
+            failed=results["failed"],
+            errors=results["errors"]
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk user creation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to bulk create users"
         )
 
 

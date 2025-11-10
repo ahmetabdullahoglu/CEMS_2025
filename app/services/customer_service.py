@@ -565,7 +565,63 @@ class CustomerService:
     async def get_branch_customer_stats(self, branch_id: UUID) -> Dict[str, Any]:
         """Get customer statistics for a branch"""
         return await self.repo.get_branch_customer_stats(branch_id)
-    
+
+    async def bulk_create_customers(
+        self,
+        customers_data: List[Dict[str, Any]],
+        current_user: User,
+        branch_id: UUID
+    ) -> Dict[str, Any]:
+        """
+        Create multiple customers in bulk
+
+        Args:
+            customers_data: List of customer creation data
+            current_user: User performing the operation
+            branch_id: Branch where customers are being registered
+
+        Returns:
+            Dictionary with results: total, successful, failed, errors
+        """
+        logger.info(f"Bulk creating {len(customers_data)} customers at branch {branch_id}")
+
+        results = {
+            "total": len(customers_data),
+            "successful": 0,
+            "failed": 0,
+            "errors": [],
+            "created_customers": []
+        }
+
+        for idx, customer_data in enumerate(customers_data):
+            try:
+                # Create customer
+                customer = await self.create_customer(customer_data, current_user, branch_id)
+                results["successful"] += 1
+                results["created_customers"].append({
+                    "index": idx,
+                    "customer_number": customer.customer_number,
+                    "name": f"{customer.first_name} {customer.last_name}",
+                    "id": str(customer.id)
+                })
+
+            except (ValidationError, DuplicateError) as e:
+                results["failed"] += 1
+                results["errors"].append({
+                    "index": idx,
+                    "name": f"{customer_data.get('first_name', '')} {customer_data.get('last_name', '')}",
+                    "error": str(e)
+                })
+                logger.warning(f"Failed to create customer at index {idx}: {str(e)}")
+                continue
+
+        logger.info(
+            f"Bulk customer creation completed: "
+            f"{results['successful']} successful, {results['failed']} failed"
+        )
+
+        return results
+
     # ==================== Validation Helpers ====================
     
     def _validate_phone(self, phone: str) -> bool:

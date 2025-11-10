@@ -216,6 +216,59 @@ class UserService:
             logger.error(f"Failed to deactivate user: {str(e)}")
             raise DatabaseOperationError(f"User deactivation failed: {str(e)}")
 
+    async def bulk_create_users(
+        self,
+        users_data: List[Dict[str, Any]],
+        current_user: Optional[User] = None
+    ) -> Dict[str, Any]:
+        """
+        Create multiple users in bulk
+
+        Args:
+            users_data: List of user creation data
+            current_user: User performing the operation
+
+        Returns:
+            Dictionary with results: total, successful, failed, errors
+        """
+        logger.info(f"Bulk creating {len(users_data)} users")
+
+        results = {
+            "total": len(users_data),
+            "successful": 0,
+            "failed": 0,
+            "errors": [],
+            "created_users": []
+        }
+
+        for idx, user_data in enumerate(users_data):
+            try:
+                # Create user
+                user = await self.create_user(user_data, current_user)
+                results["successful"] += 1
+                results["created_users"].append({
+                    "index": idx,
+                    "email": user.email,
+                    "id": str(user.id)
+                })
+
+            except (ValidationError, DatabaseOperationError) as e:
+                results["failed"] += 1
+                results["errors"].append({
+                    "index": idx,
+                    "email": user_data.get("email", "unknown"),
+                    "error": str(e)
+                })
+                logger.warning(f"Failed to create user at index {idx}: {str(e)}")
+                continue
+
+        logger.info(
+            f"Bulk user creation completed: "
+            f"{results['successful']} successful, {results['failed']} failed"
+        )
+
+        return results
+
     # ==================== Role Management ====================
 
     async def _assign_roles(self, user: User, role_ids: List[UUID]) -> None:

@@ -23,7 +23,7 @@ from app.schemas.customer import (
     CustomerNoteCreate, CustomerNoteResponse,
     CustomerKYCVerification
 )
-from app.schemas.common import PaginatedResponse, paginated  # ⬅️ أضف هذا
+from app.schemas.common import PaginatedResponse, paginated, BulkOperationResponse
 from app.core.exceptions import NotFoundError, ValidationError, DuplicateError
 from app.utils.logger import get_logger
 
@@ -94,6 +94,96 @@ async def create_customer(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create customer"
+        )
+
+
+@router.post(
+    "/bulk",
+    response_model=BulkOperationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk Create Customers"
+)
+async def bulk_create_customers(
+    customers: List[CustomerCreate],
+    branch_id: UUID = Query(..., description="Branch ID where all customers will be registered"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Create multiple customers in a single request
+
+    **Required Fields for each customer:**
+    - first_name, last_name
+    - phone_number
+    - Either national_id or passport_number
+
+    **Note:** All customers will be registered to the same branch specified in branch_id query parameter
+
+    **Response:**
+    Returns summary of successful and failed creations with error details
+
+    **Permissions:** Authenticated user with customer:create permission
+
+    **Example Request:**
+    ```json
+    [
+      {
+        "first_name": "Ahmed",
+        "last_name": "Ali",
+        "phone_number": "+966501234567",
+        "national_id": "1234567890",
+        "email": "ahmed@example.com",
+        "customer_type": "individual"
+      },
+      {
+        "first_name": "Sarah",
+        "last_name": "Mohammed",
+        "phone_number": "+966501234568",
+        "passport_number": "P12345678",
+        "email": "sarah@example.com",
+        "customer_type": "individual"
+      }
+    ]
+    ```
+    """
+    try:
+        if not customers:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Customers list cannot be empty"
+            )
+
+        if len(customers) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot create more than 100 customers at once"
+            )
+
+        logger.info(f"Bulk creating {len(customers)} customers at branch {branch_id} by user {current_user.id}")
+
+        service = CustomerService(db)
+        customers_data = [customer.dict(exclude_unset=True) for customer in customers]
+        results = await service.bulk_create_customers(customers_data, current_user, branch_id)
+
+        logger.info(
+            f"Bulk customer creation completed: "
+            f"{results['successful']} successful, {results['failed']} failed"
+        )
+
+        return BulkOperationResponse(
+            total=results["total"],
+            successful=results["successful"],
+            failed=results["failed"],
+            errors=results["errors"]
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk customer creation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to bulk create customers"
         )
 
 
