@@ -251,6 +251,69 @@ GET /users?search=john&is_active=true&skip=0&limit=10
 
 ---
 
+### 7. Bulk Create Users
+**POST** `/users/bulk`
+
+**Permission:** `user:create`
+
+**Request Body:** Array of user creation objects (max 100)
+```json
+[
+  {
+    "email": "user1@cems.com",
+    "username": "user1",
+    "password": "SecurePass123!",
+    "full_name": "User One",
+    "phone_number": "+966501234567",
+    "role_ids": []
+  },
+  {
+    "email": "user2@cems.com",
+    "username": "user2",
+    "password": "SecurePass456!",
+    "full_name": "User Two",
+    "phone_number": "+966501234568",
+    "role_ids": []
+  }
+]
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "total": 2,
+  "successful": 2,
+  "failed": 0,
+  "errors": []
+}
+```
+
+**Response with Errors (201):**
+```json
+{
+  "success": true,
+  "total": 3,
+  "successful": 2,
+  "failed": 1,
+  "errors": [
+    {
+      "index": 1,
+      "email": "duplicate@cems.com",
+      "error": "Email or username already exists"
+    }
+  ]
+}
+```
+
+**Notes:**
+- Maximum 100 users per request
+- Each user is validated individually
+- Partial success is possible (some succeed, some fail)
+- All successfully created users are returned in the response
+
+---
+
 ## Branches
 
 ### Base Path: `/branches`
@@ -260,6 +323,7 @@ GET /users?search=john&is_active=true&skip=0&limit=10
 
 **Query Parameters:**
 - `skip`, `limit` - Pagination
+- `search` (string) - Search by name (EN/AR), code, city, or address
 - `region` (enum) - Filter by region
 - `is_active` (boolean) - Filter by status
 - `include_balances` (boolean, default: false) - Include balance info
@@ -995,6 +1059,73 @@ notes: "Valid passport"
   "days_active": 375
 }
 ```
+
+---
+
+### 14. Bulk Create Customers
+**POST** `/customers/bulk?branch_id={uuid}`
+
+**Permission:** `customer:create`
+
+**Query Parameters:**
+- `branch_id` (uuid, required) - Branch where all customers will be registered
+
+**Request Body:** Array of customer creation objects (max 100)
+```json
+[
+  {
+    "first_name": "Ahmed",
+    "last_name": "Ali",
+    "phone_number": "+966501234567",
+    "national_id": "1234567890",
+    "email": "ahmed@example.com",
+    "customer_type": "individual"
+  },
+  {
+    "first_name": "Sarah",
+    "last_name": "Mohammed",
+    "phone_number": "+966501234568",
+    "passport_number": "P12345678",
+    "email": "sarah@example.com",
+    "customer_type": "individual"
+  }
+]
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "total": 2,
+  "successful": 2,
+  "failed": 0,
+  "errors": []
+}
+```
+
+**Response with Errors (201):**
+```json
+{
+  "success": true,
+  "total": 3,
+  "successful": 2,
+  "failed": 1,
+  "errors": [
+    {
+      "index": 1,
+      "name": "Duplicate Customer",
+      "error": "Customer with national_id 1234567890 already exists"
+    }
+  ]
+}
+```
+
+**Notes:**
+- Maximum 100 customers per request
+- All customers are registered to the same branch (specified in query parameter)
+- Each customer must have either national_id or passport_number
+- Each customer is validated individually
+- Partial success is possible (some succeed, some fail)
 
 ---
 
