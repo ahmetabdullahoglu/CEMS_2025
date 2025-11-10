@@ -111,7 +111,7 @@ async def list_all_vaults(
     )
 
     return VaultListResponse(
-        items=[
+        vaults=[
             VaultResponse(
                 id=vault.id,
                 vault_code=vault.vault_code,

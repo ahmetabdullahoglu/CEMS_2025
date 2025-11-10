@@ -112,9 +112,11 @@ class VaultResponse(BaseModel):
 
 
 class VaultListResponse(BaseModel):
-    """List of vaults"""
-    total: int
+    """List of vaults with pagination"""
     vaults: List[VaultResponse]
+    total: int
+    skip: int = 0
+    limit: int = 100
 
 
 # ==================== VAULT BALANCE SCHEMAS ====================
