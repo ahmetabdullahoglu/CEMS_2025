@@ -341,7 +341,7 @@ async def approve_expense_transaction(
 
 @router.get(
     "/expense",
-    response_model=TransactionListResponse,
+    response_model=PaginatedResponse[ExpenseTransactionResponse],
     summary="List Expense Transactions",
     description="Get list of expense transactions with filtering"
 )
@@ -357,12 +357,12 @@ async def list_expense_transactions(
 ):
     """
     List expense transactions with optional filters.
-    
+
     **Permissions Required:** transactions.read
     """
     try:
         service = TransactionService(db)
-        
+
         filters = TransactionFilter(
             transaction_type=TransactionType.EXPENSE,
             branch_id=branch_id,
@@ -370,15 +370,16 @@ async def list_expense_transactions(
             date_from=date_from,
             date_to=date_to
         )
-        
+
         result = await service.list_transactions(
             filters=filters,
             skip=skip,
             limit=limit
         )
-        
-        return result
-        
+
+        # Convert to paginated response
+        return paginated(result["transactions"], result["total"], skip, limit)
+
     except Exception as e:
         logger.error(f"Error listing expense transactions: {str(e)}")
         raise HTTPException(
@@ -510,7 +511,7 @@ async def create_exchange_transaction(
 
 @router.get(
     "/exchange",
-    response_model=TransactionListResponse,
+    response_model=PaginatedResponse[ExchangeTransactionResponse],
     summary="List Exchange Transactions",
     description="Get list of exchange transactions with filtering"
 )
@@ -528,12 +529,12 @@ async def list_exchange_transactions(
 ):
     """
     List exchange transactions with optional filters.
-    
+
     **Permissions Required:** transactions.read
     """
     try:
         service = TransactionService(db)
-        
+
         filters = TransactionFilter(
             transaction_type=TransactionType.EXCHANGE,
             branch_id=branch_id,
@@ -543,15 +544,16 @@ async def list_exchange_transactions(
             date_from=date_from,
             date_to=date_to
         )
-        
+
         result = await service.list_transactions(
             filters=filters,
             skip=skip,
             limit=limit
         )
-        
-        return result
-        
+
+        # Convert to paginated response
+        return paginated(result["transactions"], result["total"], skip, limit)
+
     except Exception as e:
         logger.error(f"Error listing exchange transactions: {str(e)}")
         raise HTTPException(
@@ -729,7 +731,7 @@ async def receive_transfer(
 
 @router.get(
     "/transfer",
-    response_model=TransactionListResponse,
+    response_model=PaginatedResponse[TransferTransactionResponse],
     summary="List Transfer Transactions",
     description="Get list of transfer transactions with filtering"
 )
@@ -746,12 +748,12 @@ async def list_transfer_transactions(
 ):
     """
     List transfer transactions with optional filters.
-    
+
     **Permissions Required:** transactions.read
     """
     try:
         service = TransactionService(db)
-        
+
         filters = TransactionFilter(
             transaction_type=TransactionType.TRANSFER,
             from_branch_id=from_branch_id,
@@ -760,15 +762,16 @@ async def list_transfer_transactions(
             date_from=date_from,
             date_to=date_to
         )
-        
+
         result = await service.list_transactions(
             filters=filters,
             skip=skip,
             limit=limit
         )
-        
-        return result
-        
+
+        # Convert to paginated response
+        return paginated(result["transactions"], result["total"], skip, limit)
+
     except Exception as e:
         logger.error(f"Error listing transfer transactions: {str(e)}")
         raise HTTPException(
@@ -846,9 +849,9 @@ async def list_all_transactions(
 ):
     """
     List all transactions with comprehensive filtering.
-    
+
     **Permissions Required:** transactions.read
-    
+
     **Available Filters:**
     - transaction_type: income, expense, exchange, transfer
     - branch_id: Filter by branch
@@ -857,7 +860,7 @@ async def list_all_transactions(
     - currency_id: Filter by currency
     - amount_min/amount_max: Amount range
     - date_from/date_to: Date range
-    
+
     **Example:**
     ```
     GET /transactions?transaction_type=exchange&branch_id=uuid&date_from=2025-01-01
@@ -865,7 +868,7 @@ async def list_all_transactions(
     """
     try:
         service = TransactionService(db)
-        
+
         filters = TransactionFilter(
             transaction_type=transaction_type,
             branch_id=branch_id,
@@ -877,15 +880,16 @@ async def list_all_transactions(
             date_from=date_from,
             date_to=date_to
         )
-        
+
         result = await service.list_transactions(
             filters=filters,
             skip=skip,
             limit=limit
         )
-        
-        return result
-        
+
+        # Convert to TransactionListResponse
+        return TransactionListResponse(**result)
+
     except Exception as e:
         logger.error(f"Error listing transactions: {str(e)}")
         raise HTTPException(
