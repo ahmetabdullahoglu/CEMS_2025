@@ -79,6 +79,14 @@ DEFAULT_CURRENCIES = [
         "is_base_currency": False,
         "decimal_places": 0,  # Yen doesn't use decimal places
     },
+    {
+        "code": "EGP",
+        "name_en": "Egyptian Pound",
+        "name_ar": "جنيه مصري",
+        "symbol": "E£",
+        "is_base_currency": False,
+        "decimal_places": 2,
+    },
 ]
 
 
@@ -145,6 +153,35 @@ SAMPLE_EXCHANGE_RATES = [
     # AED to JPY
     {"from": "AED", "to": "JPY", "rate": Decimal("40.74"), "buy_rate": Decimal("40.50"), "sell_rate": Decimal("41.00")},
     {"from": "JPY", "to": "AED", "rate": Decimal("0.025"), "buy_rate": Decimal("0.024"), "sell_rate": Decimal("0.025")},
+
+    # ========== EGP (Egyptian Pound) Exchange Rates ==========
+    # EGP with USD
+    {"from": "USD", "to": "EGP", "rate": Decimal("49.00"), "buy_rate": Decimal("48.80"), "sell_rate": Decimal("49.20")},
+    {"from": "EGP", "to": "USD", "rate": Decimal("0.0204"), "buy_rate": Decimal("0.0203"), "sell_rate": Decimal("0.0205")},
+
+    # EGP with EUR
+    {"from": "EUR", "to": "EGP", "rate": Decimal("53.30"), "buy_rate": Decimal("53.00"), "sell_rate": Decimal("53.60")},
+    {"from": "EGP", "to": "EUR", "rate": Decimal("0.0188"), "buy_rate": Decimal("0.0186"), "sell_rate": Decimal("0.0189")},
+
+    # EGP with TRY
+    {"from": "TRY", "to": "EGP", "rate": Decimal("1.51"), "buy_rate": Decimal("1.50"), "sell_rate": Decimal("1.52")},
+    {"from": "EGP", "to": "TRY", "rate": Decimal("0.663"), "buy_rate": Decimal("0.658"), "sell_rate": Decimal("0.667")},
+
+    # EGP with GBP
+    {"from": "GBP", "to": "EGP", "rate": Decimal("62.00"), "buy_rate": Decimal("61.70"), "sell_rate": Decimal("62.30")},
+    {"from": "EGP", "to": "GBP", "rate": Decimal("0.0161"), "buy_rate": Decimal("0.0160"), "sell_rate": Decimal("0.0162")},
+
+    # EGP with SAR
+    {"from": "SAR", "to": "EGP", "rate": Decimal("13.07"), "buy_rate": Decimal("13.00"), "sell_rate": Decimal("13.15")},
+    {"from": "EGP", "to": "SAR", "rate": Decimal("0.0765"), "buy_rate": Decimal("0.0761"), "sell_rate": Decimal("0.0769")},
+
+    # EGP with AED
+    {"from": "AED", "to": "EGP", "rate": Decimal("13.35"), "buy_rate": Decimal("13.28"), "sell_rate": Decimal("13.42")},
+    {"from": "EGP", "to": "AED", "rate": Decimal("0.0749"), "buy_rate": Decimal("0.0745"), "sell_rate": Decimal("0.0753")},
+
+    # EGP with JPY
+    {"from": "JPY", "to": "EGP", "rate": Decimal("0.328"), "buy_rate": Decimal("0.327"), "sell_rate": Decimal("0.330")},
+    {"from": "EGP", "to": "JPY", "rate": Decimal("3.05"), "buy_rate": Decimal("3.03"), "sell_rate": Decimal("3.07")},
 ]
 
 

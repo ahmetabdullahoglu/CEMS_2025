@@ -27,7 +27,7 @@ async def seed_branches(db: AsyncSession):
     print("📍 Seeding branches...")
     
     # Get currencies
-    result = await db.execute(select(Currency).where(Currency.code.in_(["TRY", "USD", "EUR"])))
+    result = await db.execute(select(Currency).where(Currency.code.in_(["TRY", "USD", "EUR", "EGP", "SAR", "AED", "GBP"])))
     currencies = {c.code: c for c in result.scalars().all()}
     
     if not currencies:
@@ -57,6 +57,9 @@ async def seed_branches(db: AsyncSession):
                 "TRY": Decimal("500000.00"),
                 "USD": Decimal("50000.00"),
                 "EUR": Decimal("30000.00"),
+                "EGP": Decimal("100000.00"),
+                "SAR": Decimal("25000.00"),
+                "GBP": Decimal("5000.00"),
             }
         },
         {
@@ -74,6 +77,7 @@ async def seed_branches(db: AsyncSession):
                 "TRY": Decimal("300000.00"),
                 "USD": Decimal("25000.00"),
                 "EUR": Decimal("15000.00"),
+                "EGP": Decimal("50000.00"),
             }
         },
         {
@@ -143,6 +147,8 @@ async def seed_branches(db: AsyncSession):
                 "TRY": Decimal("180000.00"),
                 "USD": Decimal("18000.00"),
                 "EUR": Decimal("9000.00"),
+                "EGP": Decimal("75000.00"),
+                "AED": Decimal("15000.00"),
             }
         },
         {
@@ -160,6 +166,7 @@ async def seed_branches(db: AsyncSession):
                 "TRY": Decimal("170000.00"),
                 "USD": Decimal("16000.00"),
                 "EUR": Decimal("8000.00"),
+                "SAR": Decimal("20000.00"),
             }
         },
         {

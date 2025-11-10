@@ -169,6 +169,28 @@ async def create_income_transactions(
             "source": "Premium service consultation fee",
             "reference": "SVC-006",
         },
+        # ========== ADDITIONAL INCOME WITH EGP ==========
+        {
+            "amount": Decimal("2500.00"),
+            "currency": "EGP",
+            "category": IncomeCategory.SERVICE_FEE,
+            "source": "Egyptian client money transfer fee",
+            "reference": "SVC-007",
+        },
+        {
+            "amount": Decimal("350.00"),
+            "currency": "SAR",
+            "category": IncomeCategory.COMMISSION,
+            "source": "Saudi exchange commission",
+            "reference": "COM-004",
+        },
+        {
+            "amount": Decimal("1800.00"),
+            "currency": "EGP",
+            "category": IncomeCategory.SERVICE_FEE,
+            "source": "Multi-currency account opening fee",
+            "reference": "SVC-008",
+        },
     ]
     
     created = 0
@@ -429,6 +451,42 @@ async def create_exchange_transactions(
             "rate": Decimal("0.0283"),
             "commission": Decimal("0.02"),
         },
+        # ========== ADDITIONAL EXCHANGE WITH EGP ==========
+        {
+            "from_currency": "EGP",
+            "to_currency": "USD",
+            "from_amount": Decimal("10000.00"),
+            "rate": Decimal("0.0204"),
+            "commission": Decimal("0.015"),
+        },
+        {
+            "from_currency": "USD",
+            "to_currency": "EGP",
+            "from_amount": Decimal("200.00"),
+            "rate": Decimal("49.00"),
+            "commission": Decimal("0.015"),
+        },
+        {
+            "from_currency": "EGP",
+            "to_currency": "TRY",
+            "from_amount": Decimal("5000.00"),
+            "rate": Decimal("0.663"),
+            "commission": Decimal("0.02"),
+        },
+        {
+            "from_currency": "SAR",
+            "to_currency": "EGP",
+            "from_amount": Decimal("2000.00"),
+            "rate": Decimal("13.07"),
+            "commission": Decimal("0.015"),
+        },
+        {
+            "from_currency": "EGP",
+            "to_currency": "EUR",
+            "from_amount": Decimal("8000.00"),
+            "rate": Decimal("0.0188"),
+            "commission": Decimal("0.015"),
+        },
     ]
     
     created = 0
@@ -519,6 +577,25 @@ async def create_transfer_transactions(
             "currency": "GBP",
             "transfer_type": TransferType.BRANCH_TO_BRANCH,
             "notes": "GBP currency distribution",
+        },
+        # ========== ADDITIONAL TRANSFERS WITH EGP & OTHER CURRENCIES ==========
+        {
+            "amount": Decimal("50000.00"),
+            "currency": "EGP",
+            "transfer_type": TransferType.BRANCH_TO_BRANCH,
+            "notes": "EGP cash replenishment for Egyptian clients",
+        },
+        {
+            "amount": Decimal("8000.00"),
+            "currency": "SAR",
+            "transfer_type": TransferType.BRANCH_TO_BRANCH,
+            "notes": "SAR reserve distribution",
+        },
+        {
+            "amount": Decimal("7500.00"),
+            "currency": "AED",
+            "transfer_type": TransferType.BRANCH_TO_BRANCH,
+            "notes": "AED currency balance adjustment",
         },
     ]
     
