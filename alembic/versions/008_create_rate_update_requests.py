@@ -36,7 +36,7 @@ def upgrade() -> None:
         op.create_table(
             'rate_update_requests',
             sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-            sa.Column('status', sa.Enum('pending', 'approved', 'rejected', 'expired', 'failed', name='updaterequestatus'), nullable=False),
+            sa.Column('status', sa.Enum('pending', 'approved', 'rejected', 'expired', 'failed', name='updaterequestatus', create_type=False), nullable=False),
             sa.Column('source', sa.String(50), nullable=False),
             sa.Column('base_currency', sa.String(3), nullable=False),
             sa.Column('fetched_rates', postgresql.JSON, nullable=False),
