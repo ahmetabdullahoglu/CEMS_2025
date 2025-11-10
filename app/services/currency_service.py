@@ -297,6 +297,7 @@ class CurrencyService:
         Returns:
             ExchangeRateResponse with the exchange rate
         """
+        logger.info(f"Getting latest rate for {from_currency_code}/{to_currency_code}, use_intermediary={use_intermediary}")
         from_currency = await self.repo.get_currency_by_code(from_currency_code)
         to_currency = await self.repo.get_currency_by_code(to_currency_code)
 
@@ -341,13 +342,14 @@ class CurrencyService:
                     if cross_rate:
                         return cross_rate
                 except Exception as e:
-                    logger.debug(f"Could not calculate cross rate via USD: {e}")
+                    logger.error(f"Failed to calculate cross rate via USD: {e}", exc_info=True)
 
             raise ResourceNotFoundError(
                 "ExchangeRate",
                 f"{from_currency_code}/{to_currency_code}"
             )
 
+        logger.info(f"Found direct rate for {from_currency_code}/{to_currency_code}: {rate.rate}")
         return ExchangeRateResponse.model_validate(rate)
     
     async def calculate_exchange(
@@ -551,7 +553,14 @@ class CurrencyService:
             to_currency=to_currency
         )
 
-        return ExchangeRateResponse.model_validate(calculated_rate)
+        logger.info(f"Validating calculated rate for {from_currency_code}/{to_currency_code}")
+        try:
+            validated_rate = ExchangeRateResponse.model_validate(calculated_rate)
+            logger.info(f"Successfully validated cross rate for {from_currency_code}/{to_currency_code}")
+            return validated_rate
+        except Exception as e:
+            logger.error(f"Failed to validate cross rate: {e}", exc_info=True)
+            raise
 
     async def convert_amount(
         self,
