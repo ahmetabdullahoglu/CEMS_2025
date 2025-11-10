@@ -1,6 +1,39 @@
 """
 Authentication API Endpoints
-Handles login, registration, token refresh, and password management
+=============================
+Complete authentication and authorization endpoints:
+- User login (username/email + password)
+- JWT token management (access + refresh)
+- User registration
+- Password management (change, reset)
+- Token refresh workflow
+- Session management
+
+Features:
+- JWT-based authentication
+- Access token + Refresh token
+- Secure password handling
+- Email-based password reset
+- Login attempt tracking
+- Account lockout protection
+- Token expiration management
+
+Security:
+- Passwords hashed with bcrypt
+- JWT tokens with expiration
+- Refresh tokens for session extension
+- Failed login attempt tracking
+- IP-based audit logging
+- Protection against brute force
+
+Endpoints:
+- POST /login - Authenticate user
+- POST /register - Create new account
+- POST /refresh - Refresh access token
+- POST /change-password - Change password (authenticated)
+- POST /reset-password - Request password reset
+- POST /reset-password/confirm - Confirm password reset
+- GET /me - Get current user info
 """
 
 from typing import Any, Optional

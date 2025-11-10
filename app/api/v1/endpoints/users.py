@@ -1,8 +1,31 @@
-# app/api/v1/endpoints/users.py
 """
 User Management API Endpoints
-RESTful API for user CRUD operations
-Phase 2: User & Role Management
+==============================
+Complete user management endpoints:
+- User CRUD operations (create, read, update, delete)
+- User search and listing with filters
+- Password management (change, reset)
+- Role assignment and management
+- Branch assignment (primary and additional)
+- User activation/deactivation
+- Bulk operations
+
+Features:
+- Email and username uniqueness validation
+- Secure password handling
+- Role-based access control
+- Multi-branch user support
+- Search by email, username, or name
+- Pagination support
+- Permission-based access control
+
+Permissions:
+- user:create - Create new users
+- user:read - View user details
+- user:update - Update user information
+- user:delete - Delete users
+- user:manage_roles - Assign/remove roles
+- user:reset_password - Reset user passwords (admin)
 """
 
 from typing import List, Optional

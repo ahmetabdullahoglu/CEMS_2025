@@ -1,6 +1,30 @@
 """
 Vault API Endpoints
-Handles all vault-related API operations
+===================
+Complete vault management endpoints:
+- Vault details and listing
+- Vault balance management and updates
+- Vault-to-vault transfers
+- Vault-to-branch transfers
+- Branch-to-vault transfers
+- Transfer approval workflow
+- Balance reconciliation
+- Vault statistics and reports
+
+Features:
+- Real-time balance tracking
+- Multi-currency support
+- Transfer approval for large amounts
+- Complete audit trail
+- Reconciliation support
+- Transfer status tracking
+
+Business Rules:
+- Only ONE main vault allowed
+- Transfers over threshold require approval
+- All transfers are atomic
+- Balance cannot go negative
+- Complete history maintained
 """
 from typing import List, Optional
 from datetime import datetime, timedelta
