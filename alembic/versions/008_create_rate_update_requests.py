@@ -17,38 +17,48 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Create enum type
+    # Create enum type if it doesn't exist
     op.execute("""
-        CREATE TYPE updaterequestatus AS ENUM ('pending', 'approved', 'rejected', 'expired', 'failed')
+        DO $$ BEGIN
+            CREATE TYPE updaterequestatus AS ENUM ('pending', 'approved', 'rejected', 'expired', 'failed');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
     """)
 
-    # Create rate_update_requests table
-    op.create_table(
-        'rate_update_requests',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('status', sa.Enum('pending', 'approved', 'rejected', 'expired', 'failed', name='updaterequestatus'), nullable=False),
-        sa.Column('source', sa.String(50), nullable=False),
-        sa.Column('base_currency', sa.String(3), nullable=False),
-        sa.Column('fetched_rates', postgresql.JSON, nullable=False),
-        sa.Column('requested_by', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('requested_at', sa.DateTime(), nullable=False),
-        sa.Column('expires_at', sa.DateTime(), nullable=False),
-        sa.Column('reviewed_by', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('reviewed_at', sa.DateTime(), nullable=True),
-        sa.Column('review_notes', sa.Text(), nullable=True),
-        sa.Column('rates_applied_count', sa.String(), nullable=True),
-        sa.Column('error_message', sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(['requested_by'], ['users.id']),
-        sa.ForeignKeyConstraint(['reviewed_by'], ['users.id']),
-    )
+    # Check if table exists, if not create it
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
 
-    # Create indexes
-    op.create_index('ix_rate_update_requests_status', 'rate_update_requests', ['status'])
-    op.create_index('ix_rate_update_requests_requested_at', 'rate_update_requests', ['requested_at'])
+    if 'rate_update_requests' not in tables:
+        # Create rate_update_requests table
+        op.create_table(
+            'rate_update_requests',
+            sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
+            sa.Column('status', sa.Enum('pending', 'approved', 'rejected', 'expired', 'failed', name='updaterequestatus'), nullable=False),
+            sa.Column('source', sa.String(50), nullable=False),
+            sa.Column('base_currency', sa.String(3), nullable=False),
+            sa.Column('fetched_rates', postgresql.JSON, nullable=False),
+            sa.Column('requested_by', postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('requested_at', sa.DateTime(), nullable=False),
+            sa.Column('expires_at', sa.DateTime(), nullable=False),
+            sa.Column('reviewed_by', postgresql.UUID(as_uuid=True), nullable=True),
+            sa.Column('reviewed_at', sa.DateTime(), nullable=True),
+            sa.Column('review_notes', sa.Text(), nullable=True),
+            sa.Column('rates_applied_count', sa.String(), nullable=True),
+            sa.Column('error_message', sa.Text(), nullable=True),
+            sa.ForeignKeyConstraint(['requested_by'], ['users.id']),
+            sa.ForeignKeyConstraint(['reviewed_by'], ['users.id']),
+        )
+
+        # Create indexes
+        op.create_index('ix_rate_update_requests_status', 'rate_update_requests', ['status'])
+        op.create_index('ix_rate_update_requests_requested_at', 'rate_update_requests', ['requested_at'])
 
 
 def downgrade() -> None:
-    op.drop_index('ix_rate_update_requests_requested_at')
-    op.drop_index('ix_rate_update_requests_status')
+    op.drop_index('ix_rate_update_requests_requested_at', table_name='rate_update_requests')
+    op.drop_index('ix_rate_update_requests_status', table_name='rate_update_requests')
     op.drop_table('rate_update_requests')
-    op.execute('DROP TYPE updaterequestatus')
+    op.execute('DROP TYPE IF EXISTS updaterequestatus')
