@@ -9,6 +9,7 @@ from app.db.models.role import Role
 
 # ==================== Currency Models ====================
 from app.db.models.currency import Currency, ExchangeRate, ExchangeRateHistory
+from app.db.models.rate_update_request import RateUpdateRequest, UpdateRequestStatus
 
 # ==================== Future Models (will be added in next phases) ====================
 # Phase 4: Branch Management
@@ -73,6 +74,8 @@ __all__ = [
     "Currency",
     "ExchangeRate",
     "ExchangeRateHistory",
+    "RateUpdateRequest",
+    "UpdateRequestStatus",
     
     # Future exports (uncomment as models are added):
     # Branch Management
@@ -188,6 +191,11 @@ MODEL_METADATA = {
     "ExchangeRateHistory": {
         "table": "exchange_rate_history",
         "description": "History of exchange rate changes",
+        "phase": 3,
+    },
+    "RateUpdateRequest": {
+        "table": "rate_update_requests",
+        "description": "Pending exchange rate update requests for approval",
         "phase": 3,
     },
 }
