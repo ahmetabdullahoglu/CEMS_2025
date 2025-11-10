@@ -217,6 +217,81 @@ class UserService:
             logger.error(f"Failed to deactivate user: {str(e)}")
             raise DatabaseOperationError(f"User deactivation failed: {str(e)}")
 
+    async def admin_reset_password(
+        self,
+        user_id: UUID,
+        new_password: str,
+        admin_user: User
+    ) -> None:
+        """
+        Reset user password by admin (no current password required)
+
+        Args:
+            user_id: ID of user whose password to reset
+            new_password: New password to set
+            admin_user: Admin user performing the operation
+
+        Raises:
+            ResourceNotFoundError: If user not found
+            DatabaseOperationError: If operation fails
+        """
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            raise ResourceNotFoundError(f"User {user_id} not found")
+
+        try:
+            user.hashed_password = get_password_hash(new_password)
+            await self.db.commit()
+            logger.info(
+                f"Password reset for user {user.email} by admin {admin_user.email}"
+            )
+
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to reset password: {str(e)}")
+            raise DatabaseOperationError(f"Password reset failed: {str(e)}")
+
+    async def delete_user(
+        self,
+        user_id: UUID,
+        current_user: User
+    ) -> None:
+        """
+        Permanently delete a user
+
+        Args:
+            user_id: ID of user to delete
+            current_user: User performing the operation
+
+        Raises:
+            ResourceNotFoundError: If user not found
+            BusinessRuleViolationError: If trying to delete self
+            DatabaseOperationError: If operation fails
+        """
+        # Prevent self-deletion
+        if user_id == current_user.id:
+            raise BusinessRuleViolationError("Cannot delete your own account")
+
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            raise ResourceNotFoundError(f"User {user_id} not found")
+
+        try:
+            user_email = user.email
+            await self.db.delete(user)
+            await self.db.commit()
+            logger.info(
+                f"User {user_email} permanently deleted by {current_user.email}"
+            )
+
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            logger.error(f"Failed to delete user: {str(e)}")
+            raise DatabaseOperationError(
+                f"User deletion failed. This may be due to foreign key constraints. "
+                f"Consider deactivating the user instead. Error: {str(e)}"
+            )
+
     async def bulk_create_users(
         self,
         users_data: List[Dict[str, Any]],

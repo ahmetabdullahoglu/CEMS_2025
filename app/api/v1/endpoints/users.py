@@ -24,13 +24,15 @@ from app.schemas.user import (
     UserCreate,
     UserUpdate,
     UserResponse,
-    PasswordChange
+    PasswordChange,
+    AdminPasswordReset
 )
 from app.schemas.common import BulkOperationResponse
 from app.core.exceptions import (
     ResourceNotFoundError,
     ValidationError,
-    AuthenticationError
+    AuthenticationError,
+    BusinessRuleViolationError
 )
 from app.utils.logger import get_logger
 
@@ -400,6 +402,107 @@ async def deactivate_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to deactivate user"
+        )
+
+
+@router.post(
+    "/{user_id}/admin-reset-password",
+    status_code=status.HTTP_200_OK,
+    summary="Admin Reset User Password",
+    dependencies=[Depends(get_current_superuser)]
+)
+async def admin_reset_password(
+    user_id: UUID,
+    password_data: AdminPasswordReset,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_superuser)
+):
+    """
+    Reset user password by admin (no current password required)
+
+    **Note:** This endpoint bypasses the current password requirement.
+    Only superusers can access this endpoint.
+
+    **Required Fields:**
+    - new_password (must meet password strength requirements)
+
+    **Permissions:** Superuser only
+    """
+    try:
+        service = UserService(db)
+        await service.admin_reset_password(
+            user_id=user_id,
+            new_password=password_data.new_password,
+            admin_user=current_user
+        )
+
+        logger.info(
+            f"Password reset for user {user_id} by admin {current_user.email}"
+        )
+        return {"message": "Password reset successfully"}
+
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error resetting password: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password"
+        )
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete User",
+    dependencies=[Depends(require_permission("user:delete"))]
+)
+async def delete_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Permanently delete a user
+
+    **Warning:** This is a permanent deletion and cannot be undone.
+    Consider using the deactivate endpoint instead for soft deletion.
+
+    **Note:**
+    - Cannot delete your own account
+    - May fail if user has related records due to foreign key constraints
+    - In such cases, deactivate the user instead
+
+    **Permissions:** user:delete
+    """
+    try:
+        service = UserService(db)
+        await service.delete_user(
+            user_id=user_id,
+            current_user=current_user
+        )
+
+        logger.info(f"User {user_id} deleted by {current_user.email}")
+        return {"message": "User deleted successfully"}
+
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except BusinessRuleViolationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error deleting user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )
 
 
