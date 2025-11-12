@@ -191,8 +191,21 @@ class UserService:
         search: Optional[str] = None,
         is_active: Optional[bool] = None,
         branch_id: Optional[UUID] = None
-    ) -> List[User]:
-        """List users with filters and search"""
+    ) -> tuple[List[User], int]:
+        """
+        List users with filters and search
+
+        Args:
+            skip: Number of records to skip (pagination)
+            limit: Maximum number of records to return
+            search: Search term for name, email, or username
+            is_active: Filter by active status
+            branch_id: Filter by primary branch
+
+        Returns:
+            Tuple of (users list, total count)
+        """
+        # Build base query
         query = select(User)
 
         # Apply search filter
@@ -210,10 +223,20 @@ class UserService:
         if branch_id:
             query = query.where(User.primary_branch_id == branch_id)
 
+        # Get total count
+        from sqlalchemy import func
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Apply pagination
         query = query.offset(skip).limit(limit)
 
+        # Execute query
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        users = list(result.scalars().all())
+
+        return users, total
 
     async def update_user(
         self,

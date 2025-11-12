@@ -50,7 +50,7 @@ from app.schemas.user import (
     PasswordChange,
     AdminPasswordReset
 )
-from app.schemas.common import BulkOperationResponse
+from app.schemas.common import BulkOperationResponse, PaginatedResponse, paginated
 from app.core.exceptions import (
     ResourceNotFoundError,
     ValidationError,
@@ -117,7 +117,7 @@ async def create_user(
 
 @router.get(
     "",
-    response_model=List[UserResponse],
+    response_model=PaginatedResponse[UserResponse],
     summary="List Users",
     dependencies=[Depends(require_permission("user:read"))]
 )
@@ -131,7 +131,7 @@ async def list_users(
     current_user: User = Depends(get_current_user)
 ):
     """
-    List all users with optional filters and search
+    List all users with pagination and optional filters
 
     **Search:** Search in full_name, email, and username fields
 
@@ -140,10 +140,12 @@ async def list_users(
     - branch_id: Filter by primary branch
 
     **Permissions:** user:read
+
+    **Returns:** Paginated list of users with metadata
     """
     try:
         service = UserService(db)
-        users = await service.list_users(
+        users, total = await service.list_users(
             skip=skip,
             limit=limit,
             search=search,
@@ -151,7 +153,8 @@ async def list_users(
             branch_id=branch_id
         )
 
-        return users
+        # Convert to paginated response
+        return paginated(users, total, skip, limit)
 
     except Exception as e:
         logger.error(f"Error listing users: {str(e)}")

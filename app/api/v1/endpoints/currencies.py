@@ -28,6 +28,7 @@ from app.schemas.currency import (
     ExchangeRateResponse,
     ExchangeRateListResponse
 )
+from app.schemas.common import PaginatedResponse, paginated
 from app.db.models.user import User
 from app.core.exceptions import (
     ResourceNotFoundError,
@@ -45,7 +46,7 @@ router = APIRouter()
 
 @router.get(
     "",
-    response_model=CurrencyListResponse,
+    response_model=PaginatedResponse[CurrencyResponse],
     summary="List all currencies",
     description="Get list of all currencies with optional filtering"
 )
@@ -60,28 +61,25 @@ async def list_currencies(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get list of all currencies
-    
+    Get list of all currencies with pagination
+
     **Permissions:**
     - Any authenticated user can view currencies
-    
+
     **Parameters:**
     - **include_inactive**: Include deactivated currencies
     - **skip**: Pagination offset
     - **limit**: Page size (max 500)
-    
+
     **Returns:**
-    - List of currencies with total count
+    - Paginated list of currencies with metadata
     """
     try:
         service = CurrencyService(db)
         currencies, total = await service.list_currencies(include_inactive, skip, limit)
-        
-        return CurrencyListResponse(
-            success=True,
-            data=currencies,
-            total=total
-        )
+
+        # Convert to paginated response
+        return paginated(currencies, total, skip, limit)
     except Exception as e:
         logger.error(f"Error listing currencies: {str(e)}")
         raise HTTPException(
