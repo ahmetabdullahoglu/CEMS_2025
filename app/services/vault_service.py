@@ -158,8 +158,20 @@ class VaultService:
         is_active: Optional[bool] = True,
         skip: int = 0,
         limit: int = 100
-    ) -> List[Vault]:
-        """List vaults with optional filters"""
+    ) -> tuple[List[Vault], int]:
+        """
+        List vaults with optional filters and pagination
+
+        Args:
+            branch_id: Filter by branch ID
+            is_active: Filter by active status
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+
+        Returns:
+            Tuple of (vaults list, total count)
+        """
+        # Build base query
         stmt = select(Vault).options(
             selectinload(Vault.branch)
         )
@@ -174,11 +186,19 @@ class VaultService:
         if filters:
             stmt = stmt.filter(and_(*filters))
 
+        # Get total count
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_result = await self.db.execute(count_stmt)
+        total = total_result.scalar() or 0
+
         # Apply pagination
         stmt = stmt.offset(skip).limit(limit)
 
+        # Execute query
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        vaults = list(result.scalars().all())
+
+        return vaults, total
 
     async def count_vaults(
         self,

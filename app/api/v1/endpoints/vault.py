@@ -45,6 +45,7 @@ from app.schemas.vault import (
     VaultReconciliationRequest, VaultReconciliationReport,
     VaultStatistics, VaultTransferSummary
 )
+from app.schemas.common import PaginatedResponse, paginated
 
 router = APIRouter(prefix="/vault", tags=["vault"])
 
@@ -96,7 +97,7 @@ async def get_main_vault(
 
 @router.get(
     "/all",
-    response_model=VaultListResponse,
+    response_model=PaginatedResponse[VaultResponse],
     summary="List all vaults"
 )
 async def list_all_vaults(
@@ -108,7 +109,7 @@ async def list_all_vaults(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get list of all vaults with optional filters
+    Get list of all vaults with pagination and optional filters
 
     **Filters:**
     - branch_id: Filter vaults by branch
@@ -116,45 +117,20 @@ async def list_all_vaults(
 
     **Permissions:** Any authenticated user
 
-    **Returns:** Paginated list of vaults with their balances
+    **Returns:** Paginated list of vaults with metadata
     """
     vault_service = VaultService(db)
 
-    # Get vaults list
-    vaults = await vault_service.list_vaults(
+    # Get vaults list with total count
+    vaults, total = await vault_service.list_vaults(
         branch_id=branch_id,
         is_active=is_active,
         skip=skip,
         limit=limit
     )
 
-    # Get total count
-    total = await vault_service.count_vaults(
-        branch_id=branch_id,
-        is_active=is_active
-    )
-
-    return VaultListResponse(
-        vaults=[
-            VaultResponse(
-                id=vault.id,
-                vault_code=vault.vault_code,
-                name=vault.name,
-                vault_type=vault.vault_type,
-                branch_id=vault.branch_id,
-                is_active=vault.is_active,
-                description=vault.description,
-                location=vault.location,
-                balances=[],  # Balances loaded separately if needed
-                created_at=vault.created_at,
-                updated_at=vault.updated_at
-            )
-            for vault in vaults
-        ],
-        total=total,
-        skip=skip,
-        limit=limit
-    )
+    # Convert to paginated response
+    return paginated(vaults, total, skip, limit)
 
 
 @router.post(
@@ -588,7 +564,7 @@ async def cancel_transfer(
 
 @router.get(
     "/transfers",
-    response_model=VaultTransferListResponse,
+    response_model=PaginatedResponse[VaultTransferResponse],
     summary="Get transfer history"
 )
 async def get_transfers(
@@ -604,9 +580,18 @@ async def get_transfers(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get transfer history with filters
-    
+    Get transfer history with pagination and filters
+
+    **Filters:**
+    - vault_id: Filter by vault
+    - branch_id: Filter by branch
+    - status: Filter by transfer status
+    - transfer_type: Filter by transfer type
+    - date_from/date_to: Date range filter
+
     **Permissions:** Any authenticated user
+
+    **Returns:** Paginated list of vault transfers with metadata
     """
     vault_service = VaultService(db)
 
@@ -619,32 +604,9 @@ async def get_transfers(
         skip=skip,
         limit=limit
     )
-    
-    return VaultTransferListResponse(
-        total=total,
-        transfers=[
-            VaultTransferResponse(
-                id=t.id,
-                transfer_number=t.transfer_number,
-                from_vault_id=t.from_vault_id,
-                to_vault_id=t.to_vault_id,
-                to_branch_id=t.to_branch_id,
-                currency_id=t.currency_id,
-                amount=t.amount,
-                transfer_type=t.transfer_type,
-                status=t.status,
-                initiated_by=t.initiated_by,
-                approved_by=t.approved_by,
-                received_by=t.received_by,
-                initiated_at=t.initiated_at,
-                approved_at=t.approved_at,
-                completed_at=t.completed_at,
-                notes=t.notes,
-                rejection_reason=t.rejection_reason
-            )
-            for t in transfers
-        ]
-    )
+
+    # Convert to paginated response
+    return paginated(transfers, total, skip, limit)
 
 
 @router.get(
