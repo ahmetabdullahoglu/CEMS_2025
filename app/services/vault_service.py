@@ -760,9 +760,9 @@ class VaultService:
     
     def _can_approve_transfer(self, user: User) -> bool:
         """Check if user can approve transfers"""
-        # Should check for manager or admin role
+        # Check for manager or admin role (lowercase as defined in DEFAULT_ROLES)
         return any(
-            role.name in ['MANAGER', 'ADMIN', 'SUPER_ADMIN']
+            role.name.lower() in ['manager', 'admin', 'super_admin']
             for role in user.roles
         )
     
