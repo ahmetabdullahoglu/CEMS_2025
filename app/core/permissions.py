@@ -92,10 +92,15 @@ ALL_PERMISSIONS: Dict[str, List[str]] = {
     
     # Vault Management
     "vault": [
+        "create",          # Create new vaults
         "read",            # View vault information
+        "update",          # Update vault information
         "transfer",        # Initiate transfers
-        "approve_transfer", # Approve vault transfers
+        "approve",         # Approve vault transfers
+        "receive",         # Receive/complete transfers
+        "cancel",          # Cancel transfers
         "view_balances",   # View vault balances
+        "adjust_balance",  # Adjust vault balance (corrections)
         "reconcile",       # Perform reconciliation
     ],
     
@@ -164,9 +169,10 @@ ROLE_PERMISSIONS: Dict[str, List[str]] = {
         "transactions:create", "transactions:read", "transactions:update",
         "transactions:delete", "transactions:approve", "transactions:cancel",
         "transactions:view_all",
-        
-        "vault:read", "vault:transfer", "vault:approve_transfer",
-        "vault:view_balances", "vault:reconcile",
+
+        "vault:create", "vault:read", "vault:update", "vault:transfer",
+        "vault:approve", "vault:receive", "vault:cancel",
+        "vault:view_balances", "vault:adjust_balance", "vault:reconcile",
         
         "reports:view_branch", "reports:view_all", "reports:export",
         "reports:generate", "reports:schedule",
@@ -196,8 +202,9 @@ ROLE_PERMISSIONS: Dict[str, List[str]] = {
         
         "transactions:create", "transactions:read", "transactions:update",
         "transactions:approve", "transactions:cancel", "transactions:view_branch",
-        
-        "vault:read", "vault:transfer", "vault:view_balances",
+
+        "vault:read", "vault:transfer", "vault:approve", "vault:receive",
+        "vault:cancel", "vault:view_balances", "vault:adjust_balance", "vault:reconcile",
         
         "reports:view_branch", "reports:export", "reports:generate",
         

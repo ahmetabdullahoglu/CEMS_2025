@@ -83,20 +83,43 @@ DEFAULT_ROLES = {
         "display_name_ar": "مدير النظام",
         "description": "Full system access with all permissions",
         "permissions": [
-            # User permissions
-            "user:create", "user:read", "user:update", "user:delete",
-            # Branch permissions
-            "branch:create", "branch:read", "branch:update", "branch:delete", "branch:assign_users",
-            # Currency permissions
-            "currency:create", "currency:read", "currency:update", "currency:delete", "currency:set_rates",
-            # Transaction permissions
-            "transaction:create", "transaction:read", "transaction:approve", "transaction:cancel",
-            # Vault permissions
-            "vault:read", "vault:transfer", "vault:approve_transfer",
-            # Report permissions
-            "report:view_branch", "report:view_all", "report:export",
-            # Customer permissions
-            "customer:create", "customer:read", "customer:update", "customer:delete",
+            # User Management
+            "users:create", "users:read", "users:update", "users:delete",
+            "users:assign_roles", "users:manage_permissions",
+
+            # Branch Management
+            "branches:create", "branches:read", "branches:update", "branches:delete",
+            "branches:assign_users", "branches:view_all", "branches:manage_balances",
+
+            # Currency Management
+            "currencies:create", "currencies:read", "currencies:update", "currencies:delete",
+            "currencies:set_rates", "currencies:view_rates", "currencies:manage_rates",
+
+            # Transaction Management
+            "transactions:create", "transactions:read", "transactions:update",
+            "transactions:delete", "transactions:approve", "transactions:cancel",
+            "transactions:view_all",
+
+            # Vault Management
+            "vault:create", "vault:read", "vault:update", "vault:transfer",
+            "vault:approve", "vault:receive", "vault:cancel",
+            "vault:view_balances", "vault:adjust_balance", "vault:reconcile",
+
+            # Reports
+            "reports:view_branch", "reports:view_all", "reports:export",
+            "reports:generate", "reports:schedule",
+
+            # Customer Management
+            "customers:create", "customers:read", "customers:update", "customers:delete",
+            "customers:verify", "customers:view_all",
+
+            # Document Management
+            "documents:upload", "documents:read", "documents:update", "documents:delete",
+            "documents:verify", "documents:download",
+
+            # System Management
+            "system:view_logs", "system:manage_settings", "system:backup",
+            "system:restore", "system:maintenance",
         ]
     },
     "manager": {
@@ -104,20 +127,34 @@ DEFAULT_ROLES = {
         "display_name_ar": "مدير الفرع",
         "description": "Branch-level management with approval capabilities",
         "permissions": [
-            # User permissions (limited)
-            "user:read",
-            # Branch permissions
-            "branch:read", "branch:update", "branch:assign_users",
-            # Currency permissions (read + set rates)
-            "currency:read", "currency:set_rates",
-            # Transaction permissions (all)
-            "transaction:create", "transaction:read", "transaction:approve", "transaction:cancel",
-            # Vault permissions (limited)
-            "vault:read", "vault:transfer",
-            # Report permissions (branch only)
-            "report:view_branch", "report:export",
-            # Customer permissions (all)
-            "customer:create", "customer:read", "customer:update",
+            # User Management (limited)
+            "users:read",
+
+            # Branch Management
+            "branches:read", "branches:update", "branches:assign_users",
+            "branches:view_own", "branches:manage_balances",
+
+            # Currency Management
+            "currencies:read", "currencies:set_rates", "currencies:view_rates",
+
+            # Transaction Management
+            "transactions:create", "transactions:read", "transactions:update",
+            "transactions:approve", "transactions:cancel", "transactions:view_branch",
+
+            # Vault Management
+            "vault:read", "vault:transfer", "vault:approve", "vault:receive",
+            "vault:cancel", "vault:view_balances", "vault:adjust_balance", "vault:reconcile",
+
+            # Reports
+            "reports:view_branch", "reports:export", "reports:generate",
+
+            # Customer Management
+            "customers:create", "customers:read", "customers:update",
+            "customers:verify", "customers:view_branch",
+
+            # Document Management
+            "documents:upload", "documents:read", "documents:update",
+            "documents:verify", "documents:download",
         ]
     },
     "teller": {
@@ -125,14 +162,20 @@ DEFAULT_ROLES = {
         "display_name_ar": "موظف الصراف",
         "description": "Front-desk operations with limited permissions",
         "permissions": [
-            # Currency permissions (read only)
-            "currency:read",
-            # Transaction permissions (create + read)
-            "transaction:create", "transaction:read",
-            # Report permissions (own transactions)
-            "report:view_branch",
-            # Customer permissions (create + read)
-            "customer:create", "customer:read",
+            # Currency Management (read only)
+            "currencies:read", "currencies:view_rates",
+
+            # Transaction Management
+            "transactions:create", "transactions:read", "transactions:view_own",
+
+            # Reports
+            "reports:view_branch",
+
+            # Customer Management
+            "customers:create", "customers:read", "customers:view_branch",
+
+            # Document Management
+            "documents:upload", "documents:read",
         ]
     }
 }
