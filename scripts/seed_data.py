@@ -28,21 +28,28 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 async def create_default_roles(db: AsyncSession) -> dict:
     """
     Create default roles (admin, manager, teller)
+    Updates existing roles with latest permissions
     Returns dict of role_name: role_object
     """
-    print("Creating default roles...")
+    print("Creating/updating default roles...")
     roles_map = {}
-    
+
     for role_name, role_data in DEFAULT_ROLES.items():
         # Check if role already exists
         result = await db.execute(
             select(Role).where(Role.name == role_name)
         )
         existing_role = result.scalar_one_or_none()
-        
+
         if existing_role:
-            print(f"  ✓ Role '{role_name}' already exists")
+            # Update existing role with latest permissions
+            existing_role.display_name_ar = role_data["display_name_ar"]
+            existing_role.description = role_data["description"]
+            existing_role.permissions = role_data["permissions"]
+            existing_role.is_active = True
+
             roles_map[role_name] = existing_role
+            print(f"  ✓ Updated role '{role_name}' with {len(role_data['permissions'])} permissions")
         else:
             # Create new role
             new_role = Role(
@@ -55,10 +62,10 @@ async def create_default_roles(db: AsyncSession) -> dict:
             db.add(new_role)
             await db.flush()  # Flush to get ID
             roles_map[role_name] = new_role
-            print(f"  ✓ Created role '{role_name}'")
-    
+            print(f"  ✓ Created role '{role_name}' with {len(role_data['permissions'])} permissions")
+
     await db.commit()
-    print(f"✓ Successfully created {len(roles_map)} roles\n")
+    print(f"✓ Successfully processed {len(roles_map)} roles\n")
     return roles_map
 
 
