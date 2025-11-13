@@ -947,7 +947,7 @@ async def get_transaction(
             "transaction_date": transaction.transaction_date,
             "notes": transaction.notes,
             "reference_number": transaction.reference_number,
-            "created_by": transaction.created_by,
+            "created_by": transaction.user_id,  # The model uses user_id, not created_by
             "created_at": transaction.created_at,
             "updated_at": transaction.updated_at,
         }
