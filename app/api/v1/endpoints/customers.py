@@ -318,14 +318,14 @@ async def get_customer(
             "created_at": customer.created_at,
             "updated_at": customer.updated_at,
             "additional_info": customer.additional_info if hasattr(customer, 'additional_info') else None,
-            # Include documents only if loaded
+            # Include documents only if explicitly requested (and eagerly loaded)
             "documents": [
                 {
                     "id": doc.id,
                     "customer_id": doc.customer_id,
                     "document_type": doc.document_type,
                     "document_number": doc.document_number,
-                    "document_url": doc.document_url,  # Fixed: was file_path
+                    "document_url": doc.document_url,
                     "issue_date": doc.issue_date,
                     "expiry_date": doc.expiry_date,
                     "is_verified": doc.is_verified,
@@ -337,20 +337,20 @@ async def get_customer(
                     "updated_at": doc.updated_at
                 }
                 for doc in customer.documents
-            ] if hasattr(customer, 'documents') and customer.documents else [],
-            # Include notes only if loaded
+            ] if include_documents else [],
+            # Include notes only if explicitly requested (and eagerly loaded)
             "notes": [
                 {
                     "id": note.id,
                     "customer_id": note.customer_id,
                     "note_text": note.note_text,
-                    "is_alert": note.is_alert,  # Fixed: was note_type
+                    "is_alert": note.is_alert,
                     "created_by_id": note.created_by_id,
                     "created_at": note.created_at,
                     "updated_at": note.updated_at
                 }
                 for note in customer.notes
-            ] if hasattr(customer, 'notes') and customer.notes else [],
+            ] if include_notes else [],
             "total_transactions": 0  # TODO: Calculate from transactions
         }
 
