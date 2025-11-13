@@ -947,7 +947,7 @@ async def get_transaction(
             "transaction_date": transaction.transaction_date,
             "notes": transaction.notes,
             "reference_number": transaction.reference_number,
-            "created_by": transaction.user_id,  # The model uses user_id, not created_by
+            "user_id": transaction.user_id,  # Response schemas expect user_id
             "created_at": transaction.created_at,
             "updated_at": transaction.updated_at,
         }
@@ -955,28 +955,40 @@ async def get_transaction(
         # Add type-specific fields based on transaction type
         if transaction.transaction_type == TransactionType.INCOME:
             transaction_dict.update({
-                "category": transaction.category,
-                "description": transaction.description,
+                "income_category": transaction.income_category,
+                "income_source": transaction.income_source,
             })
         elif transaction.transaction_type == TransactionType.EXPENSE:
             transaction_dict.update({
-                "category": transaction.category,
-                "vendor": transaction.vendor,
-                "requires_approval": transaction.requires_approval,
-                "approved_by": transaction.approved_by,
+                "expense_category": transaction.expense_category,
+                "expense_to": transaction.expense_to,
+                "approval_required": transaction.approval_required,
+                "approved_by_id": transaction.approved_by_id,
                 "approved_at": transaction.approved_at,
-                "is_approved": transaction.approved_at is not None,
+                "is_approved": not transaction.approval_required or (
+                    transaction.approved_by_id is not None and transaction.approved_at is not None
+                ),
             })
         elif transaction.transaction_type == TransactionType.EXCHANGE:
+            # Calculate computed fields
+            from decimal import Decimal
+            effective_rate = Decimal("0")
+            if transaction.from_amount and transaction.from_amount != 0:
+                effective_rate = transaction.to_amount / transaction.from_amount
+
+            total_cost = transaction.from_amount + (transaction.commission_amount or Decimal("0.00"))
+
             transaction_dict.update({
                 "customer_id": transaction.customer_id,
                 "from_currency_id": transaction.from_currency_id,
                 "to_currency_id": transaction.to_currency_id,
                 "from_amount": transaction.from_amount,
                 "to_amount": transaction.to_amount,
-                "exchange_rate": transaction.exchange_rate,
+                "exchange_rate_used": transaction.exchange_rate_used,
                 "commission_percentage": transaction.commission_percentage,
                 "commission_amount": transaction.commission_amount,
+                "effective_rate": effective_rate,
+                "total_cost": total_cost,
             })
         elif transaction.transaction_type == TransactionType.TRANSFER:
             transaction_dict.update({
