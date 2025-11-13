@@ -69,6 +69,7 @@ def balance_to_response(balance: BranchBalance) -> dict:
             "maximum_threshold": float(balance.maximum_threshold) if balance.maximum_threshold else None,
             "last_updated": balance.updated_at if hasattr(balance, 'updated_at') else None,
             "last_reconciled_at": balance.last_reconciled_at if hasattr(balance, 'last_reconciled_at') else None,
+            "usd_value": None  # Will be calculated separately if requested
         }
     except Exception as e:
         logger.error(f"Error converting balance to response: {str(e)}")
@@ -86,6 +87,7 @@ def balance_to_response(balance: BranchBalance) -> dict:
             "maximum_threshold": None,
             "last_updated": None,
             "last_reconciled_at": None,
+            "usd_value": None
         }
 
 
@@ -116,11 +118,12 @@ def branch_to_dict_safe(branch) -> dict:
 
 # ==================== Branch CRUD Endpoints ====================
 
-@router.get("", response_model=PaginatedResponse[BranchResponse])
+@router.get("", response_model=PaginatedResponse[Union[BranchResponse, BranchWithBalances]])
 async def list_branches(
     region: Optional[RegionEnum] = Query(None),
     is_active: bool = Query(True),
     include_balances: bool = Query(False),
+    calculate_usd_value: bool = Query(False, description="Calculate total USD value for all balances"),
     search: Optional[str] = Query(None, description="Search by name, code, city, or address"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -136,12 +139,14 @@ async def list_branches(
     - region: Filter by region
     - is_active: Filter by active status
     - include_balances: Include currency balances
+    - calculate_usd_value: Calculate total USD value for all balances (requires include_balances=true)
 
     **Permissions:** Any authenticated user
     """
     try:
-        logger.info(f"Listing branches with include_balances={include_balances}, search={search}")
+        logger.info(f"Listing branches with include_balances={include_balances}, calculate_usd_value={calculate_usd_value}, search={search}")
         service = BranchService(db)
+        balance_service = BalanceService(db)
 
         # Get branches
         branches = await service.get_all_branches(
@@ -150,27 +155,90 @@ async def list_branches(
             include_balances=include_balances,
             search=search
         )
-        
+
         # Apply pagination manually
         total = len(branches)
         paginated_branches = branches[skip:skip + limit]
-        
+
         # Convert to response format
         if include_balances:
             branch_list = []
             for branch in paginated_branches:
                 branch_dict = branch_to_dict_safe(branch)
-                # Handle balances...
-                branch_with_balances = BranchWithBalances(**branch_dict)
-                branch_list.append(branch_with_balances)
+
+                # Process balances
+                balances = []
+                if hasattr(branch, 'balances') and branch.balances:
+                    for balance in branch.balances:
+                        balance_dict = balance_to_response(balance)
+
+                        # Calculate USD value if requested
+                        if calculate_usd_value:
+                            try:
+                                # Get exchange rate and calculate USD value
+                                from app.services.currency_service import CurrencyService
+                                currency_service = CurrencyService(db)
+
+                                currency_code = balance.currency.code
+                                if currency_code == 'USD':
+                                    balance_dict['usd_value'] = float(balance.balance)
+                                else:
+                                    # Get exchange rate to USD
+                                    try:
+                                        rate_response = await currency_service.get_latest_rate(
+                                            currency_code,
+                                            'USD'
+                                        )
+                                        balance_dict['usd_value'] = float(balance.balance * rate_response.rate)
+                                    except Exception as rate_error:
+                                        logger.warning(f"No exchange rate for {currency_code} to USD: {rate_error}")
+                                        balance_dict['usd_value'] = None
+                            except Exception as usd_error:
+                                logger.error(f"Error calculating USD value: {usd_error}")
+                                balance_dict['usd_value'] = None
+
+                        balances.append(balance_dict)
+                else:
+                    # Load balances separately if not loaded
+                    branch_balances = await balance_service.get_branch_balances(branch.id)
+                    for balance in branch_balances:
+                        balance_dict = balance_to_response(balance)
+
+                        # Calculate USD value if requested
+                        if calculate_usd_value:
+                            try:
+                                from app.services.currency_service import CurrencyService
+                                currency_service = CurrencyService(db)
+
+                                currency_code = balance.currency.code
+                                if currency_code == 'USD':
+                                    balance_dict['usd_value'] = float(balance.balance)
+                                else:
+                                    try:
+                                        rate_response = await currency_service.get_latest_rate(
+                                            currency_code,
+                                            'USD'
+                                        )
+                                        balance_dict['usd_value'] = float(balance.balance * rate_response.rate)
+                                    except Exception as rate_error:
+                                        logger.warning(f"No exchange rate for {currency_code} to USD: {rate_error}")
+                                        balance_dict['usd_value'] = None
+                            except Exception as usd_error:
+                                logger.error(f"Error calculating USD value: {usd_error}")
+                                balance_dict['usd_value'] = None
+
+                        balances.append(balance_dict)
+
+                branch_dict["balances"] = balances
+                branch_list.append(branch_dict)
         else:
-            branch_list = [BranchResponse(**branch_to_dict_safe(b)) for b in paginated_branches]
-        
+            branch_list = [branch_to_dict_safe(b) for b in paginated_branches]
+
         logger.info(f"Retrieved {len(branch_list)} branches")
-        
+
         # ✅ استخدم paginated helper
         return paginated(branch_list, total, skip, limit)
-        
+
     except Exception as e:
         logger.error(f"Error listing branches: {str(e)}")
         raise HTTPException(
@@ -183,41 +251,92 @@ async def list_branches(
 async def get_branch(
     branch_id: UUID,
     include_balances: bool = Query(True),
+    calculate_usd_value: bool = Query(False, description="Calculate total USD value for all balances"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get branch by ID with optional balances"""
+    """Get branch by ID with optional balances and USD value calculation"""
     try:
         service = BranchService(db)
         branch = await service.get_branch_by_id(branch_id, include_balances=include_balances)
-        
+
         if not branch:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Branch not found"
             )
-        
+
         branch_dict = branch_to_dict_safe(branch)
-        
+
         if include_balances:
             balances = []
-            
+
             # Check if balances are already loaded
             if hasattr(branch, 'balances') and branch.balances:
                 for balance in branch.balances:
-                    balances.append(balance_to_response(balance))
+                    balance_dict = balance_to_response(balance)
+
+                    # Calculate USD value if requested
+                    if calculate_usd_value:
+                        try:
+                            from app.services.currency_service import CurrencyService
+                            currency_service = CurrencyService(db)
+
+                            currency_code = balance.currency.code
+                            if currency_code == 'USD':
+                                balance_dict['usd_value'] = float(balance.balance)
+                            else:
+                                try:
+                                    rate_response = await currency_service.get_latest_rate(
+                                        currency_code,
+                                        'USD'
+                                    )
+                                    balance_dict['usd_value'] = float(balance.balance * rate_response.rate)
+                                except Exception as rate_error:
+                                    logger.warning(f"No exchange rate for {currency_code} to USD: {rate_error}")
+                                    balance_dict['usd_value'] = None
+                        except Exception as usd_error:
+                            logger.error(f"Error calculating USD value: {usd_error}")
+                            balance_dict['usd_value'] = None
+
+                    balances.append(balance_dict)
             else:
                 # Load balances separately
                 balance_service = BalanceService(db)
                 branch_balances = await balance_service.get_branch_balances(branch_id)
                 for balance in branch_balances:
-                    balances.append(balance_to_response(balance))
-            
+                    balance_dict = balance_to_response(balance)
+
+                    # Calculate USD value if requested
+                    if calculate_usd_value:
+                        try:
+                            from app.services.currency_service import CurrencyService
+                            currency_service = CurrencyService(db)
+
+                            currency_code = balance.currency.code
+                            if currency_code == 'USD':
+                                balance_dict['usd_value'] = float(balance.balance)
+                            else:
+                                try:
+                                    rate_response = await currency_service.get_latest_rate(
+                                        currency_code,
+                                        'USD'
+                                    )
+                                    balance_dict['usd_value'] = float(balance.balance * rate_response.rate)
+                                except Exception as rate_error:
+                                    logger.warning(f"No exchange rate for {currency_code} to USD: {rate_error}")
+                                    balance_dict['usd_value'] = None
+                        except Exception as usd_error:
+                            logger.error(f"Error calculating USD value: {usd_error}")
+                            balance_dict['usd_value'] = None
+
+                    balances.append(balance_dict)
+
             branch_dict["balances"] = balances
             return BranchWithBalances(**branch_dict)
         else:
             return BranchResponse(**branch_dict)
-            
+
     except HTTPException:
         raise
     except Exception as e:
