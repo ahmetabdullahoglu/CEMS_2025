@@ -304,11 +304,10 @@ class CustomerDocumentResponse(CustomerDocumentBase):
     is_verified: bool
     verified_at: Optional[datetime] = None
     verified_by_id: Optional[UUID] = None
-    uploaded_at: datetime
     uploaded_by_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
         use_enum_values = True

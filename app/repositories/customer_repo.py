@@ -255,9 +255,9 @@ class CustomerRepository:
             stmt = stmt.where(CustomerDocument.document_type == document_type)
         if is_verified is not None:
             stmt = stmt.where(CustomerDocument.is_verified == is_verified)
-        
-        stmt = stmt.order_by(desc(CustomerDocument.uploaded_at))
-        
+
+        stmt = stmt.order_by(desc(CustomerDocument.created_at))
+
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
     
