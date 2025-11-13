@@ -288,9 +288,67 @@ async def get_customer(
             include_documents=include_documents,
             include_notes=include_notes
         )
-        
-        return customer
-        
+
+        # Convert to dict to avoid lazy loading issues
+        customer_dict = {
+            "id": customer.id,
+            "customer_number": customer.customer_number,
+            "customer_type": customer.customer_type,
+            "first_name": customer.first_name,
+            "last_name": customer.last_name,
+            "date_of_birth": customer.date_of_birth,
+            "national_id": customer.national_id,
+            "passport_number": customer.passport_number,
+            "phone_number": customer.phone_number,
+            "email": customer.email,
+            "address": customer.address,
+            "city": customer.city,
+            "country": customer.country,
+            "occupation": customer.occupation,
+            "is_verified": customer.is_verified,
+            "verification_date": customer.verification_date,
+            "risk_level": customer.risk_level,
+            "is_active": customer.is_active,
+            "branch_id": customer.branch_id,
+            "registered_by": customer.registered_by,
+            "created_at": customer.created_at,
+            "updated_at": customer.updated_at,
+            # Include documents only if loaded
+            "documents": [
+                {
+                    "id": doc.id,
+                    "document_type": doc.document_type,
+                    "document_number": doc.document_number,
+                    "issue_date": doc.issue_date,
+                    "expiry_date": doc.expiry_date,
+                    "issuing_authority": doc.issuing_authority,
+                    "file_path": doc.file_path,
+                    "is_verified": doc.is_verified,
+                    "verified_by": doc.verified_by,
+                    "verified_at": doc.verified_at,
+                    "notes": doc.notes,
+                    "created_at": doc.created_at,
+                    "updated_at": doc.updated_at
+                }
+                for doc in customer.documents
+            ] if hasattr(customer, 'documents') and customer.documents else [],
+            # Include notes only if loaded
+            "notes": [
+                {
+                    "id": note.id,
+                    "note_text": note.note_text,
+                    "note_type": note.note_type,
+                    "created_by": note.created_by,
+                    "created_at": note.created_at,
+                    "updated_at": note.updated_at
+                }
+                for note in customer.notes
+            ] if hasattr(customer, 'notes') and customer.notes else [],
+            "total_transactions": 0  # TODO: Calculate from transactions
+        }
+
+        return customer_dict
+
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
