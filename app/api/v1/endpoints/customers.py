@@ -325,14 +325,14 @@ async def get_customer(
                     "customer_id": doc.customer_id,
                     "document_type": doc.document_type,
                     "document_number": doc.document_number,
+                    "document_url": doc.document_url,  # Fixed: was file_path
                     "issue_date": doc.issue_date,
                     "expiry_date": doc.expiry_date,
-                    "issuing_authority": doc.issuing_authority if hasattr(doc, 'issuing_authority') else None,
-                    "file_path": doc.file_path if hasattr(doc, 'file_path') else None,
                     "is_verified": doc.is_verified,
-                    "verified_by_id": doc.verified_by_id if hasattr(doc, 'verified_by_id') else None,
-                    "verified_at": doc.verified_at if hasattr(doc, 'verified_at') else None,
-                    "verification_notes": doc.verification_notes if hasattr(doc, 'verification_notes') else None,
+                    "verified_by_id": doc.verified_by_id,
+                    "verified_at": doc.verified_at,
+                    "verification_notes": doc.verification_notes,
+                    "uploaded_by_id": doc.uploaded_by_id,
                     "created_at": doc.created_at,
                     "updated_at": doc.updated_at
                 }
@@ -344,8 +344,8 @@ async def get_customer(
                     "id": note.id,
                     "customer_id": note.customer_id,
                     "note_text": note.note_text,
-                    "note_type": note.note_type if hasattr(note, 'note_type') else None,
-                    "created_by_id": note.created_by_id if hasattr(note, 'created_by_id') else None,
+                    "is_alert": note.is_alert,  # Fixed: was note_type
+                    "created_by_id": note.created_by_id,
                     "created_at": note.created_at,
                     "updated_at": note.updated_at
                 }
