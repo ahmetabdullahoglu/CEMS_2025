@@ -581,24 +581,25 @@ async def get_customer_transactions(
 ):
     """
     Get customer transaction history
-    
-    **Note:** Full implementation will be available when Transaction module is complete
-    
+
+    Returns paginated list of all transactions for the specified customer.
+
     **Permissions:** Authenticated user
     """
     try:
         service = CustomerService(db)
-        transactions = await service.get_customer_transactions(
+        result = await service.get_customer_transactions(
             customer_id=customer_id,
+            skip=skip,
             limit=limit
         )
-        
+
         return {
             "customer_id": str(customer_id),
-            "transactions": transactions,
-            "total": len(transactions)
+            "transactions": result["transactions"],
+            "total": result["total"]
         }
-        
+
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
