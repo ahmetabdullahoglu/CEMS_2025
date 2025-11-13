@@ -20,7 +20,7 @@ Features:
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
@@ -900,7 +900,12 @@ async def list_all_transactions(
 
 @router.get(
     "/{transaction_id}",
-    response_model=dict,  # Will return appropriate type based on transaction_type
+    response_model=Union[
+        IncomeTransactionResponse,
+        ExpenseTransactionResponse,
+        ExchangeTransactionResponse,
+        TransferTransactionResponse
+    ],
     summary="Get Transaction Details",
     description="Get detailed information about any transaction"
 )
@@ -911,23 +916,77 @@ async def get_transaction(
 ):
     """
     Get details of any transaction by ID.
-    
+
     **Permissions Required:** transactions.read
-    
-    Returns appropriate response schema based on transaction type.
+
+    Returns appropriate response schema based on transaction type:
+    - Income transactions → IncomeTransactionResponse
+    - Expense transactions → ExpenseTransactionResponse
+    - Exchange transactions → ExchangeTransactionResponse
+    - Transfer transactions → TransferTransactionResponse
     """
     try:
         service = TransactionService(db)
         transaction = await service.get_transaction(transaction_id)
-        
+
         if not transaction:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Transaction {transaction_id} not found"
             )
-        
-        return transaction
-        
+
+        # Convert to dict to avoid ORM object serialization issues
+        transaction_dict = {
+            "id": transaction.id,
+            "transaction_number": transaction.transaction_number,
+            "transaction_type": transaction.transaction_type,
+            "branch_id": transaction.branch_id,
+            "amount": transaction.amount,
+            "currency_id": transaction.currency_id,
+            "status": transaction.status,
+            "transaction_date": transaction.transaction_date,
+            "notes": transaction.notes,
+            "reference_number": transaction.reference_number,
+            "created_by": transaction.created_by,
+            "created_at": transaction.created_at,
+            "updated_at": transaction.updated_at,
+        }
+
+        # Add type-specific fields based on transaction type
+        if transaction.transaction_type == TransactionType.INCOME:
+            transaction_dict.update({
+                "category": transaction.category,
+                "description": transaction.description,
+            })
+        elif transaction.transaction_type == TransactionType.EXPENSE:
+            transaction_dict.update({
+                "category": transaction.category,
+                "vendor": transaction.vendor,
+                "requires_approval": transaction.requires_approval,
+                "approved_by": transaction.approved_by,
+                "approved_at": transaction.approved_at,
+                "is_approved": transaction.approved_at is not None,
+            })
+        elif transaction.transaction_type == TransactionType.EXCHANGE:
+            transaction_dict.update({
+                "customer_id": transaction.customer_id,
+                "from_currency_id": transaction.from_currency_id,
+                "to_currency_id": transaction.to_currency_id,
+                "from_amount": transaction.from_amount,
+                "to_amount": transaction.to_amount,
+                "exchange_rate": transaction.exchange_rate,
+                "commission_percentage": transaction.commission_percentage,
+                "commission_amount": transaction.commission_amount,
+            })
+        elif transaction.transaction_type == TransactionType.TRANSFER:
+            transaction_dict.update({
+                "from_branch_id": transaction.from_branch_id,
+                "to_branch_id": transaction.to_branch_id,
+                "transfer_type": transaction.transfer_type,
+            })
+
+        return transaction_dict
+
     except HTTPException:
         raise
     except Exception as e:
