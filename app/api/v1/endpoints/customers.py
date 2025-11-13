@@ -29,7 +29,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/customers", tags=["Customers"])
+router = APIRouter(tags=["Customers"])
 
 
 # ==================== Customer CRUD ====================
@@ -288,9 +288,74 @@ async def get_customer(
             include_documents=include_documents,
             include_notes=include_notes
         )
-        
-        return customer
-        
+
+        # Convert to dict to avoid lazy loading issues
+        customer_dict = {
+            "id": customer.id,
+            "customer_number": customer.customer_number,
+            "customer_type": customer.customer_type,
+            "first_name": customer.first_name,
+            "last_name": customer.last_name,
+            "name_ar": customer.name_ar if hasattr(customer, 'name_ar') else None,
+            "date_of_birth": customer.date_of_birth,
+            "nationality": customer.nationality,
+            "national_id": customer.national_id,
+            "passport_number": customer.passport_number,
+            "phone_number": customer.phone_number,
+            "email": customer.email,
+            "address": customer.address,
+            "city": customer.city,
+            "country": customer.country,
+            "is_verified": customer.is_verified,
+            "verified_at": customer.verified_at,
+            "risk_level": customer.risk_level,
+            "is_active": customer.is_active,
+            "branch_id": customer.branch_id,
+            "registered_by_id": customer.registered_by_id,
+            "verified_by_id": customer.verified_by_id if hasattr(customer, 'verified_by_id') else None,
+            "registered_at": customer.registered_at,
+            "last_transaction_date": customer.last_transaction_date if hasattr(customer, 'last_transaction_date') else None,
+            "created_at": customer.created_at,
+            "updated_at": customer.updated_at,
+            "additional_info": customer.additional_info if hasattr(customer, 'additional_info') else None,
+            # Include documents only if explicitly requested (and eagerly loaded)
+            "documents": [
+                {
+                    "id": doc.id,
+                    "customer_id": doc.customer_id,
+                    "document_type": doc.document_type,
+                    "document_number": doc.document_number,
+                    "document_url": doc.document_url,
+                    "issue_date": doc.issue_date,
+                    "expiry_date": doc.expiry_date,
+                    "is_verified": doc.is_verified,
+                    "verified_by_id": doc.verified_by_id,
+                    "verified_at": doc.verified_at,
+                    "verification_notes": doc.verification_notes,
+                    "uploaded_by_id": doc.uploaded_by_id,
+                    "created_at": doc.created_at,
+                    "updated_at": doc.updated_at
+                }
+                for doc in customer.documents
+            ] if include_documents else [],
+            # Include notes only if explicitly requested (and eagerly loaded)
+            "notes": [
+                {
+                    "id": note.id,
+                    "customer_id": note.customer_id,
+                    "note_text": note.note_text,
+                    "is_alert": note.is_alert,
+                    "created_by_id": note.created_by_id,
+                    "created_at": note.created_at,
+                    "updated_at": note.updated_at
+                }
+                for note in customer.notes
+            ] if include_notes else [],
+            "total_transactions": 0  # TODO: Calculate from transactions
+        }
+
+        return customer_dict
+
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -516,24 +581,25 @@ async def get_customer_transactions(
 ):
     """
     Get customer transaction history
-    
-    **Note:** Full implementation will be available when Transaction module is complete
-    
+
+    Returns paginated list of all transactions for the specified customer.
+
     **Permissions:** Authenticated user
     """
     try:
         service = CustomerService(db)
-        transactions = await service.get_customer_transactions(
+        result = await service.get_customer_transactions(
             customer_id=customer_id,
+            skip=skip,
             limit=limit
         )
-        
+
         return {
             "customer_id": str(customer_id),
-            "transactions": transactions,
-            "total": len(transactions)
+            "transactions": result["transactions"],
+            "total": result["total"]
         }
-        
+
     except NotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

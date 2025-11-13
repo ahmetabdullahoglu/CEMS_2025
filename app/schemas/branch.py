@@ -117,7 +117,8 @@ class BranchBalanceResponse(BranchBalanceBase):
     available_balance: Decimal
     last_updated: datetime
     last_reconciled_at: Optional[datetime] = None  # ✅ FIX: Default to None
-    
+    usd_value: Optional[float] = None  # Total USD equivalent value (calculated on demand)
+
     model_config = ConfigDict(from_attributes=True)
 
 

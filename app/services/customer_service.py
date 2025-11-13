@@ -26,6 +26,7 @@ from app.core.exceptions import (
 )
 from app.utils.logger import get_logger
 from app.utils.generators import generate_customer_number
+from app.schemas.transaction import TransactionFilter
 
 logger = get_logger(__name__)
 
@@ -550,17 +551,49 @@ class CustomerService:
     async def get_customer_transactions(
         self,
         customer_id: UUID,
-        date_range: Optional[Tuple[datetime, datetime]] = None,
-        limit: int = 50
-    ) -> List[Any]:
+        skip: int = 0,
+        limit: int = 50,
+        date_range: Optional[Tuple[datetime, datetime]] = None
+    ) -> Dict[str, Any]:
         """
         Get customer transaction history
-        
-        This will be fully implemented when Transaction module is ready
+
+        Args:
+            customer_id: UUID of the customer
+            skip: Number of records to skip for pagination
+            limit: Maximum number of records to return
+            date_range: Optional tuple of (date_from, date_to)
+
+        Returns:
+            Dict with 'transactions' list and 'total' count
         """
-        # Placeholder for transaction integration
-        logger.info(f"Getting transactions for customer {customer_id}")
-        return []
+        # Import here to avoid circular dependency
+        from app.services.transaction_service import TransactionService
+
+        logger.info(f"Getting transactions for customer {customer_id} (skip={skip}, limit={limit})")
+
+        # Verify customer exists
+        customer = await self.repo.get_by_id(customer_id)
+        if not customer:
+            raise NotFoundError(f"Customer {customer_id} not found")
+
+        # Build filter for transactions
+        filters = TransactionFilter(
+            customer_id=customer_id,
+            skip=skip,
+            limit=limit
+        )
+
+        # Add date range if provided
+        if date_range:
+            filters.date_from = date_range[0]
+            filters.date_to = date_range[1]
+
+        # Get transactions using TransactionService
+        transaction_service = TransactionService(self.db)
+        result = await transaction_service.list_transactions(filters, skip=skip, limit=limit)
+
+        return result
     
     async def get_branch_customer_stats(self, branch_id: UUID) -> Dict[str, Any]:
         """Get customer statistics for a branch"""

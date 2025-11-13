@@ -47,7 +47,7 @@ from app.schemas.vault import (
 )
 from app.schemas.common import PaginatedResponse, paginated
 
-router = APIRouter(prefix="/vault", tags=["vault"])
+router = APIRouter(tags=["vault"])
 
 
 # ==================== VAULT MANAGEMENT ====================
@@ -129,8 +129,34 @@ async def list_all_vaults(
         limit=limit
     )
 
+    # Convert vaults to dict format with properly formatted balances
+    vaults_data = []
+    for vault in vaults:
+        vault_dict = {
+            "id": vault.id,
+            "vault_code": vault.vault_code,
+            "name": vault.name,
+            "vault_type": vault.vault_type.value if hasattr(vault.vault_type, 'value') else vault.vault_type,
+            "branch_id": vault.branch_id,
+            "is_active": vault.is_active,
+            "description": vault.description,
+            "location": vault.location,
+            "created_at": vault.created_at,
+            "updated_at": vault.updated_at,
+            "balances": [
+                {
+                    "currency_code": balance.currency.code,
+                    "currency_name": balance.currency.name,
+                    "balance": balance.balance,
+                    "last_updated": balance.last_updated
+                }
+                for balance in vault.balances
+            ]
+        }
+        vaults_data.append(vault_dict)
+
     # Convert to paginated response
-    return paginated(vaults, total, skip, limit)
+    return paginated(vaults_data, total, skip, limit)
 
 
 @router.post(
