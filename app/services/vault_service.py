@@ -171,9 +171,12 @@ class VaultService:
         Returns:
             Tuple of (vaults list, total count)
         """
-        # Build base query
+        # Build base query with eager loading of relationships
+        from app.db.models.vault import VaultBalance
+
         stmt = select(Vault).options(
-            selectinload(Vault.branch)
+            selectinload(Vault.branch),
+            selectinload(Vault.balances).selectinload(VaultBalance.currency)
         )
 
         # Apply filters
