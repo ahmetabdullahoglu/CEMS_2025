@@ -47,7 +47,7 @@ from app.schemas.vault import (
 )
 from app.schemas.common import PaginatedResponse, paginated
 
-router = APIRouter(prefix="/vault", tags=["vault"])
+router = APIRouter(tags=["vault"])
 
 
 # ==================== VAULT MANAGEMENT ====================
