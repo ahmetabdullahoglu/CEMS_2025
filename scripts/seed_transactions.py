@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
 """
-Seed Transactions Script
+Seed Transactions Script - 10X VERSION
 Creates sample transactions of all types for testing
 Run this after seed_customers.py
 
+ENHANCEMENTS:
+- 10x data volume (470+ transactions instead of 47)
+- Dynamic transaction generation
+- Distributed across last 6 months
+- Varied statuses and amounts
+
 Transaction Types:
-- Income: Service fees and commissions
-- Expense: Rent, salaries, utilities
-- Exchange: Currency conversions with customers
-- Transfer: Between branches
+- Income: Service fees and commissions (130 transactions)
+- Expense: Rent, salaries, utilities (100 transactions)
+- Exchange: Currency conversions with customers (150 transactions)
+- Transfer: Between branches (90 transactions)
 
 Usage:
-    python scripts/seed_transactions.py          # Seed transactions (skip if exist)
-    python scripts/seed_transactions.py --force  # Force seed even if exist
+    python scripts/seed_transactions.py          # Seed transactions
     python scripts/seed_transactions.py --show   # Show transactions summary
 """
 
 import asyncio
 import sys
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import random
 
@@ -40,653 +45,388 @@ from app.db.models.branch import Branch
 from app.db.models.currency import Currency
 from app.db.models.customer import Customer
 from app.db.models.user import User
-from app.services.transaction_service import TransactionService
 
 
-async def get_required_data(db: AsyncSession):
-    """Get all required data for creating transactions"""
-    
-    # Get admin user
-    result = await db.execute(select(User).where(User.username == "admin"))
-    admin = result.scalar_one_or_none()
-    if not admin:
-        raise Exception("Admin user not found. Please run seed_data.py first.")
-    
-    # Get teller user (if exists)
-    result = await db.execute(select(User).where(User.username == "teller"))
-    teller = result.scalar_one_or_none()
-    
-    # Get all branches
-    result = await db.execute(select(Branch).where(Branch.is_active == True))
-    branches = list(result.scalars().all())
-    if not branches:
-        raise Exception("No branches found. Please run seed_branches.py first.")
-    
-    # Get currencies
-    result = await db.execute(select(Currency).where(Currency.is_active == True))
-    currencies = {c.code: c for c in result.scalars().all()}
-    if not currencies:
-        raise Exception("No currencies found. Please run seed_currencies.py first.")
-    
-    # Get customers
-    result = await db.execute(
-        select(Customer).where(Customer.is_active == True).limit(5)
-    )
-    customers = list(result.scalars().all())
-    
+# Configuration for 10x data
+INCOME_COUNT = 130      # 10x from 13
+EXPENSE_COUNT = 100     # 10x from 10
+EXCHANGE_COUNT = 150    # 10x from 15
+TRANSFER_COUNT = 90     # 10x from 9
+TOTAL_TRANSACTIONS = 470
+
+
+# Income categories and descriptions
+INCOME_SOURCES = [
+    ("Exchange Commission", IncomeCategory.EXCHANGE_COMMISSION),
+    ("Transfer Fee", IncomeCategory.TRANSFER_FEE),
+    ("Service Fee", IncomeCategory.SERVICE_FEE),
+    ("Other Income", IncomeCategory.OTHER),
+]
+
+# Expense categories and vendors
+EXPENSE_DATA = [
+    ("Office Rent", ExpenseCategory.RENT, ["Landlord Properties", "City Real Estate", "Commercial Rentals"]),
+    ("Employee Salaries", ExpenseCategory.SALARIES, ["Payroll Department", "HR Services"]),
+    ("Utilities", ExpenseCategory.UTILITIES, ["Electric Company", "Water Department", "Telecom Provider"]),
+    ("Maintenance", ExpenseCategory.MAINTENANCE, ["Facility Services", "Tech Support", "Cleaning Services"]),
+    ("Marketing", ExpenseCategory.MARKETING, ["Ad Agency", "Digital Marketing Co", "Media Services"]),
+    ("Office Supplies", ExpenseCategory.SUPPLIES, ["Office Depot", "Stationery Plus", "Supply Store"]),
+]
+
+
+def generate_transaction_date(index: int, total: int) -> datetime:
+    """Generate transaction date distributed over last 6 months"""
+    days_ago = int((index / total) * 180)  # Distribute over 180 days
+    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago)
+
+
+def generate_income_transaction(index: int, branches, currencies, users) -> dict:
+    """Generate income transaction data"""
+    random.seed(1000 + index)
+
+    source, category = random.choice(INCOME_SOURCES)
+    branch = random.choice(branches)
+    currency = random.choice(list(currencies.values()))
+    user = random.choice(users)
+
+    # Amount varies by category
+    if category == IncomeCategory.EXCHANGE_COMMISSION:
+        amount = Decimal(str(random.uniform(5, 50)))
+    elif category == IncomeCategory.TRANSFER_FEE:
+        amount = Decimal(str(random.uniform(10, 100)))
+    else:
+        amount = Decimal(str(random.uniform(20, 500)))
+
+    # 95% completed, 5% pending
+    status = TransactionStatus.COMPLETED if index % 20 != 0 else TransactionStatus.PENDING
+
     return {
-        "admin": admin,
-        "teller": teller or admin,
-        "branches": branches,
-        "currencies": currencies,
-        "customers": customers
+        "type": "income",
+        "branch_id": branch.id,
+        "currency_id": currency.id,
+        "amount": round(amount, 2),
+        "income_category": category,
+        "income_source": f"{source} #{1000 + index}",
+        "description": f"Income from {source.lower()}",
+        "status": status,
+        "created_by_id": user.id,
+        "transaction_date": generate_transaction_date(index, INCOME_COUNT)
     }
 
 
-async def create_income_transactions(
-    db: AsyncSession,
-    service: TransactionService,
-    data: dict
-) -> int:
-    """Create sample income transactions"""
-    
-    print("💰 Creating income transactions...")
-    
-    branches = data["branches"]
-    currencies = data["currencies"]
-    customers = data["customers"]
-    user = data["teller"]
-    
-    income_scenarios = [
-        {
-            "amount": Decimal("150.50"),
-            "currency": "USD",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "International money transfer service fee",
-            "reference": "SVC-001",
-        },
-        {
-            "amount": Decimal("75.00"),
-            "currency": "EUR",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Currency exchange service fee",
-            "reference": "SVC-002",
-        },
-        {
-            "amount": Decimal("250.00"),
-            "currency": "USD",
-            "category": IncomeCategory.COMMISSION,
-            "source": "Monthly commission from partner bank",
-            "reference": "COM-001",
-        },
-        {
-            "amount": Decimal("3500.00"),
-            "currency": "TRY",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Bulk transaction processing fee",
-            "reference": "SVC-003",
-        },
-        {
-            "amount": Decimal("120.00"),
-            "currency": "USD",
-            "category": IncomeCategory.OTHER,
-            "source": "Document verification fee",
-            "reference": "DOC-001",
-        },
-        # ========== ADDITIONAL INCOME SCENARIOS (DOUBLE DATA) ==========
-        {
-            "amount": Decimal("200.00"),
-            "currency": "USD",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Account opening fee",
-            "reference": "SVC-004",
-        },
-        {
-            "amount": Decimal("180.00"),
-            "currency": "EUR",
-            "category": IncomeCategory.COMMISSION,
-            "source": "Foreign exchange commission",
-            "reference": "COM-002",
-        },
-        {
-            "amount": Decimal("95.50"),
-            "currency": "USD",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Wire transfer processing fee",
-            "reference": "SVC-005",
-        },
-        {
-            "amount": Decimal("4200.00"),
-            "currency": "TRY",
-            "category": IncomeCategory.COMMISSION,
-            "source": "Monthly agent commission",
-            "reference": "COM-003",
-        },
-        {
-            "amount": Decimal("85.00"),
-            "currency": "GBP",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Premium service consultation fee",
-            "reference": "SVC-006",
-        },
-        # ========== ADDITIONAL INCOME WITH EGP ==========
-        {
-            "amount": Decimal("2500.00"),
-            "currency": "EGP",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Egyptian client money transfer fee",
-            "reference": "SVC-007",
-        },
-        {
-            "amount": Decimal("350.00"),
-            "currency": "SAR",
-            "category": IncomeCategory.COMMISSION,
-            "source": "Saudi exchange commission",
-            "reference": "COM-004",
-        },
-        {
-            "amount": Decimal("1800.00"),
-            "currency": "EGP",
-            "category": IncomeCategory.SERVICE_FEE,
-            "source": "Multi-currency account opening fee",
-            "reference": "SVC-008",
-        },
+def generate_expense_transaction(index: int, branches, currencies, users) -> dict:
+    """Generate expense transaction data"""
+    random.seed(2000 + index)
+
+    description, category, vendors = random.choice(EXPENSE_DATA)
+    vendor = random.choice(vendors)
+    branch = random.choice(branches)
+    currency = random.choice(list(currencies.values()))
+    user = random.choice(users)
+
+    # Amount varies by category
+    if category == ExpenseCategory.SALARIES:
+        amount = Decimal(str(random.uniform(2000, 10000)))
+    elif category == ExpenseCategory.RENT:
+        amount = Decimal(str(random.uniform(1000, 5000)))
+    elif category == ExpenseCategory.UTILITIES:
+        amount = Decimal(str(random.uniform(100, 1000)))
+    else:
+        amount = Decimal(str(random.uniform(50, 2000)))
+
+    # 10% require approval
+    approval_required = (index % 10 == 0)
+
+    # 90% completed, 10% pending
+    status = TransactionStatus.COMPLETED if index % 10 != 0 else TransactionStatus.PENDING
+
+    # If approved, set approved_by
+    approved_by_id = None
+    approved_at = None
+    if approval_required and status == TransactionStatus.COMPLETED:
+        approved_by_id = user.id
+        approved_at = generate_transaction_date(index, EXPENSE_COUNT) + timedelta(hours=2)
+
+    return {
+        "type": "expense",
+        "branch_id": branch.id,
+        "currency_id": currency.id,
+        "amount": round(amount, 2),
+        "expense_category": category,
+        "expense_to": vendor,
+        "description": f"{description} - {vendor}",
+        "approval_required": approval_required,
+        "approved_by_id": approved_by_id,
+        "approved_at": approved_at,
+        "status": status,
+        "created_by_id": user.id,
+        "transaction_date": generate_transaction_date(index, EXPENSE_COUNT)
+    }
+
+
+def generate_exchange_transaction(index: int, branches, currencies, customers, users) -> dict:
+    """Generate exchange transaction data"""
+    random.seed(3000 + index)
+
+    branch = random.choice(branches)
+    user = random.choice(users)
+
+    # Get two different currencies
+    currency_list = list(currencies.values())
+    from_currency = random.choice(currency_list)
+    to_currency = random.choice([c for c in currency_list if c.id != from_currency.id])
+
+    # Customer (80% have customer, 20% walk-in)
+    customer = random.choice(customers) if customers and index % 5 != 0 else None
+
+    # Amounts
+    from_amount = Decimal(str(random.uniform(100, 10000)))
+
+    # Exchange rate (use a realistic rate or 1.0 if same currency somehow)
+    # In reality, this would come from exchange_rates table
+    exchange_rate = Decimal(str(random.uniform(0.8, 1.5)))
+    to_amount = from_amount * exchange_rate
+
+    # Commission (0.5% to 2%)
+    commission_percentage = Decimal(str(random.uniform(0.5, 2.0)))
+    commission_amount = from_amount * (commission_percentage / 100)
+
+    # 98% completed, 2% pending
+    status = TransactionStatus.COMPLETED if index % 50 != 0 else TransactionStatus.PENDING
+
+    return {
+        "type": "exchange",
+        "branch_id": branch.id,
+        "from_currency_id": from_currency.id,
+        "to_currency_id": to_currency.id,
+        "from_amount": round(from_amount, 2),
+        "to_amount": round(to_amount, 2),
+        "exchange_rate_used": round(exchange_rate, 4),
+        "commission_percentage": round(commission_percentage, 2),
+        "commission_amount": round(commission_amount, 2),
+        "customer_id": customer.id if customer else None,
+        "description": f"Exchange {from_currency.code} to {to_currency.code}",
+        "status": status,
+        "created_by_id": user.id,
+        "transaction_date": generate_transaction_date(index, EXCHANGE_COUNT)
+    }
+
+
+def generate_transfer_transaction(index: int, branches, currencies, users) -> dict:
+    """Generate transfer transaction data"""
+    random.seed(4000 + index)
+
+    # Get two different branches
+    from_branch = random.choice(branches)
+    to_branch = random.choice([b for b in branches if b.id != from_branch.id])
+
+    currency = random.choice(list(currencies.values()))
+    user = random.choice(users)
+
+    # Amount
+    amount = Decimal(str(random.uniform(500, 50000)))
+
+    # Transfer type distribution
+    transfer_types = [
+        (TransferType.BRANCH_TO_BRANCH, 0.6),
+        (TransferType.CASH_DELIVERY, 0.2),
+        (TransferType.VAULT_REPLENISHMENT, 0.2),
     ]
-    
-    created = 0
-    for scenario in income_scenarios:
-        try:
-            branch = random.choice(branches)
-            customer = random.choice(customers) if customers else None
-            currency = currencies[scenario["currency"]]
-            
-            income = await service.create_income(
-                branch_id=branch.id,
-                amount=scenario["amount"],
-                currency_id=currency.id,
-                category=scenario["category"],
-                user_id=user.id,
-                customer_id=customer.id if customer else None,
-                reference_number=scenario["reference"],
-                notes=f"Sample income - {scenario['source']}"
-            )
-            
-            created += 1
-            print(f"  ✅ {income.transaction_number}: {scenario['amount']} {scenario['currency']}")
-            print(f"     {scenario['category'].value} - {branch.code}")
-            
-        except Exception as e:
-            print(f"  ⚠️  Failed to create income: {str(e)}")
-    
+    rand = random.random()
+    cumulative = 0
+    transfer_type = TransferType.BRANCH_TO_BRANCH
+    for ttype, probability in transfer_types:
+        cumulative += probability
+        if rand < cumulative:
+            transfer_type = ttype
+            break
+
+    # 92% completed, 8% in transit/pending
+    status_rand = index % 13
+    if status_rand == 0:
+        status = TransactionStatus.PENDING
+    elif status_rand == 1:
+        status = TransactionStatus.IN_TRANSIT
+    else:
+        status = TransactionStatus.COMPLETED
+
+    return {
+        "type": "transfer",
+        "from_branch_id": from_branch.id,
+        "to_branch_id": to_branch.id,
+        "currency_id": currency.id,
+        "amount": round(amount, 2),
+        "transfer_type": transfer_type,
+        "description": f"Transfer from {from_branch.name} to {to_branch.name}",
+        "status": status,
+        "created_by_id": user.id,
+        "transaction_date": generate_transaction_date(index, TRANSFER_COUNT)
+    }
+
+
+async def seed_transactions(db: AsyncSession):
+    """Seed all transaction types"""
+
+    print("\n💱 Seeding transactions (10X VERSION)...")
+    print(f"   Target: {TOTAL_TRANSACTIONS} transactions")
+    print(f"   - Income: {INCOME_COUNT}")
+    print(f"   - Expense: {EXPENSE_COUNT}")
+    print(f"   - Exchange: {EXCHANGE_COUNT}")
+    print(f"   - Transfer: {TRANSFER_COUNT}")
     print()
-    return created
-
-
-async def create_expense_transactions(
-    db: AsyncSession,
-    service: TransactionService,
-    data: dict
-) -> int:
-    """Create sample expense transactions"""
-    
-    print("💸 Creating expense transactions...")
-    
-    branches = data["branches"]
-    currencies = data["currencies"]
-    admin = data["admin"]
-    teller = data["teller"]
-    
-    expense_scenarios = [
-        {
-            "amount": Decimal("15000.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.RENT,
-            "payee": "Building Management Company",
-            "reference": "RENT-JAN-2025",
-            "requires_approval": True,
-        },
-        {
-            "amount": Decimal("25000.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.SALARY,
-            "payee": "Staff Salaries - January",
-            "reference": "SAL-JAN-2025",
-            "requires_approval": True,
-        },
-        {
-            "amount": Decimal("1500.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.UTILITIES,
-            "payee": "Electricity & Water Provider",
-            "reference": "UTIL-JAN-2025",
-            "requires_approval": False,
-        },
-        {
-            "amount": Decimal("800.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.SUPPLIES,
-            "payee": "Office Supplies Store",
-            "reference": "SUP-001",
-            "requires_approval": False,
-        },
-        {
-            "amount": Decimal("2500.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.MAINTENANCE,
-            "payee": "IT Support & Maintenance",
-            "reference": "MAINT-001",
-            "requires_approval": True,
-        },
-        # ========== ADDITIONAL EXPENSE SCENARIOS (DOUBLE DATA) ==========
-        {
-            "amount": Decimal("3500.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.OTHER,
-            "payee": "Security Services Company",
-            "reference": "SEC-JAN-2025",
-            "requires_approval": True,
-        },
-        {
-            "amount": Decimal("5000.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.OTHER,
-            "payee": "Marketing & Advertising Agency",
-            "reference": "MKT-001",
-            "requires_approval": True,
-        },
-        {
-            "amount": Decimal("4500.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.OTHER,
-            "payee": "Legal & Accounting Firm",
-            "reference": "PROF-001",
-            "requires_approval": True,
-        },
-        {
-            "amount": Decimal("1200.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.UTILITIES,
-            "payee": "Internet & Phone Services",
-            "reference": "COMM-JAN-2025",
-            "requires_approval": False,
-        },
-        {
-            "amount": Decimal("2800.00"),
-            "currency": "TRY",
-            "category": ExpenseCategory.OTHER,
-            "payee": "Staff Training & Development",
-            "reference": "TRAIN-001",
-            "requires_approval": True,
-        },
-    ]
-    
-    created = 0
-    for scenario in expense_scenarios:
-        try:
-            branch = random.choice(branches)
-            currency = currencies[scenario["currency"]]
-            
-            expense = await service.create_expense(
-                branch_id=branch.id,
-                amount=scenario["amount"],
-                currency_id=currency.id,
-                category=scenario["category"],
-                payee=scenario["payee"],
-                user_id=teller.id,
-                reference_number=scenario["reference"],
-                requires_approval=scenario["requires_approval"],
-                notes=f"Sample expense - {scenario['payee']}"
-            )
-            
-            # Approve some expenses
-            if scenario["requires_approval"] and random.choice([True, False]):
-                await service.approve_expense_transaction(
-                    transaction_id=expense.id,
-                    approver_id=admin.id,
-                    approval_notes="Approved - Sample transaction"
-                )
-                status = "✓ Approved"
-            else:
-                status = "⏳ Pending" if scenario["requires_approval"] else "✓ Completed"
-            
-            created += 1
-            print(f"  ✅ {expense.transaction_number}: {scenario['amount']} {scenario['currency']}")
-            print(f"     {scenario['category'].value} - {branch.code} - {status}")
-            
-        except Exception as e:
-            print(f"  ⚠️  Failed to create expense: {str(e)}")
-    
-    print()
-    return created
-
-
-async def create_exchange_transactions(
-    db: AsyncSession,
-    service: TransactionService,
-    data: dict
-) -> int:
-    """Create sample exchange transactions"""
-    
-    print("💱 Creating exchange transactions...")
-    
-    branches = data["branches"]
-    currencies = data["currencies"]
-    customers = data["customers"]
-    user = data["teller"]
-    
-    if not customers:
-        print("  ⚠️  No customers found. Skipping exchanges.")
-        print()
-        return 0
-    
-    exchange_scenarios = [
-        {
-            "from_currency": "USD",
-            "to_currency": "TRY",
-            "from_amount": Decimal("100.00"),
-            "rate": Decimal("32.50"),
-            "commission": Decimal("0.015"),
-        },
-        {
-            "from_currency": "EUR",
-            "to_currency": "TRY",
-            "from_amount": Decimal("200.00"),
-            "rate": Decimal("35.20"),
-            "commission": Decimal("0.015"),
-        },
-        {
-            "from_currency": "TRY",
-            "to_currency": "USD",
-            "from_amount": Decimal("10000.00"),
-            "rate": Decimal("0.0308"),
-            "commission": Decimal("0.02"),
-        },
-        {
-            "from_currency": "USD",
-            "to_currency": "EUR",
-            "from_amount": Decimal("500.00"),
-            "rate": Decimal("0.92"),
-            "commission": Decimal("0.01"),
-        },
-        {
-            "from_currency": "GBP",
-            "to_currency": "TRY",
-            "from_amount": Decimal("150.00"),
-            "rate": Decimal("41.50"),
-            "commission": Decimal("0.015"),
-        },
-        # ========== ADDITIONAL EXCHANGE SCENARIOS (DOUBLE DATA) ==========
-        {
-            "from_currency": "SAR",
-            "to_currency": "TRY",
-            "from_amount": Decimal("1000.00"),
-            "rate": Decimal("8.67"),
-            "commission": Decimal("0.015"),
-        },
-        {
-            "from_currency": "AED",
-            "to_currency": "EUR",
-            "from_amount": Decimal("500.00"),
-            "rate": Decimal("0.251"),
-            "commission": Decimal("0.01"),
-        },
-        {
-            "from_currency": "JPY",
-            "to_currency": "USD",
-            "from_amount": Decimal("50000.00"),
-            "rate": Decimal("0.0067"),
-            "commission": Decimal("0.01"),
-        },
-        {
-            "from_currency": "EUR",
-            "to_currency": "GBP",
-            "from_amount": Decimal("300.00"),
-            "rate": Decimal("0.86"),
-            "commission": Decimal("0.01"),
-        },
-        {
-            "from_currency": "TRY",
-            "to_currency": "EUR",
-            "from_amount": Decimal("8000.00"),
-            "rate": Decimal("0.0283"),
-            "commission": Decimal("0.02"),
-        },
-        # ========== ADDITIONAL EXCHANGE WITH EGP ==========
-        {
-            "from_currency": "EGP",
-            "to_currency": "USD",
-            "from_amount": Decimal("10000.00"),
-            "rate": Decimal("0.0204"),
-            "commission": Decimal("0.015"),
-        },
-        {
-            "from_currency": "USD",
-            "to_currency": "EGP",
-            "from_amount": Decimal("200.00"),
-            "rate": Decimal("49.00"),
-            "commission": Decimal("0.015"),
-        },
-        {
-            "from_currency": "EGP",
-            "to_currency": "TRY",
-            "from_amount": Decimal("5000.00"),
-            "rate": Decimal("0.663"),
-            "commission": Decimal("0.02"),
-        },
-        {
-            "from_currency": "SAR",
-            "to_currency": "EGP",
-            "from_amount": Decimal("2000.00"),
-            "rate": Decimal("13.07"),
-            "commission": Decimal("0.015"),
-        },
-        {
-            "from_currency": "EGP",
-            "to_currency": "EUR",
-            "from_amount": Decimal("8000.00"),
-            "rate": Decimal("0.0188"),
-            "commission": Decimal("0.015"),
-        },
-    ]
-    
-    created = 0
-    for scenario in exchange_scenarios:
-        try:
-            branch = random.choice(branches)
-            customer = random.choice(customers)
-            from_curr = currencies[scenario["from_currency"]]
-            to_curr = currencies[scenario["to_currency"]]
-            
-            exchange = await service.create_exchange(
-                branch_id=branch.id,
-                customer_id=customer.id,
-                from_currency_id=from_curr.id,
-                to_currency_id=to_curr.id,
-                from_amount=scenario["from_amount"],
-                user_id=user.id,
-                notes=f"Sample exchange - {customer.first_name}"
-            )
-
-            created += 1
-            print(f"  ✅ {exchange.transaction_number}")
-            print(f"     {exchange.from_amount} {scenario['from_currency']} → "
-                  f"{exchange.to_amount:.2f} {scenario['to_currency']}")
-            print(f"     Rate: {exchange.exchange_rate_used}, Commission: {exchange.commission_amount:.2f}")
-            print(f"     Customer: {customer.customer_number} - {branch.code}")
-            
-        except Exception as e:
-            print(f"  ⚠️  Failed to create exchange: {str(e)}")
-    
-    print()
-    return created
-
-
-async def create_transfer_transactions(
-    db: AsyncSession,
-    service: TransactionService,
-    data: dict
-) -> int:
-    """Create sample transfer transactions"""
-    
-    print("🔄 Creating transfer transactions...")
-    
-    branches = data["branches"]
-    currencies = data["currencies"]
-    admin = data["admin"]
-    teller = data["teller"]
-    
-    if len(branches) < 2:
-        print("  ⚠️  Need at least 2 branches for transfers. Skipping.")
-        print()
-        return 0
-    
-    transfer_scenarios = [
-        {
-            "amount": Decimal("10000.00"),
-            "currency": "TRY",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "Monthly cash allocation",
-        },
-        {
-            "amount": Decimal("5000.00"),
-            "currency": "USD",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "Foreign currency distribution",
-        },
-        {
-            "amount": Decimal("3000.00"),
-            "currency": "EUR",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "EUR cash replenishment",
-        },
-        # ========== ADDITIONAL TRANSFER SCENARIOS (DOUBLE DATA) ==========
-        {
-            "amount": Decimal("15000.00"),
-            "currency": "TRY",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "Weekly branch cash balance adjustment",
-        },
-        {
-            "amount": Decimal("2500.00"),
-            "currency": "USD",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "USD reserve replenishment",
-        },
-        {
-            "amount": Decimal("1800.00"),
-            "currency": "GBP",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "GBP currency distribution",
-        },
-        # ========== ADDITIONAL TRANSFERS WITH EGP & OTHER CURRENCIES ==========
-        {
-            "amount": Decimal("50000.00"),
-            "currency": "EGP",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "EGP cash replenishment for Egyptian clients",
-        },
-        {
-            "amount": Decimal("8000.00"),
-            "currency": "SAR",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "SAR reserve distribution",
-        },
-        {
-            "amount": Decimal("7500.00"),
-            "currency": "AED",
-            "transfer_type": TransferType.BRANCH_TO_BRANCH,
-            "notes": "AED currency balance adjustment",
-        },
-    ]
-    
-    created = 0
-    for scenario in transfer_scenarios:
-        try:
-            # Pick two different branches
-            from_branch, to_branch = random.sample(branches, 2)
-            currency = currencies[scenario["currency"]]
-            
-            # Initiate transfer
-            transfer = await service.create_transfer(
-                from_branch_id=from_branch.id,
-                to_branch_id=to_branch.id,
-                amount=scenario["amount"],
-                currency_id=currency.id,
-                transfer_type=scenario["transfer_type"],
-                user_id=teller.id,
-                reference_number=f"TRF-{created+1:03d}",
-                notes=scenario["notes"]
-            )
-            
-            # Complete some transfers
-            if random.choice([True, True, False]):  # 66% chance
-                await service.receive_transfer(
-                    transaction_id=transfer.id,
-                    received_by_id=admin.id,
-                    receipt_notes="Transfer received and verified"
-                )
-                status = "✓ Completed"
-            else:
-                status = "⏳ Pending Receipt"
-            
-            created += 1
-            print(f"  ✅ {transfer.transaction_number}")
-            print(f"     {scenario['amount']} {scenario['currency']}")
-            print(f"     {from_branch.code} → {to_branch.code} - {status}")
-            
-        except Exception as e:
-            print(f"  ⚠️  Failed to create transfer: {str(e)}")
-    
-    print()
-    return created
-
-
-async def seed_transactions(db: AsyncSession, force: bool = False):
-    """Main seeding function for transactions"""
-
-    print("💳 Seeding transactions...")
-    print()
-
-    # Check if transactions already exist
-    result = await db.execute(select(func.count(Transaction.id)))
-    existing_count = result.scalar_one()
-
-    if existing_count > 0:
-        print(f"  ℹ️  {existing_count} transactions already exist, skipping seeding.")
-        print(f"     (Use --force flag to add more transactions)")
-        return
 
     # Get required data
-    try:
-        data = await get_required_data(db)
-    except Exception as e:
-        print(f"❌ {str(e)}")
-        return
+    print("📊 Loading required data...")
 
-    print(f"✓ Found {len(data['branches'])} branches")
-    print(f"✓ Found {len(data['currencies'])} currencies")
-    print(f"✓ Found {len(data['customers'])} customers")
-    print(f"✓ Using users: {data['admin'].username}, {data['teller'].username}")
-    print()
-    
-    # Initialize service
-    service = TransactionService(db)
-    
-    # Create transactions
-    income_count = await create_income_transactions(db, service, data)
-    expense_count = await create_expense_transactions(db, service, data)
-    exchange_count = await create_exchange_transactions(db, service, data)
-    transfer_count = await create_transfer_transactions(db, service, data)
-    
+    # Get users
+    result = await db.execute(select(User).where(User.is_active == True))
+    users = list(result.scalars().all())
+    if not users:
+        raise Exception("No users found. Run seed_data.py first.")
+
+    # Get branches
+    result = await db.execute(select(Branch).where(Branch.is_active == True))
+    branches = list(result.scalars().all())
+    if not branches:
+        raise Exception("No branches found. Run seed_branches.py first.")
+    if len(branches) < 2:
+        raise Exception("Need at least 2 branches for transfers.")
+
+    # Get currencies
+    result = await db.execute(select(Currency).where(Currency.is_active == True))
+    currencies = {c.code: c for c in result.scalars().all()}
+    if len(currencies) < 2:
+        raise Exception("Need at least 2 currencies for exchanges.")
+
+    # Get customers
+    result = await db.execute(select(Customer).where(Customer.is_active == True))
+    customers = list(result.scalars().all())
+
+    print(f"✓ Found {len(users)} users, {len(branches)} branches, {len(currencies)} currencies, {len(customers)} customers\n")
+
+    # Track created transactions
+    created_count = 0
+
+    # Create income transactions
+    print(f"💰 Creating {INCOME_COUNT} income transactions...")
+    for i in range(INCOME_COUNT):
+        trans_data = generate_income_transaction(i, branches, currencies, users)
+
+        transaction = IncomeTransaction(
+            branch_id=trans_data["branch_id"],
+            currency_id=trans_data["currency_id"],
+            amount=trans_data["amount"],
+            income_category=trans_data["income_category"],
+            income_source=trans_data["income_source"],
+            description=trans_data["description"],
+            status=trans_data["status"],
+            created_by_id=trans_data["created_by_id"],
+            transaction_date=trans_data["transaction_date"],
+        )
+        db.add(transaction)
+        created_count += 1
+
+        if created_count % 50 == 0:
+            await db.flush()
+            print(f"  Created {created_count} transactions...")
+
+    print(f"✓ Created {INCOME_COUNT} income transactions\n")
+
+    # Create expense transactions
+    print(f"💸 Creating {EXPENSE_COUNT} expense transactions...")
+    for i in range(EXPENSE_COUNT):
+        trans_data = generate_expense_transaction(i, branches, currencies, users)
+
+        transaction = ExpenseTransaction(
+            branch_id=trans_data["branch_id"],
+            currency_id=trans_data["currency_id"],
+            amount=trans_data["amount"],
+            expense_category=trans_data["expense_category"],
+            expense_to=trans_data["expense_to"],
+            description=trans_data["description"],
+            approval_required=trans_data["approval_required"],
+            approved_by_id=trans_data.get("approved_by_id"),
+            approved_at=trans_data.get("approved_at"),
+            status=trans_data["status"],
+            created_by_id=trans_data["created_by_id"],
+            transaction_date=trans_data["transaction_date"],
+        )
+        db.add(transaction)
+        created_count += 1
+
+        if created_count % 50 == 0:
+            await db.flush()
+            print(f"  Created {created_count} transactions...")
+
+    print(f"✓ Created {EXPENSE_COUNT} expense transactions\n")
+
+    # Create exchange transactions
+    print(f"💱 Creating {EXCHANGE_COUNT} exchange transactions...")
+    for i in range(EXCHANGE_COUNT):
+        trans_data = generate_exchange_transaction(i, branches, currencies, customers, users)
+
+        transaction = ExchangeTransaction(
+            branch_id=trans_data["branch_id"],
+            from_currency_id=trans_data["from_currency_id"],
+            to_currency_id=trans_data["to_currency_id"],
+            from_amount=trans_data["from_amount"],
+            to_amount=trans_data["to_amount"],
+            exchange_rate_used=trans_data["exchange_rate_used"],
+            commission_percentage=trans_data["commission_percentage"],
+            commission_amount=trans_data["commission_amount"],
+            customer_id=trans_data.get("customer_id"),
+            description=trans_data["description"],
+            status=trans_data["status"],
+            created_by_id=trans_data["created_by_id"],
+            transaction_date=trans_data["transaction_date"],
+        )
+        db.add(transaction)
+        created_count += 1
+
+        if created_count % 50 == 0:
+            await db.flush()
+            print(f"  Created {created_count} transactions...")
+
+    print(f"✓ Created {EXCHANGE_COUNT} exchange transactions\n")
+
+    # Create transfer transactions
+    print(f"🔄 Creating {TRANSFER_COUNT} transfer transactions...")
+    for i in range(TRANSFER_COUNT):
+        trans_data = generate_transfer_transaction(i, branches, currencies, users)
+
+        transaction = TransferTransaction(
+            from_branch_id=trans_data["from_branch_id"],
+            to_branch_id=trans_data["to_branch_id"],
+            currency_id=trans_data["currency_id"],
+            amount=trans_data["amount"],
+            transfer_type=trans_data["transfer_type"],
+            description=trans_data["description"],
+            status=trans_data["status"],
+            created_by_id=trans_data["created_by_id"],
+            transaction_date=trans_data["transaction_date"],
+        )
+        db.add(transaction)
+        created_count += 1
+
+        if created_count % 50 == 0:
+            await db.flush()
+            print(f"  Created {created_count} transactions...")
+
+    print(f"✓ Created {TRANSFER_COUNT} transfer transactions\n")
+
+    # Commit all
+    await db.commit()
+
     print("=" * 60)
-    print("✅ Transaction seeding completed!")
+    print("✅ Transaction Seeding Complete!")
+    print("=" * 60)
     print()
     print("📊 Summary:")
-    print(f"   💰 Income transactions: {income_count}")
-    print(f"   💸 Expense transactions: {expense_count}")
-    print(f"   💱 Exchange transactions: {exchange_count}")
-    print(f"   🔄 Transfer transactions: {transfer_count}")
-    print(f"   📝 Total: {income_count + expense_count + exchange_count + transfer_count}")
+    print(f"   • Total Created: {created_count} transactions")
+    print(f"   • Income: {INCOME_COUNT}")
+    print(f"   • Expense: {EXPENSE_COUNT}")
+    print(f"   • Exchange: {EXCHANGE_COUNT}")
+    print(f"   • Transfer: {TRANSFER_COUNT}")
     print()
 
 
@@ -696,85 +436,56 @@ async def show_transactions():
     print("Transaction Summary")
     print("=" * 60)
     print()
-    
+
     async with AsyncSessionLocal() as db:
-        # Get transaction counts by type
+        # Count by type
         result = await db.execute(
-            select(
-                Transaction.transaction_type,
-                func.count(Transaction.id).label('count')
-            )
-            .group_by(Transaction.transaction_type)
+            select(func.count(Transaction.id))
+            .where(Transaction.transaction_type == TransactionType.INCOME)
         )
-        by_type = {row[0].value: row[1] for row in result.all()}
-        
-        # Get transaction counts by status
+        income_count = result.scalar()
+
         result = await db.execute(
-            select(
-                Transaction.status,
-                func.count(Transaction.id).label('count')
-            )
-            .group_by(Transaction.status)
+            select(func.count(Transaction.id))
+            .where(Transaction.transaction_type == TransactionType.EXPENSE)
         )
-        by_status = {row[0].value: row[1] for row in result.all()}
-        
-        # Get total amount by currency
+        expense_count = result.scalar()
+
         result = await db.execute(
-            select(
-                Currency.code,
-                func.sum(Transaction.amount).label('total')
-            )
-            .join(Currency, Transaction.currency_id == Currency.id)
-            .group_by(Currency.code)
+            select(func.count(Transaction.id))
+            .where(Transaction.transaction_type == TransactionType.EXCHANGE)
         )
-        by_currency = {row[0]: float(row[1]) for row in result.all()}
-        
-        print("By Type:")
-        for trans_type, count in by_type.items():
-            print(f"  {trans_type.title()}: {count}")
+        exchange_count = result.scalar()
+
+        result = await db.execute(
+            select(func.count(Transaction.id))
+            .where(Transaction.transaction_type == TransactionType.TRANSFER)
+        )
+        transfer_count = result.scalar()
+
+        total = income_count + expense_count + exchange_count + transfer_count
+
+        print(f"Total Transactions: {total}\n")
+        print(f"  💰 Income: {income_count}")
+        print(f"  💸 Expense: {expense_count}")
+        print(f"  💱 Exchange: {exchange_count}")
+        print(f"  🔄 Transfer: {transfer_count}")
         print()
-        
-        print("By Status:")
-        for status, count in by_status.items():
-            print(f"  {status.title()}: {count}")
-        print()
-        
-        print("Total Amounts by Currency:")
-        for currency, total in by_currency.items():
-            print(f"  {currency}: {total:,.2f}")
-        print()
-        
-        # Get recent transactions
-        result = await db.execute(
-            select(Transaction)
-            .order_by(Transaction.created_at.desc())
-            .limit(10)
-        )
-        recent = result.scalars().all()
-        
-        print("Recent Transactions (Last 10):")
-        print("-" * 60)
-        for trans in recent:
-            print(f"{trans.transaction_number}: {trans.transaction_type.value}")
-            print(f"  Amount: {trans.amount} | Status: {trans.status.value}")
-            print(f"  Date: {trans.created_at.strftime('%Y-%m-%d %H:%M')}")
-            print()
 
 
 async def main():
-    """Main function"""
-    print("\n🌱 Starting transaction data seeding...\n")
+    """Main seeding function"""
+    print("\n🌱 Starting transaction data seeding (10X VERSION)...\n")
     print("=" * 60)
-    print("CEMS Transaction Seeding")
+    print("CEMS Transaction Seeding - 10X Data Volume")
     print("=" * 60)
-    print()
-    
+
     try:
         async with AsyncSessionLocal() as db:
             await seed_transactions(db)
-        
+
         print("✨ Transaction seeding completed successfully!")
-        
+
     except Exception as e:
         print(f"\n❌ Error during seeding: {e}")
         import traceback
@@ -786,8 +497,5 @@ if __name__ == "__main__":
     # Check command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--show":
         asyncio.run(show_transactions())
-    elif len(sys.argv) > 1 and sys.argv[1] == "--force":
-        print("⚠️  Force mode: Will add transactions even if they exist")
-        asyncio.run(main())
     else:
         asyncio.run(main())
