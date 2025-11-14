@@ -1,8 +1,32 @@
 #!/bin/bash
 # 🌱 Complete CEMS Database Seeding Script
 # Runs all seed scripts in the correct order with proper error handling
+#
+# Usage:
+#   ./SEED_USAGE_3.sh              # Default: Use new comprehensive seeding
+#   ./SEED_USAGE_3.sh --legacy     # Use legacy individual seed scripts
+#   ./SEED_USAGE_3.sh --small      # Use comprehensive seeding with less data
 
 set -e  # Exit on error
+
+# Parse arguments
+MODE="comprehensive"
+SMALL_MODE=""
+
+for arg in "$@"; do
+    case $arg in
+        --legacy)
+            MODE="legacy"
+            shift
+            ;;
+        --small)
+            SMALL_MODE="--small"
+            shift
+            ;;
+        *)
+            ;;
+    esac
+done
 
 echo "🌱 CEMS Complete Database Seeding"
 echo "===================================="
@@ -14,10 +38,15 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Counters
-TOTAL_STEPS=6
+if [ "$MODE" = "comprehensive" ]; then
+    TOTAL_STEPS=4
+else
+    TOTAL_STEPS=6
+fi
 CURRENT_STEP=0
 
 # Function to print step header
@@ -60,25 +89,57 @@ run_seed() {
 }
 
 # Display seeding plan
-echo -e "${BLUE}📋 Seeding Plan (6 Steps):${NC}"
-echo ""
-echo "   ${CYAN}Phase 1-2:${NC} Foundation & Authentication"
-echo "   ├─ 1️⃣  Users & Roles"
-echo ""
-echo "   ${CYAN}Phase 3:${NC} Currency Management"
-echo "   ├─ 2️⃣  Currencies & Exchange Rates"
-echo ""
-echo "   ${CYAN}Phase 4:${NC} Branch Management"
-echo "   ├─ 3️⃣  Branches & Balances"
-echo ""
-echo "   ${CYAN}Phase 5:${NC} Customer Management"
-echo "   ├─ 4️⃣  Customers & Documents"
-echo ""
-echo "   ${CYAN}Phase 6:${NC} Transaction Management"
-echo "   ├─ 5️⃣  Sample Transactions"
-echo ""
-echo "   ${CYAN}Phase 7:${NC} Vault Management ⭐ ${GREEN}(NEW!)${NC}"
-echo "   └─ 6️⃣  Vaults & Transfers"
+if [ "$MODE" = "comprehensive" ]; then
+    echo -e "${MAGENTA}🌟 Using NEW Comprehensive Seeding Mode${NC}"
+    [ -n "$SMALL_MODE" ] && echo -e "${YELLOW}   (Small mode: reduced dataset)${NC}"
+    echo ""
+    echo -e "${BLUE}📋 Seeding Plan (4 Steps):${NC}"
+    echo ""
+    echo "   ${CYAN}Phase 1-2:${NC} Foundation & Authentication"
+    echo "   ├─ 1️⃣  Users & Roles (admin, managers, tellers)"
+    echo ""
+    echo "   ${CYAN}Phase 3:${NC} Currency Management"
+    echo "   ├─ 2️⃣  Currencies & Exchange Rates"
+    echo ""
+    echo "   ${CYAN}Phase 4:${NC} Branch Management"
+    echo "   ├─ 3️⃣  Branches & Balances"
+    echo ""
+    echo "   ${CYAN}Phase 5-7:${NC} ${MAGENTA}Comprehensive Data${NC} ⭐ ${GREEN}(NEW!)${NC}"
+    echo "   └─ 4️⃣  Users, Customers, Vaults, Transactions (All-in-One)"
+    echo ""
+    echo -e "${GREEN}✨ What you'll get:${NC}"
+    if [ -n "$SMALL_MODE" ]; then
+        echo "      • 10 users, 30 customers, 60 transactions"
+    else
+        echo "      • 30+ users (2 admins, 10 managers, 18+ tellers)"
+        echo "      • 150+ customers with documents & notes"
+        echo "      • 20+ vaults with multi-currency balances"
+        echo "      • 50+ vault transfers"
+        echo "      • 750+ transactions (Exchange, Transfer, Income, Expense)"
+    fi
+else
+    echo -e "${YELLOW}📦 Using Legacy Seeding Mode${NC}"
+    echo ""
+    echo -e "${BLUE}📋 Seeding Plan (6 Steps):${NC}"
+    echo ""
+    echo "   ${CYAN}Phase 1-2:${NC} Foundation & Authentication"
+    echo "   ├─ 1️⃣  Users & Roles"
+    echo ""
+    echo "   ${CYAN}Phase 3:${NC} Currency Management"
+    echo "   ├─ 2️⃣  Currencies & Exchange Rates"
+    echo ""
+    echo "   ${CYAN}Phase 4:${NC} Branch Management"
+    echo "   ├─ 3️⃣  Branches & Balances"
+    echo ""
+    echo "   ${CYAN}Phase 5:${NC} Customer Management"
+    echo "   ├─ 4️⃣  Customers & Documents"
+    echo ""
+    echo "   ${CYAN}Phase 6:${NC} Transaction Management"
+    echo "   ├─ 5️⃣  Sample Transactions"
+    echo ""
+    echo "   ${CYAN}Phase 7:${NC} Vault Management"
+    echo "   └─ 6️⃣  Vaults & Transfers"
+fi
 echo ""
 echo -e "${YELLOW}⏳ Starting in 3 seconds...${NC}"
 sleep 1
@@ -93,23 +154,34 @@ sleep 1
 
 # ==================== Execute Seeding Scripts ====================
 
-# Step 1: Users & Roles (Foundation)
+# Common steps for both modes
 run_seed "seed_data.py" "Users & Roles (Phase 1-2)"
-
-# Step 2: Currencies
 run_seed "seed_currencies.py" "Currencies & Exchange Rates (Phase 3)"
-
-# Step 3: Branches
 run_seed "seed_branches.py" "Branches & Balances (Phase 4)"
 
-# Step 4: Customers
-run_seed "seed_customers.py" "Customers & Documents (Phase 5)"
+# Mode-specific execution
+if [ "$MODE" = "comprehensive" ]; then
+    # New comprehensive seeding
+    print_step "Comprehensive Data (Phase 5-7)"
+    echo -e "${YELLOW}▶ Running: seed_comprehensive.py ${SMALL_MODE}${NC}"
+    echo ""
 
-# Step 5: Transactions
-run_seed "seed_transactions.py" "Sample Transactions (Phase 6)"
-
-# Step 6: Vaults (NEW!)
-run_seed "seed_vaults.py" "Vaults & Transfers (Phase 7)"
+    if python scripts/seed_comprehensive.py $SMALL_MODE; then
+        echo ""
+        echo -e "${GREEN}✅ Comprehensive Data completed successfully${NC}"
+        echo ""
+    else
+        echo ""
+        echo -e "${RED}❌ Comprehensive Data failed${NC}"
+        echo -e "${RED}Error: Seeding stopped at step ${CURRENT_STEP}/${TOTAL_STEPS}${NC}"
+        exit 1
+    fi
+else
+    # Legacy individual seeding
+    run_seed "seed_customers.py" "Customers & Documents (Phase 5)"
+    run_seed "seed_transactions.py" "Sample Transactions (Phase 6)"
+    run_seed "seed_vaults.py" "Vaults & Transfers (Phase 7)"
+fi
 
 # ==================== Success Summary ====================
 
@@ -120,30 +192,77 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo -e "${BLUE}📊 Database Summary:${NC}"
 echo ""
-echo "   ${GREEN}✅${NC} Users & Roles"
-echo "      └─ 3 default roles (admin, manager, teller)"
-echo "      └─ 1 admin user"
-echo ""
-echo "   ${GREEN}✅${NC} Currencies"
-echo "      └─ 7 currencies (USD, EUR, TRY, SAR, AED, GBP, EGP)"
-echo "      └─ Exchange rates matrix"
-echo ""
-echo "   ${GREEN}✅${NC} Branches"
-echo "      └─ 3 branches (BR001, BR002, BR003)"
-echo "      └─ Branch balances by currency"
-echo ""
-echo "   ${GREEN}✅${NC} Customers"
-echo "      └─ 8 sample customers"
-echo "      └─ Customer documents & notes"
-echo ""
-echo "   ${GREEN}✅${NC} Transactions"
-echo "      └─ Income, Expense, Exchange, Transfer"
-echo "      └─ 15+ sample transactions"
-echo ""
-echo "   ${GREEN}✅${NC} Vaults ${CYAN}(NEW!)${NC}"
-echo "      └─ 1 Main vault + 3 Branch vaults"
-echo "      └─ 24 vault balances"
-echo "      └─ 4 sample transfers (completed, pending, in-transit)"
+
+if [ "$MODE" = "comprehensive" ]; then
+    echo "   ${GREEN}✅${NC} Users & Roles"
+    echo "      └─ 3 default roles (admin, manager, teller)"
+    if [ -n "$SMALL_MODE" ]; then
+        echo "      └─ 10+ users"
+    else
+        echo "      └─ 30+ users (2 admins, 10 managers, 18+ tellers)"
+    fi
+    echo ""
+    echo "   ${GREEN}✅${NC} Currencies"
+    echo "      └─ 8 currencies (USD, EUR, TRY, SAR, AED, GBP, EGP, JPY)"
+    echo "      └─ Complete exchange rates matrix"
+    echo ""
+    echo "   ${GREEN}✅${NC} Branches"
+    echo "      └─ 4-5 branches across different regions"
+    echo "      └─ Multi-currency balances per branch"
+    echo ""
+    echo "   ${GREEN}✅${NC} Customers ${MAGENTA}(COMPREHENSIVE!)${NC}"
+    if [ -n "$SMALL_MODE" ]; then
+        echo "      └─ 30 customers"
+    else
+        echo "      └─ 150+ customers (85% individual, 15% corporate)"
+    fi
+    echo "      └─ 1-3 documents per customer (verified)"
+    echo "      └─ 0-3 notes per customer"
+    echo ""
+    echo "   ${GREEN}✅${NC} Vaults ${MAGENTA}(COMPREHENSIVE!)${NC}"
+    if [ -n "$SMALL_MODE" ]; then
+        echo "      └─ 6-8 vaults"
+        echo "      └─ 15+ vault transfers"
+    else
+        echo "      └─ 20+ vaults (Main, Cash, Foreign Currency, Reserve)"
+        echo "      └─ 50+ vault transfers (various statuses)"
+    fi
+    echo "      └─ Multi-currency balances"
+    echo ""
+    echo "   ${GREEN}✅${NC} Transactions ${MAGENTA}(COMPREHENSIVE!)${NC}"
+    if [ -n "$SMALL_MODE" ]; then
+        echo "      └─ 60+ transactions"
+    else
+        echo "      └─ 750+ transactions"
+    fi
+    echo "      └─ 60% Exchange, 20% Transfer, 10% Income, 10% Expense"
+    echo "      └─ Distributed across last 6 months"
+    echo "      └─ Realistic statuses and amounts"
+else
+    echo "   ${GREEN}✅${NC} Users & Roles"
+    echo "      └─ 3 default roles (admin, manager, teller)"
+    echo "      └─ 1 admin user"
+    echo ""
+    echo "   ${GREEN}✅${NC} Currencies"
+    echo "      └─ 8 currencies (USD, EUR, TRY, SAR, AED, GBP, EGP, JPY)"
+    echo "      └─ Exchange rates matrix"
+    echo ""
+    echo "   ${GREEN}✅${NC} Branches"
+    echo "      └─ 4-5 branches"
+    echo "      └─ Branch balances by currency"
+    echo ""
+    echo "   ${GREEN}✅${NC} Customers"
+    echo "      └─ 8 sample customers"
+    echo "      └─ Customer documents & notes"
+    echo ""
+    echo "   ${GREEN}✅${NC} Transactions"
+    echo "      └─ Income, Expense, Exchange, Transfer"
+    echo "      └─ 15+ sample transactions"
+    echo ""
+    echo "   ${GREEN}✅${NC} Vaults"
+    echo "      └─ 1 Main vault + 3 Branch vaults"
+    echo "      └─ Vault balances and transfers"
+fi
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
@@ -162,13 +281,30 @@ echo "   • Branches:     GET    /api/v1/branches"
 echo "   • Transactions: GET    /api/v1/transactions"
 echo "   • Customers:    GET    /api/v1/customers"
 echo ""
-echo -e "${YELLOW}3. Default Login:${NC}"
-echo "   Username: admin"
-echo "   Password: Admin@123"
-echo "   ⚠️  Change password after first login!"
+echo -e "${YELLOW}3. Login Credentials:${NC}"
+if [ "$MODE" = "comprehensive" ]; then
+    echo "   ${MAGENTA}Admin:${NC}"
+    echo "      Username: admin  |  Password: Admin@123"
+    echo ""
+    echo "   ${MAGENTA}Managers:${NC}"
+    echo "      manager01 to manager10  |  Password: Password@123"
+    echo ""
+    echo "   ${MAGENTA}Tellers:${NC}"
+    echo "      teller01 to teller18  |  Password: Password@123"
+else
+    echo "   Username: admin"
+    echo "   Password: Admin@123"
+fi
+echo "   ⚠️  Change passwords after first login!"
 echo ""
 echo -e "${YELLOW}4. Useful Commands:${NC}"
-echo "   • Show vault summary:  python scripts/seed_vaults.py --show"
+if [ "$MODE" = "comprehensive" ]; then
+    echo "   • Re-run seeding:      ./scripts/SEED_USAGE_3.sh"
+    echo "   • Small dataset:       ./scripts/SEED_USAGE_3.sh --small"
+    echo "   • Legacy mode:         ./scripts/SEED_USAGE_3.sh --legacy"
+else
+    echo "   • Show vault summary:  python scripts/seed_vaults.py --show"
+fi
 echo "   • Check migrations:    alembic current"
 echo "   • Reset database:      docker compose down -v && docker compose up -d"
 echo ""
