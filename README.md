@@ -121,6 +121,57 @@ make setup
 # Documentation: http://localhost:8000/docs
 ```
 
+### 🌱 البيانات التجريبية (Seeding)
+
+لتجربة النظام بشكل كامل مع بيانات واقعية، نوفر سكريبتات seed شاملة:
+
+#### التشغيل السريع (موصى به)
+
+```bash
+# داخل حاوية Docker
+docker exec -it cems_app_dev bash
+
+# تشغيل السكريبتات بالترتيب
+python scripts/seed_data.py          # الأدوار والمستخدمين الأساسيين
+python scripts/seed_currencies.py   # العملات وأسعار الصرف
+python scripts/seed_branches.py     # الفروع والأرصدة
+python scripts/seed_comprehensive.py # بيانات شاملة (موصى به!)
+```
+
+#### ما الذي ستحصل عليه؟
+
+بعد تشغيل `seed_comprehensive.py`:
+- 👥 **30+ مستخدم** (2 admins, 10 managers, 18+ tellers)
+- 👤 **150+ عميل** مع وثائق وملاحظات
+- 🏦 **20+ خزنة** بأرصدة متعددة العملات
+- 💸 **50+ تحويل خزنة** بحالات مختلفة
+- 💳 **750+ معاملة**:
+  - 60% صرافة (Exchange)
+  - 20% تحويل (Transfer)
+  - 10% إيرادات (Income)
+  - 10% مصروفات (Expense)
+
+#### الوضع المصغر (للاختبار السريع)
+
+```bash
+# بيانات أقل للاختبار السريع
+python scripts/seed_comprehensive.py --small
+# ينتج: 10 مستخدمين، 30 عميل، 60 معاملة
+```
+
+#### بيانات الدخول بعد التعبئة
+
+**Admin:**
+- Username: `admin` / Password: `Admin@123`
+
+**Managers:**
+- `manager01` إلى `manager10` / Password: `Password@123`
+
+**Tellers:**
+- `teller01` إلى `teller18` / Password: `Password@123`
+
+📖 **المزيد من التفاصيل:** [دليل البيانات التجريبية الكامل](scripts/SEEDING_README.md)
+
 ### 📚 التوثيق
 
 - [📖 دليل الإعداد الكامل](PROJECT_SETUP.md)
@@ -222,6 +273,57 @@ make setup
 # API: http://localhost:8000
 # Docs: http://localhost:8000/docs
 ```
+
+### 🌱 Seed Data for Testing
+
+To test the system with realistic data, we provide comprehensive seeding scripts:
+
+#### Quick Setup (Recommended)
+
+```bash
+# Inside Docker container
+docker exec -it cems_app_dev bash
+
+# Run scripts in order
+python scripts/seed_data.py          # Roles and base users
+python scripts/seed_currencies.py   # Currencies and exchange rates
+python scripts/seed_branches.py     # Branches and balances
+python scripts/seed_comprehensive.py # Comprehensive data (Recommended!)
+```
+
+#### What You'll Get
+
+After running `seed_comprehensive.py`:
+- 👥 **30+ users** (2 admins, 10 managers, 18+ tellers)
+- 👤 **150+ customers** with documents and notes
+- 🏦 **20+ vaults** with multi-currency balances
+- 💸 **50+ vault transfers** with various statuses
+- 💳 **750+ transactions**:
+  - 60% Exchange operations
+  - 20% Transfers
+  - 10% Income
+  - 10% Expenses
+
+#### Small Mode (Quick Testing)
+
+```bash
+# Less data for quick testing
+python scripts/seed_comprehensive.py --small
+# Generates: 10 users, 30 customers, 60 transactions
+```
+
+#### Login Credentials
+
+**Admin:**
+- Username: `admin` / Password: `Admin@123`
+
+**Managers:**
+- `manager01` to `manager10` / Password: `Password@123`
+
+**Tellers:**
+- `teller01` to `teller18` / Password: `Password@123`
+
+📖 **More Details:** [Complete Seeding Guide](scripts/SEEDING_README.md)
 
 ### 📚 Documentation
 
