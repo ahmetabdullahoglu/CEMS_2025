@@ -19,7 +19,7 @@ pydantic==2.5.3             # Data validation (already in main requirements)
 pytest==7.4.3               # Testing framework
 pytest-asyncio==0.21.1      # Async testing support
 pytest-cov==4.1.0           # Code coverage
-faker==20.1.0               # Fake data generation for tests
+faker==22.6.0               # Fake data generation for tests (updated to match requirements.txt)
 
 # Performance Testing (optional)
 locust==2.19.1              # Load testing
