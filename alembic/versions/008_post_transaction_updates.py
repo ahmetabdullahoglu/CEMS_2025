@@ -105,29 +105,11 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
 
     # ---------- Rate update request table ----------
-    # When this consolidated migration is re-run on a database that partially
-    # applied it before failing (for example during local development), the
-    # PostgreSQL enum for rate update request status may already exist even
-    # though the revision itself should start from a clean slate. Dropping the
-    # enum up front ensures the create below is deterministic and avoids
-    # `DuplicateObjectError` exceptions without affecting fresh databases.
-    op.execute("DROP TYPE IF EXISTS rateupdaterequeststatus")
-
-    # Use two ENUM objects: the first actually creates the PostgreSQL type,
-    # while the second (with ``create_type=False``) is attached to the column
-    # definitions below so SQLAlchemy doesn't try to recreate the enum during
-    # ``CREATE TABLE`` and re-trigger the duplicate-type error we just guarded
-    # against above.
-    postgresql.ENUM(
-        *RATE_REQUEST_STATUS_VALUES,
-        name="rateupdaterequeststatus",
-    ).create(bind, checkfirst=True)
-
     rate_status_enum = postgresql.ENUM(
         *RATE_REQUEST_STATUS_VALUES,
         name="rateupdaterequeststatus",
-        create_type=False,
     )
+    rate_status_enum.create(bind, checkfirst=True)
 
     op.create_table(
         "rate_update_requests",
