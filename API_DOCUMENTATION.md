@@ -1168,6 +1168,7 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
       "customer_name": "John Doe",
       "user_id": "uuid",
       "transaction_date": "2025-01-10T10:00:00Z",
+      "description": "Exchange USD to TRY",
       "notes": "Exchange USD to TRY"
     }
   ],
@@ -1205,6 +1206,7 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
   "user_id": "uuid",
   "transaction_date": "2025-01-10T10:00:00Z",
   "completed_at": "2025-01-10T10:01:00Z",
+  "description": "Exchange USD to TRY",
   "notes": "Exchange USD to TRY"
 }
 ```
@@ -1224,6 +1226,7 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
   "currency_id": "uuid",
   "amount": 5000.00,
   "income_source": "Cash deposit",
+  "description": "Service fee for VIP desk",
   "notes": "Monthly deposit"
 }
 ```
@@ -1243,6 +1246,7 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
   "amount": 500.00,
   "expense_category": "Utilities",
   "requires_approval": false,
+  "description": "Utility payment for HQ",
   "notes": "Electricity bill"
 }
 ```
@@ -1266,6 +1270,7 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
   "to_currency_id": "uuid",
   "exchange_rate_id": "uuid",
   "commission_percentage": 1.0,
+  "description": "Exchange USD to TRY for walk-in",
   "notes": "Exchange transaction"
 }
 ```
@@ -1303,6 +1308,7 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
   "currency_id": "uuid",
   "amount": 5000.00,
   "transfer_reason": "Branch replenishment",
+  "description": "Replenish North branch cash",
   "notes": "Transfer to north branch"
 }
 ```

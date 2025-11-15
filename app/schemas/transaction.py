@@ -57,6 +57,10 @@ class TransactionBase(BaseModel):
         max_length=100,
         description="External reference number"
     )
+    description: Optional[str] = Field(
+        None,
+        description="Human-readable transaction summary"
+    )
     notes: Optional[str] = Field(None, description="Transaction notes")
     transaction_date: Optional[datetime] = Field(
         None,
@@ -229,6 +233,10 @@ class ExchangeTransactionCreate(BaseModel):
     )
     
     reference_number: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(
+        None,
+        description="Human-readable transaction summary",
+    )
     notes: Optional[str] = None
     transaction_date: Optional[datetime] = None
     
@@ -250,7 +258,8 @@ class ExchangeTransactionCreate(BaseModel):
                 "exchange_rate": 3.75,
                 "commission_percentage": 1.5,
                 "reference_number": "EXC-2025-001",
-                "notes": "USD to SAR exchange for customer"
+                "description": "USD to SAR exchange for customer",
+                "notes": "Walk-in transaction"
             }
         }
     )
@@ -283,6 +292,7 @@ class ExchangeTransactionResponse(BaseModel):
     total_cost: Decimal = Field(description="Total cost including commission")
 
     reference_number: Optional[str] = None
+    description: Optional[str] = None
     notes: Optional[str] = None
     transaction_date: datetime
     completed_at: Optional[datetime] = None
@@ -340,6 +350,10 @@ class TransferTransactionCreate(BaseModel):
     )
     
     reference_number: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(
+        None,
+        description="Human-readable transaction summary",
+    )
     notes: Optional[str] = None
     transaction_date: Optional[datetime] = None
     
@@ -359,7 +373,8 @@ class TransferTransactionCreate(BaseModel):
                 "currency_id": "423e4567-e89b-12d3-a456-426614174003",
                 "transfer_type": "branch_to_branch",
                 "reference_number": "TRF-2025-001",
-                "notes": "Monthly cash allocation transfer"
+                "description": "Monthly cash allocation transfer",
+                "notes": "Courier drop"
             }
         }
     )
@@ -393,6 +408,7 @@ class TransferTransactionResponse(BaseModel):
     )
 
     reference_number: Optional[str] = None
+    description: Optional[str] = None
     notes: Optional[str] = None
     transaction_date: datetime
     completed_at: Optional[datetime] = None
