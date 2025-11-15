@@ -20,50 +20,22 @@ from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
-# Import enums from models
-from enum import Enum
+from app.core.constants import (
+    TransactionType,
+    TransactionStatus,
+    IncomeCategory,
+    ExpenseCategory,
+)
+from app.db.models.transaction import TransferType
 
 
-# ==================== Enumerations (Mirror from Models) ====================
+# ==================== Enumerations (Mirror from Models/Core) ====================
 
-class TransactionTypeEnum(str, Enum):
-    """Transaction type enumeration"""
-    INCOME = "income"
-    EXPENSE = "expense"
-    EXCHANGE = "exchange"
-    TRANSFER = "transfer"
-
-
-class TransactionStatusEnum(str, Enum):
-    """Transaction status enumeration"""
-    PENDING = "pending"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
-
-
-class IncomeCategoryEnum(str, Enum):
-    """Income categories"""
-    SERVICE_FEE = "service_fee"
-    COMMISSION = "commission"
-    OTHER = "other"
-
-
-class ExpenseCategoryEnum(str, Enum):
-    """Expense categories"""
-    RENT = "rent"
-    SALARY = "salary"
-    UTILITIES = "utilities"
-    MAINTENANCE = "maintenance"
-    SUPPLIES = "supplies"
-    OTHER = "other"
-
-
-class TransferTypeEnum(str, Enum):
-    """Transfer types"""
-    BRANCH_TO_BRANCH = "branch_to_branch"
-    VAULT_TO_BRANCH = "vault_to_branch"
-    BRANCH_TO_VAULT = "branch_to_vault"
+TransactionTypeEnum = TransactionType
+TransactionStatusEnum = TransactionStatus
+IncomeCategoryEnum = IncomeCategory
+ExpenseCategoryEnum = ExpenseCategory
+TransferTypeEnum = TransferType
 
 
 # ==================== Base Transaction Schemas ====================

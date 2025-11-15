@@ -31,47 +31,15 @@ from sqlalchemy.orm import relationship, validates, Session
 from sqlalchemy.ext.hybrid import hybrid_property
 
 from app.db.base import Base
+from app.core.constants import (
+    TransactionType,
+    TransactionStatus,
+    IncomeCategory,
+    ExpenseCategory,
+)
 
 
 # ==================== Enumerations ====================
-
-class TransactionType(str, Enum):
-    """Transaction type enumeration"""
-    INCOME = "income"
-    EXPENSE = "expense"
-    EXCHANGE = "exchange"
-    TRANSFER = "transfer"
-
-
-class TransactionStatus(str, Enum):
-    """
-    Transaction status with state machine rules:
-    pending -> completed (normal flow)
-    pending -> cancelled (by user/admin)
-    pending -> failed (system error)
-    completed -> [immutable]
-    """
-    PENDING = "pending"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
-
-
-class IncomeCategory(str, Enum):
-    """Income transaction categories"""
-    SERVICE_FEE = "service_fee"
-    COMMISSION = "commission"
-    OTHER = "other"
-
-
-class ExpenseCategory(str, Enum):
-    """Expense transaction categories"""
-    RENT = "rent"
-    SALARY = "salary"
-    UTILITIES = "utilities"
-    MAINTENANCE = "maintenance"
-    SUPPLIES = "supplies"
-    OTHER = "other"
 
 
 class TransferType(str, Enum):

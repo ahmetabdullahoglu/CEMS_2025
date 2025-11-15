@@ -88,7 +88,10 @@ async def create_income_transaction(
     
     **Income Categories:**
     - service_fee: Service charges
-    - commission: Commission earnings
+    - exchange_commission: Exchange related commissions
+    - transfer_fee: Domestic/branch transfer fees
+    - commission: Legacy general commissions
+    - interest: Interest earnings
     - other: Other income sources
     
     **Example:**
@@ -244,10 +247,12 @@ async def create_expense_transaction(
     
     **Expense Categories:**
     - rent: Office rent
-    - salary: Employee salaries
+    - salaries: Payroll and allowances (preferred)
+    - salary: Legacy payroll bucket kept for compatibility
     - utilities: Utilities (electricity, water, etc.)
     - maintenance: Maintenance and repairs
     - supplies: Office supplies
+    - marketing: Marketing and acquisition costs
     - other: Other expenses
     
     **Note:** Expense transactions are created in PENDING status
