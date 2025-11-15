@@ -264,10 +264,31 @@ class TestStatusStateMachine:
         )
         db_session.add(transaction)
         db_session.commit()
-        
+
         # Try to cancel completed transaction
         with pytest.raises(ValueError, match="Only pending transactions can be cancelled"):
             transaction.cancel(sample_user_id, "Trying to cancel completed")
+
+    def test_completed_status_sets_completed_at_before_commit(
+        self, db_session, sample_branch_id, sample_user_id, sample_currency_id
+    ):
+        """Transactions saved as completed automatically populate completed_at"""
+        transaction = Transaction(
+            id=uuid4(),
+            transaction_number=f"TRX-AUTO-{uuid4().hex[:6].upper()}",
+            transaction_type=TransactionType.INCOME,
+            branch_id=sample_branch_id,
+            user_id=sample_user_id,
+            currency_id=sample_currency_id,
+            amount=Decimal("250.00"),
+            status=TransactionStatus.COMPLETED,
+            transaction_date=datetime.utcnow()
+        )
+
+        db_session.add(transaction)
+        db_session.commit()
+
+        assert transaction.completed_at is not None
 
 
 # ==================== Income Transaction Tests ====================

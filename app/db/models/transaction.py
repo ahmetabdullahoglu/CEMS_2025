@@ -715,6 +715,20 @@ def generate_transaction_number(mapper, connection, target):
         pass
 
 
+@event.listens_for(Transaction, "before_insert")
+def ensure_completed_timestamp_on_insert(mapper, connection, target):
+    """Ensure completed transactions always have a completion timestamp"""
+    if target.status == TransactionStatus.COMPLETED and not target.completed_at:
+        target.completed_at = datetime.utcnow()
+
+
+@event.listens_for(Transaction, "before_update")
+def ensure_completed_timestamp_on_update(mapper, connection, target):
+    """Ensure updates that mark a transaction complete set completed_at"""
+    if target.status == TransactionStatus.COMPLETED and not target.completed_at:
+        target.completed_at = datetime.utcnow()
+
+
 @event.listens_for(Transaction, "before_update")
 def prevent_completed_modification(mapper, connection, target):
     """Prevent modification of completed transactions"""

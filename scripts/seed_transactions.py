@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Optional
 import random
 
 # Add project root to path
@@ -80,6 +81,20 @@ def generate_transaction_date(index: int, total: int) -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago)
 
 
+def generate_completion_timestamp(status: TransactionStatus, transaction_date: datetime) -> Optional[datetime]:
+    """Return a completion timestamp for completed transactions"""
+    if status != TransactionStatus.COMPLETED:
+        return None
+
+    # Completion within 3 days after transaction date for realism
+    # Using hours/minutes keeps deterministic output with seeded RNG per generator
+    completion_delay = timedelta(
+        hours=random.randint(1, 72),
+        minutes=random.randint(0, 59)
+    )
+    return transaction_date + completion_delay
+
+
 def generate_income_transaction(index: int, branches, currencies, users) -> dict:
     """Generate income transaction data"""
     random.seed(1000 + index)
@@ -100,6 +115,9 @@ def generate_income_transaction(index: int, branches, currencies, users) -> dict
     # 95% completed, 5% pending
     status = TransactionStatus.COMPLETED if index % 20 != 0 else TransactionStatus.PENDING
 
+    transaction_date = generate_transaction_date(index, INCOME_COUNT)
+    completed_at = generate_completion_timestamp(status, transaction_date)
+
     return {
         "type": "income",
         "branch_id": branch.id,
@@ -110,7 +128,8 @@ def generate_income_transaction(index: int, branches, currencies, users) -> dict
         "description": f"Income from {source.lower()}",
         "status": status,
         "user_id": user.id,
-        "transaction_date": generate_transaction_date(index, INCOME_COUNT)
+        "transaction_date": transaction_date,
+        "completed_at": completed_at,
     }
 
 
@@ -147,6 +166,9 @@ def generate_expense_transaction(index: int, branches, currencies, users) -> dic
         approved_by_id = user.id
         approved_at = generate_transaction_date(index, EXPENSE_COUNT) + timedelta(hours=2)
 
+    transaction_date = generate_transaction_date(index, EXPENSE_COUNT)
+    completed_at = generate_completion_timestamp(status, transaction_date)
+
     return {
         "type": "expense",
         "branch_id": branch.id,
@@ -160,7 +182,8 @@ def generate_expense_transaction(index: int, branches, currencies, users) -> dic
         "approved_at": approved_at,
         "status": status,
         "user_id": user.id,
-        "transaction_date": generate_transaction_date(index, EXPENSE_COUNT)
+        "transaction_date": transaction_date,
+        "completed_at": completed_at,
     }
 
 
@@ -194,6 +217,9 @@ def generate_exchange_transaction(index: int, branches, currencies, customers, u
     # 98% completed, 2% pending
     status = TransactionStatus.COMPLETED if index % 50 != 0 else TransactionStatus.PENDING
 
+    transaction_date = generate_transaction_date(index, EXCHANGE_COUNT)
+    completed_at = generate_completion_timestamp(status, transaction_date)
+
     return {
         "type": "exchange",
         "branch_id": branch.id,
@@ -209,7 +235,8 @@ def generate_exchange_transaction(index: int, branches, currencies, customers, u
         "description": f"Exchange {from_currency.code} to {to_currency.code}",
         "status": status,
         "user_id": user.id,
-        "transaction_date": generate_transaction_date(index, EXCHANGE_COUNT)
+        "transaction_date": transaction_date,
+        "completed_at": completed_at,
     }
 
 
@@ -249,6 +276,9 @@ def generate_transfer_transaction(index: int, branches, currencies, users) -> di
     else:
         status = TransactionStatus.COMPLETED
 
+    transaction_date = generate_transaction_date(index, TRANSFER_COUNT)
+    completed_at = generate_completion_timestamp(status, transaction_date)
+
     return {
         "type": "transfer",
         "branch_id": from_branch.id,
@@ -260,7 +290,8 @@ def generate_transfer_transaction(index: int, branches, currencies, users) -> di
         "description": f"Transfer from {from_branch.name} to {to_branch.name}",
         "status": status,
         "user_id": user.id,
-        "transaction_date": generate_transaction_date(index, TRANSFER_COUNT)
+        "transaction_date": transaction_date,
+        "completed_at": completed_at,
     }
 
 
@@ -322,6 +353,7 @@ async def seed_transactions(db: AsyncSession):
             status=trans_data["status"],
             user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
+            completed_at=trans_data["completed_at"],
         )
         db.add(transaction)
         created_count += 1
@@ -350,6 +382,7 @@ async def seed_transactions(db: AsyncSession):
             status=trans_data["status"],
             user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
+            completed_at=trans_data["completed_at"],
         )
         db.add(transaction)
         created_count += 1
@@ -381,6 +414,7 @@ async def seed_transactions(db: AsyncSession):
             status=trans_data["status"],
             user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
+            completed_at=trans_data["completed_at"],
         )
         db.add(transaction)
         created_count += 1
@@ -407,6 +441,7 @@ async def seed_transactions(db: AsyncSession):
             status=trans_data["status"],
             user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
+            completed_at=trans_data["completed_at"],
         )
         db.add(transaction)
         created_count += 1
