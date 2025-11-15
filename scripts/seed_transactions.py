@@ -251,6 +251,7 @@ def generate_transfer_transaction(index: int, branches, currencies, users) -> di
 
     return {
         "type": "transfer",
+        "branch_id": from_branch.id,
         "from_branch_id": from_branch.id,
         "to_branch_id": to_branch.id,
         "currency_id": currency.id,
@@ -396,6 +397,7 @@ async def seed_transactions(db: AsyncSession):
         trans_data = generate_transfer_transaction(i, branches, currencies, users)
 
         transaction = TransferTransaction(
+            branch_id=trans_data["branch_id"],
             from_branch_id=trans_data["from_branch_id"],
             to_branch_id=trans_data["to_branch_id"],
             currency_id=trans_data["currency_id"],

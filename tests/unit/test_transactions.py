@@ -623,24 +623,20 @@ class TestTransferTransaction:
     ):
         """Test that cannot transfer to same branch"""
         branch_id = uuid4()
-        
-        transfer = TransferTransaction(
-            id=uuid4(),
-            transaction_number="TRX-20250109-00001",
-            branch_id=branch_id,
-            user_id=sample_user_id,
-            currency_id=sample_currency_id,
-            amount=Decimal("10000.00"),
-            from_branch_id=branch_id,
-            to_branch_id=branch_id,  # Same branch
-            transfer_type=TransferType.BRANCH_TO_BRANCH,
-            transaction_date=datetime.utcnow()
-        )
-        
-        db_session.add(transfer)
-        
-        with pytest.raises(IntegrityError):
-            db_session.commit()
+
+        with pytest.raises(ValueError, match="Source and destination branches must be different"):
+            TransferTransaction(
+                id=uuid4(),
+                transaction_number="TRX-20250109-00001",
+                branch_id=branch_id,
+                user_id=sample_user_id,
+                currency_id=sample_currency_id,
+                amount=Decimal("10000.00"),
+                from_branch_id=branch_id,
+                to_branch_id=branch_id,  # Same branch
+                transfer_type=TransferType.BRANCH_TO_BRANCH,
+                transaction_date=datetime.utcnow()
+            )
 
 
 # ==================== Transaction Number Generator Tests ====================
