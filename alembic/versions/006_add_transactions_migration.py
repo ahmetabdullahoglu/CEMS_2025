@@ -26,16 +26,16 @@ def upgrade():
     # ==================== Create Enums ====================
     if 'transactiontype' not in existing_enums:
         op.execute("CREATE TYPE transactiontype AS ENUM ('income', 'expense', 'exchange', 'transfer')")
-    
+
     if 'transactionstatus' not in existing_enums:
-        op.execute("CREATE TYPE transactionstatus AS ENUM ('pending', 'completed', 'cancelled', 'failed')")
-    
+        op.execute("CREATE TYPE transactionstatus AS ENUM ('pending', 'in_transit', 'completed', 'cancelled', 'failed', 'reversed')")
+
     if 'incomecategory' not in existing_enums:
-        op.execute("CREATE TYPE incomecategory AS ENUM ('service_fee', 'commission', 'other')")
-    
+        op.execute("CREATE TYPE incomecategory AS ENUM ('service_fee', 'exchange_commission', 'transfer_fee', 'commission', 'interest', 'other')")
+
     if 'expensecategory' not in existing_enums:
-        op.execute("CREATE TYPE expensecategory AS ENUM ('rent', 'salary', 'utilities', 'maintenance', 'supplies', 'other')")
-    
+        op.execute("CREATE TYPE expensecategory AS ENUM ('rent', 'salary', 'salaries', 'utilities', 'maintenance', 'supplies', 'marketing', 'other')")
+
     if 'transfertype' not in existing_enums:
         op.execute("CREATE TYPE transfertype AS ENUM ('branch_to_branch', 'vault_to_branch', 'branch_to_vault')")
     
@@ -59,7 +59,8 @@ def upgrade():
             -- Optional Reference
             reference_number VARCHAR(100),
             notes TEXT,
-            
+            description TEXT,
+
             -- Timestamps
             transaction_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
             completed_at TIMESTAMP WITH TIME ZONE,
