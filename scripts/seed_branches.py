@@ -207,7 +207,7 @@ async def seed_branches(db: AsyncSession):
             "code": "BR010",
             "name_en": "Mersin Akdeniz Branch",
             "name_ar": "فرع مرسين - أكدينيز",
-            "region": RegionEnum.MERSIN,
+            "region": RegionEnum.OTHER,
             "address": "Akdeniz District, Harbour Avenue 55",
             "city": "Mersin",
             "phone": "+903241234567",
