@@ -109,7 +109,7 @@ def generate_income_transaction(index: int, branches, currencies, users) -> dict
         "income_source": f"{source} #{1000 + index}",
         "description": f"Income from {source.lower()}",
         "status": status,
-        "created_by_id": user.id,
+        "user_id": user.id,
         "transaction_date": generate_transaction_date(index, INCOME_COUNT)
     }
 
@@ -159,7 +159,7 @@ def generate_expense_transaction(index: int, branches, currencies, users) -> dic
         "approved_by_id": approved_by_id,
         "approved_at": approved_at,
         "status": status,
-        "created_by_id": user.id,
+        "user_id": user.id,
         "transaction_date": generate_transaction_date(index, EXPENSE_COUNT)
     }
 
@@ -207,7 +207,7 @@ def generate_exchange_transaction(index: int, branches, currencies, customers, u
         "customer_id": customer.id if customer else None,
         "description": f"Exchange {from_currency.code} to {to_currency.code}",
         "status": status,
-        "created_by_id": user.id,
+        "user_id": user.id,
         "transaction_date": generate_transaction_date(index, EXCHANGE_COUNT)
     }
 
@@ -259,7 +259,7 @@ def generate_transfer_transaction(index: int, branches, currencies, users) -> di
         "transfer_type": transfer_type,
         "description": f"Transfer from {from_branch.name} to {to_branch.name}",
         "status": status,
-        "created_by_id": user.id,
+        "user_id": user.id,
         "transaction_date": generate_transaction_date(index, TRANSFER_COUNT)
     }
 
@@ -320,7 +320,7 @@ async def seed_transactions(db: AsyncSession):
             income_source=trans_data["income_source"],
             description=trans_data["description"],
             status=trans_data["status"],
-            created_by_id=trans_data["created_by_id"],
+            user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
         )
         db.add(transaction)
@@ -348,7 +348,7 @@ async def seed_transactions(db: AsyncSession):
             approved_by_id=trans_data.get("approved_by_id"),
             approved_at=trans_data.get("approved_at"),
             status=trans_data["status"],
-            created_by_id=trans_data["created_by_id"],
+            user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
         )
         db.add(transaction)
@@ -377,7 +377,7 @@ async def seed_transactions(db: AsyncSession):
             customer_id=trans_data.get("customer_id"),
             description=trans_data["description"],
             status=trans_data["status"],
-            created_by_id=trans_data["created_by_id"],
+            user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
         )
         db.add(transaction)
@@ -402,7 +402,7 @@ async def seed_transactions(db: AsyncSession):
             transfer_type=trans_data["transfer_type"],
             description=trans_data["description"],
             status=trans_data["status"],
-            created_by_id=trans_data["created_by_id"],
+            user_id=trans_data["user_id"],
             transaction_date=trans_data["transaction_date"],
         )
         db.add(transaction)
