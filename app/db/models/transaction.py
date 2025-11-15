@@ -540,9 +540,14 @@ class ExchangeTransaction(Transaction):
 class TransferTransaction(Transaction):
     """
     Transfer Transaction
-    
+
     Money transfer between branches or between branch and vault.
     Requires sender and receiver confirmation.
+
+    The inherited ``branch_id`` column always represents the source branch
+    that initiated the transfer. This keeps ledger rollups consistent with
+    other transaction types and avoids ambiguity between ``from``/``to``
+    branches.
     """
     
     __tablename__ = None  # Use parent table
@@ -589,7 +594,7 @@ class TransferTransaction(Transaction):
     from_branch = relationship("Branch", foreign_keys=[from_branch_id])
     to_branch = relationship("Branch", foreign_keys=[to_branch_id])
     received_by = relationship("User", foreign_keys=[received_by_id], overlaps="received_transfers")
-    
+
     # ========== Properties ==========
     @hybrid_property
     def is_received(self) -> bool:
@@ -615,6 +620,31 @@ class TransferTransaction(Transaction):
         
         self.received_by_id = receiver_id
         self.received_at = datetime.utcnow()
+
+    # ========== Validators ==========
+    @validates("from_branch_id")
+    def validate_from_branch(self, key, value):
+        """Ensure source branch is set and mirrors base branch_id"""
+        if value is None:
+            raise ValueError("Transfer requires a source branch")
+
+        if self.to_branch_id and value == self.to_branch_id:
+            raise ValueError("Source and destination branches must be different")
+
+        # Keep inherited branch reference in sync for reporting/constraints
+        self.branch_id = value
+        return value
+
+    @validates("to_branch_id")
+    def validate_to_branch(self, key, value):
+        """Ensure destination differs from source"""
+        if value is None:
+            raise ValueError("Transfer requires a destination branch")
+
+        if self.from_branch_id and value == self.from_branch_id:
+            raise ValueError("Source and destination branches must be different")
+
+        return value
     
     def __repr__(self):
         return (
