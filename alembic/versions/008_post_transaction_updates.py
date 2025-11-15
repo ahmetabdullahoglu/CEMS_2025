@@ -77,11 +77,22 @@ def _recreate_enum(
             )
         )
 
-    if _enum_exists(inspector, enum_name):
-        op.execute(sa.text(f"ALTER TYPE {enum_name} RENAME TO {enum_name}_old"))
+    # Step 1: Convert column to TEXT to avoid enum-to-enum comparison issues
+    op.execute(
+        sa.text(
+            f"ALTER TABLE {table_name} ALTER COLUMN {column_name} "
+            f"TYPE TEXT USING {column_name}::text"
+        )
+    )
 
+    # Step 2: Drop old enum if it exists
+    if _enum_exists(inspector, enum_name):
+        op.execute(sa.text(f"DROP TYPE {enum_name}"))
+
+    # Step 3: Create new enum with updated values
     postgresql.ENUM(*new_values, name=enum_name).create(bind, checkfirst=True)
 
+    # Step 4: Convert column from TEXT to new enum
     op.execute(
         sa.text(
             f"ALTER TABLE {table_name} ALTER COLUMN {column_name} "
@@ -96,8 +107,6 @@ def _recreate_enum(
                 f"SET DEFAULT '{default_value}'"
             )
         )
-
-    op.execute(sa.text(f"DROP TYPE IF EXISTS {enum_name}_old"))
 
 
 def upgrade() -> None:
