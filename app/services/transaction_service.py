@@ -986,9 +986,12 @@ class TransactionService:
             if not transfer:
                 raise ValidationError(f"Transfer {transfer_id} not found")
             
-            if transfer.status != TransactionStatus.PENDING:
+            if transfer.status not in {
+                TransactionStatus.PENDING,
+                TransactionStatus.IN_TRANSIT
+            }:
                 raise ValidationError(
-                    f"Transfer {transfer_id} is not pending (status: {transfer.status})"
+                    f"Transfer {transfer_id} cannot be completed from status: {transfer.status}"
                 )
             
             # Atomic operation - Phase 2

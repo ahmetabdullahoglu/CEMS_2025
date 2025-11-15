@@ -410,6 +410,34 @@ class TestTransferTransactions:
         # Verify reserved balance released
         transaction_service.balance_service.release_reserved_balance.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_complete_transfer_in_transit_success(
+        self, transaction_service, mock_db, sample_user_id
+    ):
+        """Transfers in transit can also be completed"""
+        transfer_id = uuid4()
+
+        mock_transfer = Mock(spec=TransferTransaction)
+        mock_transfer.id = transfer_id
+        mock_transfer.status = TransactionStatus.IN_TRANSIT
+        mock_transfer.from_branch_id = uuid4()
+        mock_transfer.to_branch_id = uuid4()
+        mock_transfer.currency_id = uuid4()
+        mock_transfer.amount = Decimal('1000.00')
+
+        mock_db.get.return_value = mock_transfer
+
+        transaction_service.balance_service.update_balance = AsyncMock()
+        transaction_service.balance_service.release_reserved_balance = AsyncMock()
+
+        await transaction_service.complete_transfer(
+            transfer_id=transfer_id,
+            received_by_user_id=sample_user_id
+        )
+
+        assert mock_transfer.status == TransactionStatus.COMPLETED
+        transaction_service.balance_service.release_reserved_balance.assert_called_once()
+
 
 # ==================== CANCELLATION TESTS ====================
 

@@ -562,13 +562,16 @@ class TransactionValidationService:
            transfer.transaction_type != TransactionType.TRANSFER:
             raise ValidationError("Not a transfer transaction")
         
-        if transfer.status != TransactionStatus.PENDING:
+        if transfer.status not in {
+            TransactionStatus.PENDING,
+            TransactionStatus.IN_TRANSIT
+        }:
             raise BusinessRuleViolationError(
-                f"Transfer {transfer.transaction_number} is not pending "
+                f"Transfer {transfer.transaction_number} is not ready for receipt "
                 f"(status: {transfer.status})"
             )
-        
+
         return {
             'can_receive': True,
-            'reason': 'Transfer is pending and ready for receipt'
+            'reason': 'Transfer is ready for receipt'
         }

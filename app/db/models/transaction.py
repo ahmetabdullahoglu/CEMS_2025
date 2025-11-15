@@ -273,8 +273,13 @@ class Transaction(Base):
         # Define valid transitions
         valid_transitions = {
             TransactionStatus.PENDING: [
+                TransactionStatus.IN_TRANSIT,
                 TransactionStatus.COMPLETED,
                 TransactionStatus.CANCELLED,
+                TransactionStatus.FAILED
+            ],
+            TransactionStatus.IN_TRANSIT: [
+                TransactionStatus.COMPLETED,
                 TransactionStatus.FAILED
             ],
             TransactionStatus.COMPLETED: [],  # Immutable
