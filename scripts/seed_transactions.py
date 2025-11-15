@@ -229,8 +229,8 @@ def generate_transfer_transaction(index: int, branches, currencies, users) -> di
     # Transfer type distribution
     transfer_types = [
         (TransferType.BRANCH_TO_BRANCH, 0.6),
-        (TransferType.CASH_DELIVERY, 0.2),
-        (TransferType.VAULT_REPLENISHMENT, 0.2),
+        (TransferType.VAULT_TO_BRANCH, 0.2),
+        (TransferType.BRANCH_TO_VAULT, 0.2),
     ]
     rand = random.random()
     cumulative = 0

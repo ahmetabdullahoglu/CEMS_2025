@@ -88,6 +88,7 @@ class TransactionService:
             user_id=user_id,
             customer_id=transaction.customer_id,
             reference_number=transaction.reference_number,
+            description=transaction.description,
             notes=transaction.notes
         )
 
@@ -100,6 +101,7 @@ class TransactionService:
         user_id: UUID,
         customer_id: Optional[UUID] = None,
         reference_number: Optional[str] = None,
+        description: Optional[str] = None,
         notes: Optional[str] = None
     ) -> IncomeTransaction:
         """
@@ -122,6 +124,7 @@ class TransactionService:
             user_id: User executing transaction
             customer_id: Optional customer reference
             reference_number: Optional external reference
+            description: Optional transaction description
             notes: Optional transaction notes
             
         Returns:
@@ -153,6 +156,8 @@ class TransactionService:
             # Step 3-7: Atomic operation
             try:
                 # Create income transaction
+                description_value = description or notes
+
                 income = IncomeTransaction(
                     transaction_number=transaction_number,
                     status=TransactionStatus.PENDING,
@@ -162,6 +167,7 @@ class TransactionService:
                     user_id=user_id,
                     customer_id=customer_id,
                     reference_number=reference_number,
+                    description=description_value,
                     notes=notes,
                     income_category=category,
                     transaction_date=datetime.utcnow()
@@ -316,6 +322,7 @@ class TransactionService:
             payee=transaction.expense_to,
             user_id=user_id,
             reference_number=transaction.reference_number,
+            description=transaction.description,
             notes=transaction.notes,
             requires_approval=transaction.approval_required
         )
@@ -329,6 +336,7 @@ class TransactionService:
         payee: str,
         user_id: UUID,
         reference_number: Optional[str] = None,
+        description: Optional[str] = None,
         notes: Optional[str] = None,
         requires_approval: bool = False
     ) -> ExpenseTransaction:
@@ -353,6 +361,7 @@ class TransactionService:
             payee: Payment recipient
             user_id: User executing transaction
             reference_number: Optional external reference
+            description: Optional transaction description
             notes: Optional transaction notes
             requires_approval: Whether approval is needed
             
@@ -399,6 +408,8 @@ class TransactionService:
             # Step 3-8: Atomic operation
             try:
                 # Create expense transaction
+                description_value = description or notes
+
                 expense = ExpenseTransaction(
                     transaction_number=transaction_number,
                     status=TransactionStatus.PENDING if requires_approval else TransactionStatus.PENDING,
@@ -407,6 +418,7 @@ class TransactionService:
                     branch_id=branch_id,
                     user_id=user_id,
                     reference_number=reference_number,
+                    description=description_value,
                     notes=notes,
                     expense_category=category,
                     expense_to=payee.strip(),
@@ -551,6 +563,7 @@ class TransactionService:
             from_amount=transaction.from_amount,
             user_id=user_id,
             reference_number=transaction.reference_number,
+            description=transaction.description,
             notes=transaction.notes
         )
 
@@ -563,6 +576,7 @@ class TransactionService:
         from_amount: Decimal,
         user_id: UUID,
         reference_number: Optional[str] = None,
+        description: Optional[str] = None,
         notes: Optional[str] = None
     ) -> ExchangeTransaction:
         """
@@ -590,6 +604,7 @@ class TransactionService:
             from_amount: Amount to exchange
             user_id: User executing transaction
             reference_number: Optional external reference
+            description: Optional transaction description
             notes: Optional transaction notes
             
         Returns:
@@ -667,6 +682,8 @@ class TransactionService:
             # Steps 6-12: Atomic operation
             try:
                 # Create exchange transaction
+                description_value = description or notes
+
                 exchange = ExchangeTransaction(
                     transaction_number=transaction_number,
                     status=TransactionStatus.PENDING,
@@ -676,6 +693,7 @@ class TransactionService:
                     user_id=user_id,
                     customer_id=customer_id,
                     reference_number=reference_number,
+                    description=description_value,
                     notes=notes,
                     from_currency_id=from_currency_id,
                     to_currency_id=to_currency_id,
@@ -777,6 +795,7 @@ class TransactionService:
             user_id=user_id,
             transfer_type=transaction.transfer_type,
             reference_number=transaction.reference_number,
+            description=transaction.description,
             notes=transaction.notes
         )
 
@@ -789,6 +808,7 @@ class TransactionService:
         user_id: UUID,
         transfer_type: TransferType = TransferType.BRANCH_TO_BRANCH,
         reference_number: Optional[str] = None,
+        description: Optional[str] = None,
         notes: Optional[str] = None
     ) -> TransferTransaction:
         """
@@ -813,6 +833,7 @@ class TransactionService:
             user_id: User initiating transfer
             transfer_type: Type of transfer
             reference_number: Optional external reference
+            description: Optional transfer description
             notes: Optional transfer notes
             
         Returns:
@@ -857,6 +878,8 @@ class TransactionService:
             # Atomic operation - Phase 1
             try:
                 # Create transfer transaction
+                description_value = description or notes
+
                 transfer = TransferTransaction(
                     transaction_number=transaction_number,
                     status=TransactionStatus.PENDING,
@@ -865,6 +888,7 @@ class TransactionService:
                     branch_id=from_branch_id,
                     user_id=user_id,
                     reference_number=reference_number,
+                    description=description_value,
                     notes=notes,
                     from_branch_id=from_branch_id,
                     to_branch_id=to_branch_id,

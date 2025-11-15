@@ -307,6 +307,7 @@ python scripts/seed_vaults.py       # 40+ vault transfers (10X!)
   - 100 Expense transactions (rent, salaries, utilities)
   - 150 Exchange transactions (currency conversions)
   - 90 Transfer transactions (branch-to-branch)
+- Every seeded transaction now includes a `description` summary that's surfaced by the API responses
 - 🏦 **Multiple vaults** with multi-currency balances
 - 💸 **40 vault transfers** (70% completed, 15% in-transit, 10% pending, 5% cancelled)
 

@@ -125,6 +125,11 @@ class Transaction(Base):
         nullable=True,
         comment="External reference number"
     )
+    description = Column(
+        Text,
+        nullable=True,
+        comment="Human-readable transaction summary"
+    )
     notes = Column(Text, nullable=True)
 
     # ========== Commission (primarily for Exchange transactions) ==========
