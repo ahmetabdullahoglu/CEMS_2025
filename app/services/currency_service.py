@@ -20,6 +20,7 @@ from app.schemas.currency import (
     ExchangeRateResponse
 )
 from app.db.models.currency import Currency, ExchangeRate
+from app.core.config import settings
 from app.core.exceptions import (
     ValidationError,
     ResourceNotFoundError,
@@ -637,6 +638,129 @@ class CurrencyService:
             'effective_from': rate_response.effective_from,
             'notes': rate_response.notes
         }
+
+    async def get_system_base_currency_code(self) -> str:
+        """Return configured base currency code (DB or fallback to settings)."""
+        base_currency = await self.repo.get_base_currency()
+        if base_currency:
+            return base_currency.code.upper()
+        return settings.DEFAULT_BASE_CURRENCY.upper()
+
+    async def convert_to_base_currency(
+        self,
+        amount: Decimal,
+        from_currency_code: str,
+        base_currency_code: Optional[str] = None
+    ) -> Decimal:
+        """Convert an amount to the system base currency with multi-hop fallback."""
+        if amount is None or from_currency_code is None:
+            return Decimal('0')
+
+        amount_decimal = Decimal(amount)
+        if amount_decimal <= 0:
+            return Decimal('0')
+
+        base_code = (base_currency_code or await self.get_system_base_currency_code()).upper()
+        source_code = from_currency_code.upper()
+
+        if source_code == base_code:
+            return amount_decimal
+
+        # Try direct/inverse and USD intermediary via get_latest_rate
+        for use_intermediary in (False, True):
+            try:
+                rate_response = await self.get_latest_rate(
+                    source_code,
+                    base_code,
+                    use_intermediary=use_intermediary
+                )
+                converted = (amount_decimal * rate_response.rate).quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+                return converted
+            except ResourceNotFoundError:
+                continue
+            except Exception as exc:  # pragma: no cover - logging only
+                logger.warning(
+                    "Error converting %s -> %s using use_intermediary=%s: %s",
+                    source_code,
+                    base_code,
+                    use_intermediary,
+                    exc
+                )
+
+        # Try any available intermediary currency (multi-hop)
+        intermediary_conversion = await self._convert_via_intermediary_currency(
+            amount_decimal,
+            source_code,
+            base_code
+        )
+        if intermediary_conversion is not None:
+            return intermediary_conversion
+
+        logger.warning(
+            "No conversion path found for %s -> %s. Returning 0.",
+            source_code,
+            base_code
+        )
+        return Decimal('0')
+
+    async def _convert_via_intermediary_currency(
+        self,
+        amount: Decimal,
+        from_currency_code: str,
+        to_currency_code: str
+    ) -> Optional[Decimal]:
+        """Attempt conversion via any intermediary currency if USD path is missing."""
+        currencies = await self.repo.get_all_currencies(include_inactive=False)
+        if not currencies:
+            return None
+
+        for intermediary in currencies:
+            intermediary_code = intermediary.code.upper()
+            if intermediary_code in (from_currency_code.upper(), to_currency_code.upper()):
+                continue
+
+            try:
+                first_leg = await self.get_latest_rate(
+                    from_currency_code,
+                    intermediary_code,
+                    use_intermediary=False
+                )
+                second_leg = await self.get_latest_rate(
+                    intermediary_code,
+                    to_currency_code,
+                    use_intermediary=False
+                )
+            except ResourceNotFoundError:
+                continue
+            except Exception as exc:  # pragma: no cover - logging only
+                logger.debug(
+                    "Intermediary %s failed for %s -> %s: %s",
+                    intermediary_code,
+                    from_currency_code,
+                    to_currency_code,
+                    exc
+                )
+                continue
+
+            combined_rate = first_leg.rate * second_leg.rate
+            converted = (amount * combined_rate).quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+            logger.debug(
+                "Converted %s %s -> %s via %s (rate %s)",
+                amount,
+                from_currency_code,
+                to_currency_code,
+                intermediary_code,
+                combined_rate
+            )
+            return converted
+
+        return None
 
     async def aggregate_balances(
         self,
