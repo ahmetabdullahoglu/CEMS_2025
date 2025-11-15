@@ -263,7 +263,9 @@ class BranchBalanceListResponse(BaseModel):
     """Schema for list of balances"""
     total: int
     balances: List[BranchBalanceResponse | dict]  # ✅ FIX: Support dict too
-    
+    total_in_usd: Decimal = Field(..., description="Total balance value converted to base currency")
+    base_currency_code: str = Field(..., description="Base currency code used for conversion")
+
     model_config = ConfigDict(from_attributes=True)
 
 
