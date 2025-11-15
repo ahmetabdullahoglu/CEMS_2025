@@ -276,8 +276,11 @@ class TestIncomeTransaction:
         """Test different income categories"""
         categories = [
             IncomeCategory.SERVICE_FEE,
+            IncomeCategory.EXCHANGE_COMMISSION,
+            IncomeCategory.TRANSFER_FEE,
+            IncomeCategory.INTEREST,
             IncomeCategory.COMMISSION,
-            IncomeCategory.OTHER
+            IncomeCategory.OTHER,
         ]
         
         for i, category in enumerate(categories):
@@ -297,7 +300,7 @@ class TestIncomeTransaction:
         
         # Verify all created
         incomes = db_session.query(IncomeTransaction).all()
-        assert len(incomes) == 3
+        assert len(incomes) == len(categories)
 
 
 # ==================== Expense Transaction Tests ====================
@@ -329,7 +332,40 @@ class TestExpenseTransaction:
         assert expense.expense_category == ExpenseCategory.RENT
         assert expense.expense_to == "Property Owner LLC"
         assert not expense.approval_required
-    
+
+    def test_expense_categories(
+        self, db_session, sample_branch_id, sample_user_id, sample_currency_id
+    ):
+        """Test creating expenses across the supported categories"""
+        categories = [
+            ExpenseCategory.RENT,
+            ExpenseCategory.SALARIES,
+            ExpenseCategory.MARKETING,
+            ExpenseCategory.UTILITIES,
+            ExpenseCategory.MAINTENANCE,
+            ExpenseCategory.SUPPLIES,
+            ExpenseCategory.OTHER,
+        ]
+
+        for idx, category in enumerate(categories):
+            expense = ExpenseTransaction(
+                id=uuid4(),
+                transaction_number=f"TRX-EXP-{idx+1:05d}",
+                branch_id=sample_branch_id,
+                user_id=sample_user_id,
+                currency_id=sample_currency_id,
+                amount=Decimal("250.00"),
+                expense_category=category,
+                expense_to=f"Vendor {idx}",
+                transaction_date=datetime.utcnow(),
+            )
+            db_session.add(expense)
+
+        db_session.commit()
+
+        expenses = db_session.query(ExpenseTransaction).all()
+        assert len(expenses) >= len(categories)
+
     def test_expense_approval_workflow(
         self, db_session, sample_branch_id, sample_user_id, sample_currency_id
     ):

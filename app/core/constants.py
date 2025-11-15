@@ -63,17 +63,22 @@ class TransactionStatus(str, Enum):
 
 
 class IncomeCategory(str, Enum):
-    """Income source categories"""
+    """Income source categories shared across API, DB and scripts"""
+
     SERVICE_FEE = "service_fee"
-    COMMISSION = "commission"
+    EXCHANGE_COMMISSION = "exchange_commission"
+    TRANSFER_FEE = "transfer_fee"
+    COMMISSION = "commission"  # Legacy generic commission bucket
     INTEREST = "interest"
     OTHER = "other"
 
 
 class ExpenseCategory(str, Enum):
-    """Expense type categories"""
+    """Expense type categories shared across API, DB and scripts"""
+
     RENT = "rent"
-    SALARY = "salary"
+    SALARY = "salary"          # Legacy value kept for existing data
+    SALARIES = "salaries"      # Preferred payroll category going forward
     UTILITIES = "utilities"
     MAINTENANCE = "maintenance"
     SUPPLIES = "supplies"

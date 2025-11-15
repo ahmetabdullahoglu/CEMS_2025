@@ -118,7 +118,7 @@ class TransactionService:
             branch_id: Branch receiving income
             amount: Income amount (must be positive)
             currency_id: Currency of transaction
-            category: Income category (SERVICE_FEE, COMMISSION, OTHER)
+            category: Income category (SERVICE_FEE, EXCHANGE_COMMISSION, TRANSFER_FEE, etc.)
             user_id: User executing transaction
             customer_id: Optional customer reference
             reference_number: Optional external reference
