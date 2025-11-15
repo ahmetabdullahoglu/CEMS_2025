@@ -242,12 +242,10 @@ def generate_transfer_transaction(index: int, branches, currencies, users) -> di
             transfer_type = ttype
             break
 
-    # 92% completed, 8% in transit/pending
+    # 92% completed, 8% pending
     status_rand = index % 13
     if status_rand == 0:
         status = TransactionStatus.PENDING
-    elif status_rand == 1:
-        status = TransactionStatus.IN_TRANSIT
     else:
         status = TransactionStatus.COMPLETED
 
