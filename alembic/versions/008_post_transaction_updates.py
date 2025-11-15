@@ -108,8 +108,11 @@ def upgrade() -> None:
     rate_status_enum = postgresql.ENUM(
         *RATE_REQUEST_STATUS_VALUES,
         name="rateupdaterequeststatus",
+        create_type=False,
     )
-    rate_status_enum.create(bind, checkfirst=True)
+
+    if not _enum_exists(inspector, "rateupdaterequeststatus"):
+        rate_status_enum.create(bind, checkfirst=False)
 
     op.create_table(
         "rate_update_requests",
