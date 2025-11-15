@@ -134,7 +134,7 @@ class IncomeTransactionCreate(TransactionBase):
 
 class IncomeTransactionResponse(TransactionBase):
     """Schema for income transaction response"""
-    
+
     id: UUID
     transaction_number: str
     transaction_type: TransactionTypeEnum
@@ -142,13 +142,14 @@ class IncomeTransactionResponse(TransactionBase):
     income_category: IncomeCategoryEnum
     income_source: Optional[str] = None
     user_id: UUID
+    branch_name: Optional[str] = Field(None, description="Branch name")
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     cancelled_by_id: Optional[UUID] = None
     cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -189,7 +190,7 @@ class ExpenseTransactionCreate(TransactionBase):
 
 class ExpenseTransactionResponse(TransactionBase):
     """Schema for expense transaction response"""
-    
+
     id: UUID
     transaction_number: str
     transaction_type: TransactionTypeEnum
@@ -200,16 +201,17 @@ class ExpenseTransactionResponse(TransactionBase):
     approved_by_id: Optional[UUID] = None
     approved_at: Optional[datetime] = None
     user_id: UUID
+    branch_name: Optional[str] = Field(None, description="Branch name")
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     cancelled_by_id: Optional[UUID] = None
     cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
+
     # Computed field
     is_approved: bool = Field(default=False, description="Approval status")
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -284,29 +286,30 @@ class ExchangeTransactionCreate(BaseModel):
 
 class ExchangeTransactionResponse(BaseModel):
     """Schema for exchange transaction response"""
-    
+
     id: UUID
     transaction_number: str
     transaction_type: TransactionTypeEnum
     status: TransactionStatusEnum
-    
+
     branch_id: UUID
+    branch_name: Optional[str] = Field(None, description="Branch name")
     customer_id: Optional[UUID]
     user_id: UUID
-    
+
     from_currency_id: UUID
     to_currency_id: UUID
     from_amount: Decimal
     to_amount: Decimal
-    
+
     exchange_rate_used: Decimal
     commission_amount: Decimal
     commission_percentage: Decimal
-    
+
     # Computed fields
     effective_rate: Decimal = Field(description="Effective rate with commission")
     total_cost: Decimal = Field(description="Total cost including commission")
-    
+
     reference_number: Optional[str] = None
     notes: Optional[str] = None
     transaction_date: datetime
@@ -316,7 +319,7 @@ class ExchangeTransactionResponse(BaseModel):
     cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -392,29 +395,31 @@ class TransferTransactionCreate(BaseModel):
 
 class TransferTransactionResponse(BaseModel):
     """Schema for transfer transaction response"""
-    
+
     id: UUID
     transaction_number: str
     transaction_type: TransactionTypeEnum
     status: TransactionStatusEnum
-    
+
     from_branch_id: UUID
+    from_branch_name: Optional[str] = Field(None, description="Source branch name")
     to_branch_id: UUID
+    to_branch_name: Optional[str] = Field(None, description="Destination branch name")
     amount: Decimal
     currency_id: UUID
     transfer_type: TransferTypeEnum
-    
+
     user_id: UUID  # Who initiated
     received_by_id: Optional[UUID] = None  # Who received
     received_at: Optional[datetime] = None
-    
+
     # Computed fields
     is_received: bool = Field(default=False, description="Reception status")
     is_pending_receipt: bool = Field(
         default=False,
         description="Waiting for receipt confirmation"
     )
-    
+
     reference_number: Optional[str] = None
     notes: Optional[str] = None
     transaction_date: datetime
@@ -424,7 +429,7 @@ class TransferTransactionResponse(BaseModel):
     cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

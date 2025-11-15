@@ -1204,8 +1204,20 @@ class TransactionService:
     # ==================== QUERY METHODS ====================
     
     async def get_transaction(self, transaction_id: UUID) -> Optional[Transaction]:
-        """Get transaction by ID"""
-        return await self.db.get(Transaction, transaction_id)
+        """Get transaction by ID with branch relationships loaded"""
+        from sqlalchemy.orm import selectinload
+
+        stmt = select(Transaction).where(Transaction.id == transaction_id)
+
+        # Load branch relationships
+        stmt = stmt.options(
+            selectinload(Transaction.branch),
+            selectinload(Transaction.from_branch),
+            selectinload(Transaction.to_branch)
+        )
+
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
     
     async def get_transaction_by_number(
         self, transaction_number: str

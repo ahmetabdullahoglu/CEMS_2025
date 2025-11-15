@@ -333,6 +333,16 @@ async def get_branch(
                     balances.append(balance_dict)
 
             branch_dict["balances"] = balances
+
+            # Calculate total value in base currency (USD) if requested
+            if calculate_usd_value:
+                from decimal import Decimal
+                total_value = Decimal("0")
+                for balance_dict in balances:
+                    if balance_dict.get('usd_value') is not None:
+                        total_value += Decimal(str(balance_dict['usd_value']))
+                branch_dict["total_value_in_base_currency"] = total_value
+
             return BranchWithBalances(**branch_dict)
         else:
             return BranchResponse(**branch_dict)

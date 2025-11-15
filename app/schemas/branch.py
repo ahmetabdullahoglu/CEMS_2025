@@ -125,7 +125,11 @@ class BranchBalanceResponse(BranchBalanceBase):
 class BranchWithBalances(BranchResponse):
     """Schema for branch with balances"""
     balances: List[BranchBalanceResponse] = []
-    
+    total_value_in_base_currency: Optional[Decimal] = Field(
+        None,
+        description="Total value of all balances in base currency (USD)"
+    )
+
     model_config = ConfigDict(from_attributes=True)
 
 

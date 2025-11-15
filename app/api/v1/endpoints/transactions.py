@@ -935,12 +935,18 @@ async def get_transaction(
                 detail=f"Transaction {transaction_id} not found"
             )
 
+        # Get branch name(s) if needed
+        branch_name = None
+        if hasattr(transaction, 'branch') and transaction.branch:
+            branch_name = transaction.branch.name_en if hasattr(transaction.branch, 'name_en') else None
+
         # Convert to dict to avoid ORM object serialization issues
         transaction_dict = {
             "id": transaction.id,
             "transaction_number": transaction.transaction_number,
             "transaction_type": transaction.transaction_type,
             "branch_id": transaction.branch_id,
+            "branch_name": branch_name,
             "amount": transaction.amount,
             "currency_id": transaction.currency_id,
             "status": transaction.status,
@@ -991,9 +997,19 @@ async def get_transaction(
                 "total_cost": total_cost,
             })
         elif transaction.transaction_type == TransactionType.TRANSFER:
+            # Get branch names for transfer
+            from_branch_name = None
+            to_branch_name = None
+            if hasattr(transaction, 'from_branch') and transaction.from_branch:
+                from_branch_name = transaction.from_branch.name_en if hasattr(transaction.from_branch, 'name_en') else None
+            if hasattr(transaction, 'to_branch') and transaction.to_branch:
+                to_branch_name = transaction.to_branch.name_en if hasattr(transaction.to_branch, 'name_en') else None
+
             transaction_dict.update({
                 "from_branch_id": transaction.from_branch_id,
+                "from_branch_name": from_branch_name,
                 "to_branch_id": transaction.to_branch_id,
+                "to_branch_name": to_branch_name,
                 "transfer_type": transaction.transfer_type,
             })
 
