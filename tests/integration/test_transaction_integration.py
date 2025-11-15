@@ -8,7 +8,7 @@ Tests for concurrent scenarios, race conditions, and database integrity
 import pytest
 import asyncio
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, date
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -22,7 +22,9 @@ from app.db.models.transaction import (
     IncomeCategory, ExpenseCategory
 )
 from app.db.models.branch import Branch, BranchBalance
-from app.db.models.currency import Currency
+from app.db.models.currency import Currency, ExchangeRate
+from app.db.models.user import User
+from app.db.models.customer import Customer, CustomerType, RiskLevel
 from app.core.exceptions import InsufficientBalanceError
 
 
@@ -369,51 +371,110 @@ class TestTransferWorkflow:
 
 class TestExchangeTransactions:
     """Test exchange transaction scenarios"""
-    
+
     @pytest.mark.asyncio
     async def test_exchange_with_commission(
-        self, db_session, test_branch
+        self,
+        db_session,
+        test_branch,
+        test_currency,
+        branch_balance
     ):
-        """
-        Test exchange transaction with commission calculation
-        """
-        # Create two currencies
-        usd = Currency(
-            code="USD",
-            name_en="US Dollar",
-            symbol="$",
+        """Ensure exchange transactions fill required fields and respect constraints"""
+        # Create user executing the exchange
+        user = User(
+            username=f"exchange_user_{uuid4().hex[:8]}",
+            email=f"exchange{uuid4().hex[:6]}@test.com",
+            hashed_password="hashedpassword",
+            full_name="Exchange User",
+            is_active=True,
+            is_superuser=False,
+            primary_branch_id=test_branch.id
+        )
+
+        # Create target currency and its balance record
+        eur_currency = Currency(
+            code="EUR",
+            name_en="Euro",
+            name_ar="يورو",
+            symbol="€",
             is_active=True
         )
-        try_currency = Currency(
-            code="TRY",
-            name_en="Turkish Lira",
-            symbol="₺",
-            is_active=True
-        )
-        
-        db_session.add_all([usd, try_currency])
+
+        db_session.add_all([user, eur_currency])
         await db_session.flush()
-        
-        # Create balances
-        usd_balance = BranchBalance(
+
+        eur_balance = BranchBalance(
             branch_id=test_branch.id,
-            currency_id=usd.id,
-            balance=Decimal('10000.00'),
+            currency_id=eur_currency.id,
+            balance=Decimal('5000.00'),
             reserved_balance=Decimal('0.00')
         )
-        try_balance = BranchBalance(
+
+        db_session.add(eur_balance)
+
+        # Create customer tied to the branch
+        customer = Customer(
+            first_name="Integration",
+            last_name="Customer",
+            phone_number="+905551112233",
+            email="integration.customer@test.com",
+            date_of_birth=date(1990, 1, 1),
+            nationality="Turkey",
+            address="Integration Street",
+            city="Istanbul",
+            country="Turkey",
+            customer_type=CustomerType.INDIVIDUAL,
+            risk_level=RiskLevel.LOW,
             branch_id=test_branch.id,
-            currency_id=try_currency.id,
-            balance=Decimal('50000.00'),
-            reserved_balance=Decimal('0.00')
+            registered_by_id=user.id
         )
-        
-        db_session.add_all([usd_balance, try_balance])
+
+        # Seed exchange rate required by CurrencyService
+        exchange_rate = ExchangeRate(
+            from_currency_id=test_currency.id,
+            to_currency_id=eur_currency.id,
+            rate=Decimal('3.75'),
+            set_by=user.id
+        )
+
+        db_session.add_all([customer, exchange_rate])
         await db_session.flush()
-        
-        # Test would continue with exchange rate setup
-        # and exchange transaction creation
-        pass
+
+        service = TransactionService(db_session)
+        from_amount = Decimal('250.00')
+        description = "Integration exchange test"
+
+        exchange = await service.create_exchange(
+            branch_id=test_branch.id,
+            customer_id=customer.id,
+            from_currency_id=test_currency.id,
+            to_currency_id=eur_currency.id,
+            from_amount=from_amount,
+            user_id=user.id,
+            description=description
+        )
+
+        # Required fields should be populated like other transaction types
+        assert exchange.currency_id == test_currency.id
+        assert exchange.amount == from_amount
+        assert exchange.user_id == user.id
+        assert exchange.description == description
+        assert exchange.status == TransactionStatus.COMPLETED
+
+        expected_to_amount = from_amount * Decimal('3.75')
+        commission_amount = from_amount * Decimal('0.01')
+
+        assert exchange.from_amount == from_amount
+        assert exchange.to_amount == expected_to_amount
+        assert exchange.commission_amount == commission_amount
+
+        # Balances should reflect deductions/additions without violating constraints
+        await db_session.refresh(branch_balance)
+        await db_session.refresh(eur_balance)
+
+        assert branch_balance.balance == Decimal('10000.00') - from_amount + commission_amount
+        assert eur_balance.balance == Decimal('5000.00') + expected_to_amount
 
 
 # ==================== ROLLBACK TESTS ====================

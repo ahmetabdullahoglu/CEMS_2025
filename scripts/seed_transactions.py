@@ -197,6 +197,7 @@ def generate_exchange_transaction(index: int, branches, currencies, customers, u
     return {
         "type": "exchange",
         "branch_id": branch.id,
+        "currency_id": from_currency.id,
         "from_currency_id": from_currency.id,
         "to_currency_id": to_currency.id,
         "from_amount": round(from_amount, 2),
@@ -367,6 +368,8 @@ async def seed_transactions(db: AsyncSession):
 
         transaction = ExchangeTransaction(
             branch_id=trans_data["branch_id"],
+            currency_id=trans_data["currency_id"],
+            amount=trans_data["from_amount"],
             from_currency_id=trans_data["from_currency_id"],
             to_currency_id=trans_data["to_currency_id"],
             from_amount=trans_data["from_amount"],
