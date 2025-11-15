@@ -214,7 +214,38 @@ class TestStatusStateMachine:
         assert transaction.cancelled_at is not None
         assert transaction.cancelled_by_id == sample_user_id
         assert transaction.cancellation_reason == "Customer request"
-    
+
+    def test_transfer_in_transit_transition(
+        self, db_session, sample_branch_id, sample_user_id, sample_currency_id
+    ):
+        """Transfers can move from pending -> in_transit -> completed"""
+        transfer = TransferTransaction(
+            id=uuid4(),
+            transaction_number="TRX-20250109-00099",
+            transaction_type=TransactionType.TRANSFER,
+            branch_id=sample_branch_id,
+            user_id=sample_user_id,
+            currency_id=sample_currency_id,
+            amount=Decimal("2500.00"),
+            status=TransactionStatus.PENDING,
+            from_branch_id=sample_branch_id,
+            to_branch_id=uuid4(),
+            transfer_type=TransferType.BRANCH_TO_BRANCH,
+            transaction_date=datetime.utcnow()
+        )
+
+        db_session.add(transfer)
+        db_session.commit()
+
+        transfer.status = TransactionStatus.IN_TRANSIT
+        db_session.commit()
+        assert transfer.status == TransactionStatus.IN_TRANSIT
+
+        transfer.status = TransactionStatus.COMPLETED
+        transfer.completed_at = datetime.utcnow()
+        db_session.commit()
+        assert transfer.status == TransactionStatus.COMPLETED
+
     def test_completed_immutable(
         self, db_session, sample_branch_id, sample_user_id, sample_currency_id
     ):

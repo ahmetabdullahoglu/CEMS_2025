@@ -56,6 +56,7 @@ class TransactionType(str, Enum):
 class TransactionStatus(str, Enum):
     """Transaction lifecycle states"""
     PENDING = "pending"
+    IN_TRANSIT = "in_transit"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     FAILED = "failed"
