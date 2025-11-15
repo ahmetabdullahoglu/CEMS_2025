@@ -105,14 +105,6 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
 
     # ---------- Rate update request table ----------
-    # When this consolidated migration is re-run on a database that partially
-    # applied it before failing (for example during local development), the
-    # PostgreSQL enum for rate update request status may already exist even
-    # though the revision itself should start from a clean slate. Dropping the
-    # enum up front ensures the create below is deterministic and avoids
-    # `DuplicateObjectError` exceptions without affecting fresh databases.
-    op.execute("DROP TYPE IF EXISTS rateupdaterequeststatus")
-
     rate_status_enum = postgresql.ENUM(
         *RATE_REQUEST_STATUS_VALUES,
         name="rateupdaterequeststatus",
