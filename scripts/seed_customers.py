@@ -116,12 +116,18 @@ def generate_customer_data(index: int) -> dict:
     # Arabic name
     name_ar = f"عميل {index}"
 
+    # Ensure every customer has at least one identification (national_id OR passport_number)
+    # For corporate: prefer passport_number (can represent commercial registration)
+    # For individual: prefer national_id
+    has_national_id = is_corporate or (index % 3 != 0)  # Corporates: 66%, Individuals: 66%
+    has_passport = (not is_corporate and index % 3 == 0) or (is_corporate and not has_national_id)
+
     customer = {
         "first_name": first_name,
         "last_name": last_name,
         "name_ar": name_ar,
-        "national_id": national_id if not is_corporate or index % 2 == 0 else None,
-        "passport_number": passport_number if index % 3 == 0 else None,
+        "national_id": national_id if has_national_id else None,
+        "passport_number": passport_number if has_passport else None,
         "phone_number": f"+9055{str(5000000 + index * 1234).zfill(7)}",
         "email": email,
         "date_of_birth": date_of_birth,
