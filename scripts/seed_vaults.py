@@ -187,8 +187,7 @@ async def create_vault_balances(
         balance = VaultBalance(
             vault_id=vault.id,
             currency_id=currency.id,
-            amount=amount,
-            reserved_amount=Decimal("0.00")
+            balance=amount
         )
 
         db.add(balance)
@@ -197,13 +196,12 @@ async def create_vault_balances(
     print(f"  ✅ Created balances for {len(balance_amounts)} currencies")
 
 
-def generate_vault_transfer(index: int, vaults: list, currencies: dict, users: list) -> dict:
+def generate_vault_transfer(index: int, vaults: list, branches: list, currencies: dict, users: list) -> dict:
     """Generate vault transfer data dynamically"""
     random.seed(5000 + index)
 
-    # Get two different vaults
+    # Get source vault
     from_vault = random.choice(vaults)
-    to_vault = random.choice([v for v in vaults if v.id != from_vault.id])
 
     currency = random.choice(list(currencies.values()))
     user = random.choice(users)
@@ -213,19 +211,35 @@ def generate_vault_transfer(index: int, vaults: list, currencies: dict, users: l
 
     # Transfer type distribution
     transfer_type_choices = [
-        (VaultTransferType.REPLENISHMENT, 0.4),
-        (VaultTransferType.COLLECTION, 0.3),
-        (VaultTransferType.REDISTRIBUTION, 0.2),
-        (VaultTransferType.EMERGENCY, 0.1),
+        (VaultTransferType.VAULT_TO_VAULT, 0.4),
+        (VaultTransferType.VAULT_TO_BRANCH, 0.4),
+        (VaultTransferType.BRANCH_TO_VAULT, 0.2),
     ]
     rand = random.random()
     cumulative = 0
-    transfer_type = VaultTransferType.REPLENISHMENT
+    transfer_type = VaultTransferType.VAULT_TO_VAULT
     for ttype, probability in transfer_type_choices:
         cumulative += probability
         if rand < cumulative:
             transfer_type = ttype
             break
+
+    # Set destination based on transfer type
+    to_vault_id = None
+    to_branch_id = None
+
+    if transfer_type == VaultTransferType.VAULT_TO_VAULT:
+        # Vault to Vault: use to_vault_id
+        to_vault = random.choice([v for v in vaults if v.id != from_vault.id])
+        to_vault_id = to_vault.id
+    elif transfer_type == VaultTransferType.VAULT_TO_BRANCH:
+        # Vault to Branch: use to_branch_id
+        to_branch = random.choice(branches)
+        to_branch_id = to_branch.id
+    else:  # BRANCH_TO_VAULT
+        # Branch to Vault: use to_vault_id
+        to_vault = random.choice(vaults)
+        to_vault_id = to_vault.id
 
     # Status distribution: 70% completed, 15% in-transit, 10% pending, 5% cancelled
     status_rand = index % 20
@@ -240,41 +254,44 @@ def generate_vault_transfer(index: int, vaults: list, currencies: dict, users: l
 
     # Dates
     days_ago = int((index / VAULT_TRANSFERS_COUNT) * 180)  # Distribute over 6 months
-    requested_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago)
+    initiated_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago)
 
-    approved_by_id = None
+    approved_by = None
     approved_at = None
     completed_at = None
     cancelled_at = None
 
     # Set timestamps based on status
     if status in [VaultTransferStatus.IN_TRANSIT, VaultTransferStatus.COMPLETED]:
-        approved_by_id = user.id
-        approved_at = requested_at + timedelta(hours=1)
+        approved_by = user.id
+        approved_at = initiated_at + timedelta(hours=1)
 
     if status == VaultTransferStatus.COMPLETED:
         completed_at = approved_at + timedelta(hours=random.randint(2, 24))
 
     if status == VaultTransferStatus.CANCELLED:
-        cancelled_at = requested_at + timedelta(hours=random.randint(1, 48))
+        cancelled_at = initiated_at + timedelta(hours=random.randint(1, 48))
 
     # Notes
     notes = None
-    if transfer_type == VaultTransferType.EMERGENCY:
-        notes = "Emergency transfer - urgent replenishment required"
+    if transfer_type == VaultTransferType.VAULT_TO_BRANCH:
+        notes = "Replenishment transfer to branch vault"
+    elif transfer_type == VaultTransferType.BRANCH_TO_VAULT:
+        notes = "Collection from branch to main vault"
     elif status == VaultTransferStatus.CANCELLED:
         notes = "Transfer cancelled - no longer needed"
 
     return {
         "from_vault_id": from_vault.id,
-        "to_vault_id": to_vault.id,
+        "to_vault_id": to_vault_id,
+        "to_branch_id": to_branch_id,
         "currency_id": currency.id,
         "amount": round(amount, 2),
         "transfer_type": transfer_type,
         "status": status,
-        "requested_by_id": user.id,
-        "approved_by_id": approved_by_id,
-        "requested_at": requested_at,
+        "initiated_by": user.id,
+        "approved_by": approved_by,
+        "initiated_at": initiated_at,
         "approved_at": approved_at,
         "completed_at": completed_at,
         "cancelled_at": cancelled_at,
@@ -285,6 +302,7 @@ def generate_vault_transfer(index: int, vaults: list, currencies: dict, users: l
 async def create_vault_transfers(
     db: AsyncSession,
     vaults: list,
+    branches: list,
     currencies: dict,
     users: list
 ):
@@ -299,18 +317,19 @@ async def create_vault_transfers(
     created_count = 0
 
     for i in range(VAULT_TRANSFERS_COUNT):
-        transfer_data = generate_vault_transfer(i, vaults, currencies, users)
+        transfer_data = generate_vault_transfer(i, vaults, branches, currencies, users)
 
         transfer = VaultTransfer(
             from_vault_id=transfer_data["from_vault_id"],
-            to_vault_id=transfer_data["to_vault_id"],
+            to_vault_id=transfer_data.get("to_vault_id"),
+            to_branch_id=transfer_data.get("to_branch_id"),
             currency_id=transfer_data["currency_id"],
             amount=transfer_data["amount"],
             transfer_type=transfer_data["transfer_type"],
             status=transfer_data["status"],
-            requested_by_id=transfer_data["requested_by_id"],
-            approved_by_id=transfer_data.get("approved_by_id"),
-            requested_at=transfer_data["requested_at"],
+            initiated_by=transfer_data["initiated_by"],
+            approved_by=transfer_data.get("approved_by"),
+            initiated_at=transfer_data["initiated_at"],
             approved_at=transfer_data.get("approved_at"),
             completed_at=transfer_data.get("completed_at"),
             cancelled_at=transfer_data.get("cancelled_at"),
@@ -371,7 +390,8 @@ async def seed_vaults(db: AsyncSession):
         await create_vault_balances(db, vault, data["currencies"], branch_balances)
 
     # Create vault transfers (10x)
-    await create_vault_transfers(db, all_vaults, data["currencies"], data["users"])
+    branches_list = list(data["branches"].values())
+    await create_vault_transfers(db, all_vaults, branches_list, data["currencies"], data["users"])
 
     # Commit all changes
     await db.commit()

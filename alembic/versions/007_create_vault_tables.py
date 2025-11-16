@@ -25,9 +25,9 @@ depends_on = None
 
 def upgrade() -> None:
     """Create vault management tables"""
-    
+
     # ==================== CREATE ENUMS ====================
-    
+
     # Vault Type Enum
     vault_type_enum = postgresql.ENUM(
         'main', 'branch',
@@ -35,7 +35,7 @@ def upgrade() -> None:
         create_type=False
     )
     vault_type_enum.create(op.get_bind(), checkfirst=True)
-    
+
     # Vault Transfer Type Enum
     vault_transfer_type_enum = postgresql.ENUM(
         'vault_to_vault', 'vault_to_branch', 'branch_to_vault',
@@ -51,6 +51,14 @@ def upgrade() -> None:
         create_type=False
     )
     vault_transfer_status_enum.create(op.get_bind(), checkfirst=True)
+
+    # Rate Update Request Status Enum
+    rate_status_enum = postgresql.ENUM(
+        'pending', 'approved', 'rejected', 'expired', 'failed',
+        name='rateupdaterequeststatus',
+        create_type=False
+    )
+    rate_status_enum.create(op.get_bind(), checkfirst=True)
     
     # ==================== CREATE VAULTS TABLE ====================
     
@@ -239,7 +247,43 @@ def upgrade() -> None:
     op.create_index('idx_transfer_to_vault', 'vault_transfers', ['to_vault_id', 'initiated_at'])
     op.create_index('idx_transfer_to_branch', 'vault_transfers', ['to_branch_id', 'initiated_at'])
     op.create_index('idx_vault_transfers_active', 'vault_transfers', ['is_active'])
-    
+
+    # ==================== CREATE TRIGGERS AND FUNCTIONS ====================
+
+    # Create sequence for transfer numbers
+    op.execute("CREATE SEQUENCE IF NOT EXISTS vault_transfer_number_seq START 1")
+
+    # Function to generate transfer_number using sequence
+    op.execute("""
+        CREATE OR REPLACE FUNCTION generate_vault_transfer_number()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            new_number VARCHAR(30);
+            seq_num BIGINT;
+        BEGIN
+            -- Get next sequence value (thread-safe, no race conditions)
+            seq_num := nextval('vault_transfer_number_seq');
+
+            -- Format: VTR-YYYYMMDD-NNNNN
+            new_number := 'VTR-' ||
+                         TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' ||
+                         LPAD(seq_num::TEXT, 5, '0');
+
+            NEW.transfer_number := new_number;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Trigger to auto-generate transfer_number
+    op.execute("""
+        CREATE TRIGGER trigger_generate_vault_transfer_number
+        BEFORE INSERT ON vault_transfers
+        FOR EACH ROW
+        WHEN (NEW.transfer_number IS NULL)
+        EXECUTE FUNCTION generate_vault_transfer_number();
+    """)
+
     # ==================== CREATE TRIGGER FOR UPDATED_AT ====================
     
     # Updated_at trigger for vaults
@@ -266,21 +310,73 @@ def upgrade() -> None:
         EXECUTE FUNCTION update_updated_at_column();
     """)
 
+    # ==================== CREATE RATE_UPDATE_REQUESTS TABLE ====================
+
+    op.create_table(
+        'rate_update_requests',
+        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column('status', rate_status_enum, nullable=False),
+        sa.Column('source', sa.String(length=50), nullable=False),
+        sa.Column('base_currency', sa.String(length=3), nullable=False),
+        sa.Column('fetched_rates', postgresql.JSONB(), nullable=False),
+        sa.Column(
+            'requested_by',
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey('users.id', ondelete='RESTRICT'),
+            nullable=False,
+        ),
+        sa.Column('requested_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            'reviewed_by',
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey('users.id', ondelete='SET NULL'),
+            nullable=True,
+        ),
+        sa.Column('reviewed_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('review_notes', sa.Text(), nullable=True),
+        sa.Column('rates_applied_count', sa.Integer(), nullable=True),
+        sa.Column('error_message', sa.Text(), nullable=True),
+    )
+    op.create_index(
+        'ix_rate_update_requests_status',
+        'rate_update_requests',
+        ['status'],
+    )
+    op.create_index(
+        'ix_rate_update_requests_requested_at',
+        'rate_update_requests',
+        ['requested_at'],
+    )
+
 
 def downgrade() -> None:
     """Drop vault management tables"""
-    
+
+    # Drop rate update requests table and indexes
+    op.drop_index('ix_rate_update_requests_requested_at', table_name='rate_update_requests')
+    op.drop_index('ix_rate_update_requests_status', table_name='rate_update_requests')
+    op.drop_table('rate_update_requests')
+
     # Drop triggers first
+    op.execute("DROP TRIGGER IF EXISTS trigger_generate_vault_transfer_number ON vault_transfers;")
     op.execute("DROP TRIGGER IF EXISTS update_vault_transfers_updated_at ON vault_transfers;")
     op.execute("DROP TRIGGER IF EXISTS update_vault_balances_updated_at ON vault_balances;")
     op.execute("DROP TRIGGER IF EXISTS update_vaults_updated_at ON vaults;")
-    
+
+    # Drop functions
+    op.execute("DROP FUNCTION IF EXISTS generate_vault_transfer_number();")
+
+    # Drop sequence
+    op.execute("DROP SEQUENCE IF EXISTS vault_transfer_number_seq;")
+
     # Drop tables
     op.drop_table('vault_transfers')
     op.drop_table('vault_balances')
     op.drop_table('vaults')
-    
+
     # Drop enums
+    op.execute("DROP TYPE IF EXISTS rateupdaterequeststatus;")
     op.execute("DROP TYPE IF EXISTS vault_transfer_status_enum;")
     op.execute("DROP TYPE IF EXISTS vault_transfer_type_enum;")
     op.execute("DROP TYPE IF EXISTS vault_type_enum;")
