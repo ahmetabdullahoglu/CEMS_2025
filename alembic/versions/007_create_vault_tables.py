@@ -247,7 +247,42 @@ def upgrade() -> None:
     op.create_index('idx_transfer_to_vault', 'vault_transfers', ['to_vault_id', 'initiated_at'])
     op.create_index('idx_transfer_to_branch', 'vault_transfers', ['to_branch_id', 'initiated_at'])
     op.create_index('idx_vault_transfers_active', 'vault_transfers', ['is_active'])
-    
+
+    # ==================== CREATE TRIGGERS AND FUNCTIONS ====================
+
+    # Function to generate transfer_number
+    op.execute("""
+        CREATE OR REPLACE FUNCTION generate_vault_transfer_number()
+        RETURNS TRIGGER AS $$
+        DECLARE
+            new_number VARCHAR(30);
+            counter INTEGER;
+        BEGIN
+            -- Get the next transfer number for today
+            SELECT COUNT(*) + 1 INTO counter
+            FROM vault_transfers
+            WHERE DATE(initiated_at) = CURRENT_DATE;
+
+            -- Format: VTR-YYYYMMDD-NNNNN
+            new_number := 'VTR-' ||
+                         TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' ||
+                         LPAD(counter::TEXT, 5, '0');
+
+            NEW.transfer_number := new_number;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Trigger to auto-generate transfer_number
+    op.execute("""
+        CREATE TRIGGER trigger_generate_vault_transfer_number
+        BEFORE INSERT ON vault_transfers
+        FOR EACH ROW
+        WHEN (NEW.transfer_number IS NULL)
+        EXECUTE FUNCTION generate_vault_transfer_number();
+    """)
+
     # ==================== CREATE TRIGGER FOR UPDATED_AT ====================
     
     # Updated_at trigger for vaults
@@ -323,9 +358,13 @@ def downgrade() -> None:
     op.drop_table('rate_update_requests')
 
     # Drop triggers first
+    op.execute("DROP TRIGGER IF EXISTS trigger_generate_vault_transfer_number ON vault_transfers;")
     op.execute("DROP TRIGGER IF EXISTS update_vault_transfers_updated_at ON vault_transfers;")
     op.execute("DROP TRIGGER IF EXISTS update_vault_balances_updated_at ON vault_balances;")
     op.execute("DROP TRIGGER IF EXISTS update_vaults_updated_at ON vaults;")
+
+    # Drop functions
+    op.execute("DROP FUNCTION IF EXISTS generate_vault_transfer_number();")
 
     # Drop tables
     op.drop_table('vault_transfers')
