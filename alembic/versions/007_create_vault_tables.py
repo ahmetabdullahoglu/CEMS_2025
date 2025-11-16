@@ -250,23 +250,24 @@ def upgrade() -> None:
 
     # ==================== CREATE TRIGGERS AND FUNCTIONS ====================
 
-    # Function to generate transfer_number
+    # Create sequence for transfer numbers
+    op.execute("CREATE SEQUENCE IF NOT EXISTS vault_transfer_number_seq START 1")
+
+    # Function to generate transfer_number using sequence
     op.execute("""
         CREATE OR REPLACE FUNCTION generate_vault_transfer_number()
         RETURNS TRIGGER AS $$
         DECLARE
             new_number VARCHAR(30);
-            counter INTEGER;
+            seq_num BIGINT;
         BEGIN
-            -- Get the next transfer number for today
-            SELECT COUNT(*) + 1 INTO counter
-            FROM vault_transfers
-            WHERE DATE(initiated_at) = CURRENT_DATE;
+            -- Get next sequence value (thread-safe, no race conditions)
+            seq_num := nextval('vault_transfer_number_seq');
 
             -- Format: VTR-YYYYMMDD-NNNNN
             new_number := 'VTR-' ||
                          TO_CHAR(CURRENT_DATE, 'YYYYMMDD') || '-' ||
-                         LPAD(counter::TEXT, 5, '0');
+                         LPAD(seq_num::TEXT, 5, '0');
 
             NEW.transfer_number := new_number;
             RETURN NEW;
@@ -365,6 +366,9 @@ def downgrade() -> None:
 
     # Drop functions
     op.execute("DROP FUNCTION IF EXISTS generate_vault_transfer_number();")
+
+    # Drop sequence
+    op.execute("DROP SEQUENCE IF EXISTS vault_transfer_number_seq;")
 
     # Drop tables
     op.drop_table('vault_transfers')
