@@ -118,6 +118,18 @@ class IncomeTransactionResponse(TransactionBase):
     income_category: IncomeCategoryEnum
     income_source: Optional[str] = None
     user_id: UUID
+
+    # Branch routing info (explicit for consistency)
+    from_branch_id: Optional[UUID] = Field(
+        None, description="Source branch (always None for income)"
+    )
+    from_branch_name: Optional[str] = Field(
+        None, description="Source branch name (always None for income)"
+    )
+    to_branch_id: UUID = Field(description="Destination branch (income branch)")
+    to_branch_name: Optional[str] = Field(
+        None, description="Destination branch name (income branch)"
+    )
     branch_name: Optional[str] = Field(None, description="Branch name")
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
@@ -174,6 +186,16 @@ class ExpenseTransactionResponse(TransactionBase):
     expense_category: ExpenseCategoryEnum
     expense_to: str
     approval_required: bool
+    from_branch_id: UUID = Field(description="Source branch (expense branch)")
+    from_branch_name: Optional[str] = Field(
+        None, description="Source branch name (expense branch)"
+    )
+    to_branch_id: Optional[UUID] = Field(
+        None, description="Destination branch (always None for expense)"
+    )
+    to_branch_name: Optional[str] = Field(
+        None, description="Destination branch name (always None for expense)"
+    )
     approved_by_id: Optional[UUID] = None
     approved_at: Optional[datetime] = None
     user_id: UUID
@@ -274,6 +296,14 @@ class ExchangeTransactionResponse(BaseModel):
     status: TransactionStatusEnum
 
     branch_id: UUID
+    from_branch_id: UUID = Field(description="Source branch (exchange branch)")
+    from_branch_name: Optional[str] = Field(
+        None, description="Source branch name (exchange branch)"
+    )
+    to_branch_id: UUID = Field(description="Destination branch (exchange branch)")
+    to_branch_name: Optional[str] = Field(
+        None, description="Destination branch name (exchange branch)"
+    )
     branch_name: Optional[str] = Field(None, description="Branch name")
     customer_id: Optional[UUID]
     user_id: UUID
