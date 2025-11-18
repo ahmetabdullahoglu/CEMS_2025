@@ -1236,11 +1236,11 @@ class TransactionService:
 
         stmt = select(Transaction).where(Transaction.id == transaction_id)
 
-        # Load branch relationships
+        # Load branch relationships (including transfer-specific ones)
         stmt = stmt.options(
             selectinload(Transaction.branch),
-            selectinload(Transaction.from_branch),
-            selectinload(Transaction.to_branch)
+            selectinload(Transaction.of_type(TransferTransaction).from_branch),
+            selectinload(Transaction.of_type(TransferTransaction).to_branch)
         )
 
         result = await self.db.execute(stmt)
