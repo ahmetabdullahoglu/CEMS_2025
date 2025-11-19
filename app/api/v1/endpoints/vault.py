@@ -733,7 +733,40 @@ async def get_reconciliation_report(
         notes="Current state report"
     )
     result = await vault_service.reconcile_vault_balance(reconciliation_data, current_user)
-    
+
+    return VaultReconciliationReport(**result)
+
+
+@router.get(
+    "/reconciliation",
+    response_model=VaultReconciliationReport,
+    summary="Get latest reconciliation report"
+)
+async def get_reconciliation(
+    vault_id: Optional[UUID] = Query(None),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get latest reconciliation report for a vault using a query parameter.
+
+    This mirrors the `/reconciliation/report` endpoint but allows clients to
+    request via `/reconciliation?vault_id=...` to avoid path parsing issues.
+    If no vault_id is provided, the main vault is used.
+    """
+    vault_service = VaultService(db)
+
+    if vault_id:
+        vault = await vault_service.get_vault_by_id(vault_id)
+    else:
+        vault = await vault_service.get_main_vault()
+
+    reconciliation_data = VaultReconciliationRequest(
+        vault_id=vault.id,
+        notes="Current state report"
+    )
+    result = await vault_service.reconcile_vault_balance(reconciliation_data, current_user)
+
     return VaultReconciliationReport(**result)
 
 

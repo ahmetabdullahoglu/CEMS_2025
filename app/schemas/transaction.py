@@ -16,7 +16,7 @@ Features:
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Annotated, Literal
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
@@ -113,11 +113,25 @@ class IncomeTransactionResponse(TransactionBase):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.INCOME] = Field(
+        TransactionTypeEnum.INCOME, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
     income_category: IncomeCategoryEnum
     income_source: Optional[str] = None
     user_id: UUID
+
+    # Branch routing info (explicit for consistency)
+    from_branch_id: Optional[UUID] = Field(
+        None, description="Source branch (always None for income)"
+    )
+    from_branch_name: Optional[str] = Field(
+        None, description="Source branch name (always None for income)"
+    )
+    to_branch_id: UUID = Field(description="Destination branch (income branch)")
+    to_branch_name: Optional[str] = Field(
+        None, description="Destination branch name (income branch)"
+    )
     branch_name: Optional[str] = Field(None, description="Branch name")
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
@@ -169,11 +183,23 @@ class ExpenseTransactionResponse(TransactionBase):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.EXPENSE] = Field(
+        TransactionTypeEnum.EXPENSE, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
     expense_category: ExpenseCategoryEnum
     expense_to: str
     approval_required: bool
+    from_branch_id: UUID = Field(description="Source branch (expense branch)")
+    from_branch_name: Optional[str] = Field(
+        None, description="Source branch name (expense branch)"
+    )
+    to_branch_id: Optional[UUID] = Field(
+        None, description="Destination branch (always None for expense)"
+    )
+    to_branch_name: Optional[str] = Field(
+        None, description="Destination branch name (always None for expense)"
+    )
     approved_by_id: Optional[UUID] = None
     approved_at: Optional[datetime] = None
     user_id: UUID
@@ -270,10 +296,20 @@ class ExchangeTransactionResponse(BaseModel):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.EXCHANGE] = Field(
+        TransactionTypeEnum.EXCHANGE, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
 
     branch_id: UUID
+    from_branch_id: UUID = Field(description="Source branch (exchange branch)")
+    from_branch_name: Optional[str] = Field(
+        None, description="Source branch name (exchange branch)"
+    )
+    to_branch_id: UUID = Field(description="Destination branch (exchange branch)")
+    to_branch_name: Optional[str] = Field(
+        None, description="Destination branch name (exchange branch)"
+    )
     branch_name: Optional[str] = Field(None, description="Branch name")
     customer_id: Optional[UUID]
     user_id: UUID
@@ -385,7 +421,9 @@ class TransferTransactionResponse(BaseModel):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.TRANSFER] = Field(
+        TransactionTypeEnum.TRANSFER, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
 
     from_branch_id: UUID
@@ -497,16 +535,20 @@ class TransactionFilter(BaseModel):
     )
 
 
+TransactionResponse = Annotated[
+    IncomeTransactionResponse
+    | ExpenseTransactionResponse
+    | ExchangeTransactionResponse
+    | TransferTransactionResponse,
+    Field(discriminator="transaction_type"),
+]
+
+
 class TransactionListResponse(BaseModel):
     """Schema for transaction list response"""
-    
+
     total: int
-    transactions: List[
-        IncomeTransactionResponse |
-        ExpenseTransactionResponse |
-        ExchangeTransactionResponse |
-        TransferTransactionResponse
-    ]
+    transactions: List[TransactionResponse]
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -539,15 +581,10 @@ class DailyTransactionSummary(BaseModel):
 
 class TransactionSuccessResponse(BaseModel):
     """Success response wrapper"""
-    
+
     success: bool = True
     message: str
-    data: (
-        IncomeTransactionResponse |
-        ExpenseTransactionResponse |
-        ExchangeTransactionResponse |
-        TransferTransactionResponse
-    )
+    data: TransactionResponse
 
 
 class TransactionErrorResponse(BaseModel):
