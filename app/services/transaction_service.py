@@ -19,7 +19,7 @@ from uuid import UUID
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, selectin_polymorphic
 
 from app.db.models.transaction import (
     Transaction, IncomeTransaction, ExpenseTransaction,
@@ -240,9 +240,10 @@ class TransactionService:
             
             # Build base query with eager loading to avoid async lazy-load issues
             query = select(Transaction).options(
+                selectin_polymorphic(Transaction, [TransferTransaction]),
                 selectinload(Transaction.branch),
-                selectinload(Transaction.of_type(TransferTransaction).from_branch),
-                selectinload(Transaction.of_type(TransferTransaction).to_branch)
+                selectinload(TransferTransaction.from_branch),
+                selectinload(TransferTransaction.to_branch)
             )
             
             # Apply filters
@@ -1243,9 +1244,10 @@ class TransactionService:
 
         # Load branch relationships (including transfer-specific ones)
         stmt = stmt.options(
+            selectin_polymorphic(Transaction, [TransferTransaction]),
             selectinload(Transaction.branch),
-            selectinload(Transaction.of_type(TransferTransaction).from_branch),
-            selectinload(Transaction.of_type(TransferTransaction).to_branch)
+            selectinload(TransferTransaction.from_branch),
+            selectinload(TransferTransaction.to_branch)
         )
 
         result = await self.db.execute(stmt)
