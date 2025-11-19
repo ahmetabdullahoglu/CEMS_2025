@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_async_db, get_current_user, require_permissions
 from app.db.models.user import User
 from app.db.models.vault import VaultTransferStatus, VaultTransferType
+from app.services.currency_service import CurrencyService
 from app.services.vault_service import VaultService
 from app.schemas.vault import (
     VaultCreate, VaultUpdate, VaultResponse, VaultListResponse,
@@ -237,22 +238,30 @@ async def get_vault_balances(
 
 
 @router.get(
-    "/balances/{currency_id}",
+    "/balances/{currency_identifier}",
     response_model=VaultBalanceResponse,
-    summary="Get specific currency balance"
+    summary="Get specific currency balance by code or ID"
 )
 async def get_vault_balance_by_currency(
-    currency_id: UUID,
+    currency_identifier: str,
     vault_id: Optional[UUID] = Query(None, description="Specific vault ID"),
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get balance for specific currency
-    
+    Get balance for specific currency using either the currency UUID or currency code.
+
     **Permissions:** Any authenticated user
     """
     vault_service = VaultService(db)
+    currency_service = CurrencyService(db)
+
+    # Resolve currency identifier from UUID or code
+    try:
+        currency_id = UUID(currency_identifier)
+    except ValueError:
+        currency = await currency_service.get_currency_by_code(currency_identifier.upper())
+        currency_id = currency.id
 
     if vault_id:
         vault = await vault_service.get_vault_by_id(vault_id)
@@ -260,15 +269,15 @@ async def get_vault_balance_by_currency(
         vault = await vault_service.get_main_vault()
 
     balances = await vault_service.get_vault_balance(vault.id, currency_id)
-    
+
     if not balances:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Balance not found for this currency"
         )
-    
+
     balance = balances[0]
-    
+
     return VaultBalanceResponse(
         vault_id=vault.id,
         vault_code=vault.vault_code,
@@ -733,7 +742,40 @@ async def get_reconciliation_report(
         notes="Current state report"
     )
     result = await vault_service.reconcile_vault_balance(reconciliation_data, current_user)
-    
+
+    return VaultReconciliationReport(**result)
+
+
+@router.get(
+    "/reconciliation",
+    response_model=VaultReconciliationReport,
+    summary="Get latest reconciliation report"
+)
+async def get_reconciliation(
+    vault_id: Optional[UUID] = Query(None),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get latest reconciliation report for a vault using a query parameter.
+
+    This mirrors the `/reconciliation/report` endpoint but allows clients to
+    request via `/reconciliation?vault_id=...` to avoid path parsing issues.
+    If no vault_id is provided, the main vault is used.
+    """
+    vault_service = VaultService(db)
+
+    if vault_id:
+        vault = await vault_service.get_vault_by_id(vault_id)
+    else:
+        vault = await vault_service.get_main_vault()
+
+    reconciliation_data = VaultReconciliationRequest(
+        vault_id=vault.id,
+        notes="Current state report"
+    )
+    result = await vault_service.reconcile_vault_balance(reconciliation_data, current_user)
+
     return VaultReconciliationReport(**result)
 
 
