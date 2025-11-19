@@ -16,7 +16,7 @@ Features:
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List, Annotated
+from typing import Optional, List, Annotated, Literal
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
@@ -113,7 +113,9 @@ class IncomeTransactionResponse(TransactionBase):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.INCOME] = Field(
+        TransactionTypeEnum.INCOME, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
     income_category: IncomeCategoryEnum
     income_source: Optional[str] = None
@@ -181,7 +183,9 @@ class ExpenseTransactionResponse(TransactionBase):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.EXPENSE] = Field(
+        TransactionTypeEnum.EXPENSE, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
     expense_category: ExpenseCategoryEnum
     expense_to: str
@@ -292,7 +296,9 @@ class ExchangeTransactionResponse(BaseModel):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.EXCHANGE] = Field(
+        TransactionTypeEnum.EXCHANGE, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
 
     branch_id: UUID
@@ -415,7 +421,9 @@ class TransferTransactionResponse(BaseModel):
 
     id: UUID
     transaction_number: str
-    transaction_type: TransactionTypeEnum
+    transaction_type: Literal[TransactionTypeEnum.TRANSFER] = Field(
+        TransactionTypeEnum.TRANSFER, description="Transaction type discriminator"
+    )
     status: TransactionStatusEnum
 
     from_branch_id: UUID
