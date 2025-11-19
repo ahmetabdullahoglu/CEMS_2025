@@ -19,6 +19,7 @@ from uuid import UUID
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import selectinload, selectin_polymorphic
 
 from app.db.models.transaction import (
     Transaction, IncomeTransaction, ExpenseTransaction,
@@ -237,8 +238,13 @@ class TransactionService:
         try:
             logger.info(f"Listing transactions with filters: {filters.dict(exclude_none=True)}")
             
-            # Build base query
-            query = select(Transaction)
+            # Build base query with eager loading to avoid async lazy-load issues
+            query = select(Transaction).options(
+                selectin_polymorphic(Transaction, [TransferTransaction]),
+                selectinload(Transaction.branch),
+                selectinload(TransferTransaction.from_branch),
+                selectinload(TransferTransaction.to_branch)
+            )
             
             # Apply filters
             conditions = []
@@ -1236,11 +1242,12 @@ class TransactionService:
 
         stmt = select(Transaction).where(Transaction.id == transaction_id)
 
-        # Load branch relationships
+        # Load branch relationships (including transfer-specific ones)
         stmt = stmt.options(
+            selectin_polymorphic(Transaction, [TransferTransaction]),
             selectinload(Transaction.branch),
-            selectinload(Transaction.from_branch),
-            selectinload(Transaction.to_branch)
+            selectinload(TransferTransaction.from_branch),
+            selectinload(TransferTransaction.to_branch)
         )
 
         result = await self.db.execute(stmt)

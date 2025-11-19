@@ -20,7 +20,7 @@ Features:
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List, Union
+from typing import Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.db.models.user import User
-from app.db.models.transaction import TransactionStatus, TransactionType
+from app.db.models.transaction import TransactionStatus, TransactionType, Transaction
 from app.services.transaction_service import TransactionService
 from app.schemas.transaction import (
     # Income
@@ -46,16 +46,17 @@ from app.schemas.transaction import (
     ExchangeTransactionResponse,
     ExchangeCalculationRequest,
     ExchangeCalculationResponse,
-    
+
     # Transfer
     TransferTransactionCreate,
     TransferTransactionResponse,
     TransferReceiptRequest,
-    
+
     # Common
     TransactionCancelRequest,
     TransactionFilter,
     TransactionListResponse,
+    TransactionResponse,
     TransactionSummary,
 )
 from app.schemas.common import SuccessResponse, PaginationParams
@@ -65,6 +66,108 @@ from app.schemas.common import PaginatedResponse, paginated
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+def _serialize_transaction(transaction: Transaction) -> dict:
+    """Serialize a transaction with consistent branch routing fields."""
+
+    branch_name = None
+    if hasattr(transaction, 'branch') and transaction.branch:
+        branch_name = transaction.branch.name_en if hasattr(transaction.branch, 'name_en') else None
+
+    from_branch_id = None
+    to_branch_id = None
+    from_branch_name = None
+    to_branch_name = None
+
+    transaction_dict = {
+        "id": transaction.id,
+        "transaction_number": transaction.transaction_number,
+        "transaction_type": transaction.transaction_type,
+        "branch_id": transaction.branch_id,
+        "branch_name": branch_name,
+        "amount": transaction.amount,
+        "currency_id": transaction.currency_id,
+        "status": transaction.status,
+        "transaction_date": transaction.transaction_date,
+        "notes": transaction.notes,
+        "reference_number": transaction.reference_number,
+        "user_id": transaction.user_id,
+        "created_at": transaction.created_at,
+        "updated_at": transaction.updated_at,
+        "completed_at": getattr(transaction, "completed_at", None),
+        "cancelled_at": getattr(transaction, "cancelled_at", None),
+        "cancelled_by_id": getattr(transaction, "cancelled_by_id", None),
+        "cancellation_reason": getattr(transaction, "cancellation_reason", None),
+    }
+
+    if transaction.transaction_type == TransactionType.INCOME:
+        to_branch_id = transaction.branch_id
+        to_branch_name = branch_name
+
+        transaction_dict.update({
+            "income_category": transaction.income_category,
+            "income_source": transaction.income_source,
+        })
+    elif transaction.transaction_type == TransactionType.EXPENSE:
+        from_branch_id = transaction.branch_id
+        from_branch_name = branch_name
+
+        transaction_dict.update({
+            "expense_category": transaction.expense_category,
+            "expense_to": transaction.expense_to,
+            "approval_required": transaction.approval_required,
+            "approved_by_id": transaction.approved_by_id,
+            "approved_at": transaction.approved_at,
+            "is_approved": not transaction.approval_required or (
+                transaction.approved_by_id is not None and transaction.approved_at is not None
+            ),
+        })
+    elif transaction.transaction_type == TransactionType.EXCHANGE:
+        from_branch_id = transaction.branch_id
+        to_branch_id = transaction.branch_id
+        from_branch_name = branch_name
+        to_branch_name = branch_name
+
+        effective_rate = Decimal("0")
+        if transaction.from_amount and transaction.from_amount != 0:
+            effective_rate = transaction.to_amount / transaction.from_amount
+
+        total_cost = transaction.from_amount + (transaction.commission_amount or Decimal("0.00"))
+
+        transaction_dict.update({
+            "customer_id": transaction.customer_id,
+            "from_currency_id": transaction.from_currency_id,
+            "to_currency_id": transaction.to_currency_id,
+            "from_amount": transaction.from_amount,
+            "to_amount": transaction.to_amount,
+            "exchange_rate_used": transaction.exchange_rate_used,
+            "commission_percentage": transaction.commission_percentage,
+            "commission_amount": transaction.commission_amount,
+            "effective_rate": effective_rate,
+            "total_cost": total_cost,
+        })
+    elif transaction.transaction_type == TransactionType.TRANSFER:
+        if hasattr(transaction, 'from_branch') and transaction.from_branch:
+            from_branch_name = transaction.from_branch.name_en if hasattr(transaction.from_branch, 'name_en') else None
+        if hasattr(transaction, 'to_branch') and transaction.to_branch:
+            to_branch_name = transaction.to_branch.name_en if hasattr(transaction.to_branch, 'name_en') else None
+
+        from_branch_id = transaction.from_branch_id
+        to_branch_id = transaction.to_branch_id
+
+        transaction_dict.update({
+            "transfer_type": transaction.transfer_type,
+        })
+
+    transaction_dict.update({
+        "from_branch_id": from_branch_id,
+        "from_branch_name": from_branch_name,
+        "to_branch_id": to_branch_id,
+        "to_branch_name": to_branch_name,
+    })
+
+    return transaction_dict
 
 
 # ==================== INCOME TRANSACTIONS ====================
@@ -123,8 +226,8 @@ async def create_income_transaction(
             f"Income transaction created: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error creating income transaction: {str(e)}")
@@ -172,7 +275,8 @@ async def list_income_transactions(
         )
 
         # Convert to paginated response
-        return paginated(result["transactions"], result["total"], skip, limit)
+        serialized = [_serialize_transaction(txn) for txn in result["transactions"]]
+        return paginated(serialized, result["total"], skip, limit)
         
     except Exception as e:
         logger.error(f"Error listing income transactions: {str(e)}")
@@ -213,8 +317,8 @@ async def get_income_transaction(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Transaction is not an income transaction"
             )
-        
-        return transaction
+
+        return _serialize_transaction(transaction)
         
     except HTTPException:
         raise
@@ -274,8 +378,8 @@ async def create_expense_transaction(
             f"Expense transaction created: {result.transaction_number} (pending approval)",
             extra={"transaction_id": str(result.id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error creating expense transaction: {str(e)}")
@@ -333,8 +437,8 @@ async def approve_expense_transaction(
             f"Expense transaction approved: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error approving expense transaction: {str(e)}")
@@ -383,7 +487,8 @@ async def list_expense_transactions(
         )
 
         # Convert to paginated response
-        return paginated(result["transactions"], result["total"], skip, limit)
+        serialized = [_serialize_transaction(txn) for txn in result["transactions"]]
+        return paginated(serialized, result["total"], skip, limit)
 
     except Exception as e:
         logger.error(f"Error listing expense transactions: {str(e)}")
@@ -503,8 +608,8 @@ async def create_exchange_transaction(
             f"Exchange transaction created: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error creating exchange transaction: {str(e)}")
@@ -557,7 +662,8 @@ async def list_exchange_transactions(
         )
 
         # Convert to paginated response
-        return paginated(result["transactions"], result["total"], skip, limit)
+        serialized = [_serialize_transaction(txn) for txn in result["transactions"]]
+        return paginated(serialized, result["total"], skip, limit)
 
     except Exception as e:
         logger.error(f"Error listing exchange transactions: {str(e)}")
@@ -598,8 +704,8 @@ async def get_exchange_transaction(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Transaction is not an exchange transaction"
             )
-        
-        return transaction
+
+        return _serialize_transaction(transaction)
         
     except HTTPException:
         raise
@@ -672,8 +778,8 @@ async def create_transfer_transaction(
             f"Transfer initiated: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error creating transfer transaction: {str(e)}")
@@ -723,8 +829,8 @@ async def receive_transfer(
             f"Transfer completed: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error receiving transfer: {str(e)}")
@@ -775,7 +881,8 @@ async def list_transfer_transactions(
         )
 
         # Convert to paginated response
-        return paginated(result["transactions"], result["total"], skip, limit)
+        serialized = [_serialize_transaction(txn) for txn in result["transactions"]]
+        return paginated(serialized, result["total"], skip, limit)
 
     except Exception as e:
         logger.error(f"Error listing transfer transactions: {str(e)}")
@@ -816,8 +923,8 @@ async def get_transfer_transaction(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Transaction is not a transfer transaction"
             )
-        
-        return transaction
+
+        return _serialize_transaction(transaction)
         
     except HTTPException:
         raise
@@ -892,8 +999,9 @@ async def list_all_transactions(
             limit=limit
         )
 
-        # Convert to TransactionListResponse
-        return TransactionListResponse(**result)
+        # Convert to TransactionListResponse with consistent serialization
+        serialized = [_serialize_transaction(txn) for txn in result["transactions"]]
+        return TransactionListResponse(total=result["total"], transactions=serialized)
 
     except Exception as e:
         logger.error(f"Error listing transactions: {str(e)}")
@@ -905,12 +1013,7 @@ async def list_all_transactions(
 
 @router.get(
     "/{transaction_id}",
-    response_model=Union[
-        IncomeTransactionResponse,
-        ExpenseTransactionResponse,
-        ExchangeTransactionResponse,
-        TransferTransactionResponse
-    ],
+    response_model=TransactionResponse,
     summary="Get Transaction Details",
     description="Get detailed information about any transaction"
 )
@@ -940,85 +1043,7 @@ async def get_transaction(
                 detail=f"Transaction {transaction_id} not found"
             )
 
-        # Get branch name(s) if needed
-        branch_name = None
-        if hasattr(transaction, 'branch') and transaction.branch:
-            branch_name = transaction.branch.name_en if hasattr(transaction.branch, 'name_en') else None
-
-        # Convert to dict to avoid ORM object serialization issues
-        transaction_dict = {
-            "id": transaction.id,
-            "transaction_number": transaction.transaction_number,
-            "transaction_type": transaction.transaction_type,
-            "branch_id": transaction.branch_id,
-            "branch_name": branch_name,
-            "amount": transaction.amount,
-            "currency_id": transaction.currency_id,
-            "status": transaction.status,
-            "transaction_date": transaction.transaction_date,
-            "notes": transaction.notes,
-            "reference_number": transaction.reference_number,
-            "user_id": transaction.user_id,  # Response schemas expect user_id
-            "created_at": transaction.created_at,
-            "updated_at": transaction.updated_at,
-        }
-
-        # Add type-specific fields based on transaction type
-        if transaction.transaction_type == TransactionType.INCOME:
-            transaction_dict.update({
-                "income_category": transaction.income_category,
-                "income_source": transaction.income_source,
-            })
-        elif transaction.transaction_type == TransactionType.EXPENSE:
-            transaction_dict.update({
-                "expense_category": transaction.expense_category,
-                "expense_to": transaction.expense_to,
-                "approval_required": transaction.approval_required,
-                "approved_by_id": transaction.approved_by_id,
-                "approved_at": transaction.approved_at,
-                "is_approved": not transaction.approval_required or (
-                    transaction.approved_by_id is not None and transaction.approved_at is not None
-                ),
-            })
-        elif transaction.transaction_type == TransactionType.EXCHANGE:
-            # Calculate computed fields
-            from decimal import Decimal
-            effective_rate = Decimal("0")
-            if transaction.from_amount and transaction.from_amount != 0:
-                effective_rate = transaction.to_amount / transaction.from_amount
-
-            total_cost = transaction.from_amount + (transaction.commission_amount or Decimal("0.00"))
-
-            transaction_dict.update({
-                "customer_id": transaction.customer_id,
-                "from_currency_id": transaction.from_currency_id,
-                "to_currency_id": transaction.to_currency_id,
-                "from_amount": transaction.from_amount,
-                "to_amount": transaction.to_amount,
-                "exchange_rate_used": transaction.exchange_rate_used,
-                "commission_percentage": transaction.commission_percentage,
-                "commission_amount": transaction.commission_amount,
-                "effective_rate": effective_rate,
-                "total_cost": total_cost,
-            })
-        elif transaction.transaction_type == TransactionType.TRANSFER:
-            # Get branch names for transfer
-            from_branch_name = None
-            to_branch_name = None
-            if hasattr(transaction, 'from_branch') and transaction.from_branch:
-                from_branch_name = transaction.from_branch.name_en if hasattr(transaction.from_branch, 'name_en') else None
-            if hasattr(transaction, 'to_branch') and transaction.to_branch:
-                to_branch_name = transaction.to_branch.name_en if hasattr(transaction.to_branch, 'name_en') else None
-
-            transaction_dict.update({
-                "from_branch_id": transaction.from_branch_id,
-                "from_branch_name": from_branch_name,
-                "to_branch_id": transaction.to_branch_id,
-                "to_branch_name": to_branch_name,
-                "transfer_type": transaction.transfer_type,
-            })
-
-        return transaction_dict
+        return _serialize_transaction(transaction)
 
     except HTTPException:
         raise
@@ -1087,8 +1112,8 @@ async def cancel_transaction(
             f"Transaction cancelled: {transaction_id}",
             extra={"transaction_id": str(transaction_id)}
         )
-        
-        return result
+
+        return _serialize_transaction(result)
         
     except Exception as e:
         logger.error(f"Error cancelling transaction: {str(e)}")
