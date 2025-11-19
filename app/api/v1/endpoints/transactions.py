@@ -75,10 +75,16 @@ def _serialize_transaction(transaction: Transaction) -> dict:
     if hasattr(transaction, 'branch') and transaction.branch:
         branch_name = transaction.branch.name_en if hasattr(transaction.branch, 'name_en') else None
 
+    currency_name = None
+    if hasattr(transaction, "currency") and transaction.currency:
+        currency_name = getattr(transaction.currency, "name_en", None)
+
     from_branch_id = None
     to_branch_id = None
     from_branch_name = None
     to_branch_name = None
+    from_currency_name = None
+    to_currency_name = None
 
     transaction_dict = {
         "id": transaction.id,
@@ -135,6 +141,11 @@ def _serialize_transaction(transaction: Transaction) -> dict:
 
         total_cost = transaction.from_amount + (transaction.commission_amount or Decimal("0.00"))
 
+        if hasattr(transaction, "from_currency") and transaction.from_currency:
+            from_currency_name = getattr(transaction.from_currency, "name_en", None)
+        if hasattr(transaction, "to_currency") and transaction.to_currency:
+            to_currency_name = getattr(transaction.to_currency, "name_en", None)
+
         transaction_dict.update({
             "customer_id": transaction.customer_id,
             "from_currency_id": transaction.from_currency_id,
@@ -165,6 +176,9 @@ def _serialize_transaction(transaction: Transaction) -> dict:
         "from_branch_name": from_branch_name,
         "to_branch_id": to_branch_id,
         "to_branch_name": to_branch_name,
+        "currency_name": currency_name,
+        "from_currency_name": from_currency_name,
+        "to_currency_name": to_currency_name,
     })
 
     return transaction_dict
@@ -492,6 +506,47 @@ async def list_expense_transactions(
 
     except Exception as e:
         logger.error(f"Error listing expense transactions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/expense/{transaction_id}",
+    response_model=ExpenseTransactionResponse,
+    summary="Get Expense Transaction Details",
+    description="Get detailed information about a specific expense transaction",
+)
+async def get_expense_transaction(
+    transaction_id: UUID = Path(..., description="Transaction ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Retrieve an expense transaction by ID with branch and currency context."""
+
+    try:
+        service = TransactionService(db)
+        transaction = await service.get_transaction(transaction_id)
+
+        if not transaction:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Transaction {transaction_id} not found",
+            )
+
+        if transaction.transaction_type != TransactionType.EXPENSE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Transaction is not an expense transaction",
+            )
+
+        return _serialize_transaction(transaction)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting expense transaction: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)

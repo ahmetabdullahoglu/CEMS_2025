@@ -242,8 +242,11 @@ class TransactionService:
             query = select(Transaction).options(
                 selectin_polymorphic(Transaction, [TransferTransaction]),
                 selectinload(Transaction.branch),
+                selectinload(Transaction.currency),
                 selectinload(TransferTransaction.from_branch),
-                selectinload(TransferTransaction.to_branch)
+                selectinload(TransferTransaction.to_branch),
+                selectinload(ExchangeTransaction.from_currency),
+                selectinload(ExchangeTransaction.to_currency),
             )
             
             # Apply filters
@@ -1246,8 +1249,11 @@ class TransactionService:
         stmt = stmt.options(
             selectin_polymorphic(Transaction, [TransferTransaction]),
             selectinload(Transaction.branch),
+            selectinload(Transaction.currency),
             selectinload(TransferTransaction.from_branch),
-            selectinload(TransferTransaction.to_branch)
+            selectinload(TransferTransaction.to_branch),
+            selectinload(ExchangeTransaction.from_currency),
+            selectinload(ExchangeTransaction.to_currency),
         )
 
         result = await self.db.execute(stmt)

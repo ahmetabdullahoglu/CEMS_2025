@@ -132,6 +132,9 @@ class IncomeTransactionResponse(TransactionBase):
     to_branch_name: Optional[str] = Field(
         None, description="Destination branch name (income branch)"
     )
+    currency_name: Optional[str] = Field(None, description="Currency name")
+    from_currency_name: Optional[str] = Field(None, description="Source currency name")
+    to_currency_name: Optional[str] = Field(None, description="Destination currency name")
     branch_name: Optional[str] = Field(None, description="Branch name")
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
@@ -200,6 +203,9 @@ class ExpenseTransactionResponse(TransactionBase):
     to_branch_name: Optional[str] = Field(
         None, description="Destination branch name (always None for expense)"
     )
+    currency_name: Optional[str] = Field(None, description="Currency name")
+    from_currency_name: Optional[str] = Field(None, description="Source currency name")
+    to_currency_name: Optional[str] = Field(None, description="Destination currency name")
     approved_by_id: Optional[UUID] = None
     approved_at: Optional[datetime] = None
     user_id: UUID
@@ -316,6 +322,9 @@ class ExchangeTransactionResponse(BaseModel):
 
     from_currency_id: UUID
     to_currency_id: UUID
+    currency_name: Optional[str] = Field(None, description="Primary currency name")
+    from_currency_name: Optional[str] = Field(None, description="Source currency name")
+    to_currency_name: Optional[str] = Field(None, description="Destination currency name")
     from_amount: Decimal
     to_amount: Decimal
 
@@ -432,6 +441,9 @@ class TransferTransactionResponse(BaseModel):
     to_branch_name: Optional[str] = Field(None, description="Destination branch name")
     amount: Decimal
     currency_id: UUID
+    currency_name: Optional[str] = Field(None, description="Currency name")
+    from_currency_name: Optional[str] = Field(None, description="Source currency name")
+    to_currency_name: Optional[str] = Field(None, description="Destination currency name")
     transfer_type: TransferTypeEnum
 
     user_id: UUID  # Who initiated
