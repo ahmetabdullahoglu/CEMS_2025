@@ -16,7 +16,7 @@ Features:
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
@@ -527,16 +527,20 @@ class TransactionFilter(BaseModel):
     )
 
 
+TransactionResponse = Annotated[
+    IncomeTransactionResponse
+    | ExpenseTransactionResponse
+    | ExchangeTransactionResponse
+    | TransferTransactionResponse,
+    Field(discriminator="transaction_type"),
+]
+
+
 class TransactionListResponse(BaseModel):
     """Schema for transaction list response"""
-    
+
     total: int
-    transactions: List[
-        IncomeTransactionResponse |
-        ExpenseTransactionResponse |
-        ExchangeTransactionResponse |
-        TransferTransactionResponse
-    ]
+    transactions: List[TransactionResponse]
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -569,15 +573,10 @@ class DailyTransactionSummary(BaseModel):
 
 class TransactionSuccessResponse(BaseModel):
     """Success response wrapper"""
-    
+
     success: bool = True
     message: str
-    data: (
-        IncomeTransactionResponse |
-        ExpenseTransactionResponse |
-        ExchangeTransactionResponse |
-        TransferTransactionResponse
-    )
+    data: TransactionResponse
 
 
 class TransactionErrorResponse(BaseModel):

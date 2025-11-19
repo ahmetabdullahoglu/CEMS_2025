@@ -20,7 +20,7 @@ Features:
 
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List, Union
+from typing import Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
@@ -46,16 +46,17 @@ from app.schemas.transaction import (
     ExchangeTransactionResponse,
     ExchangeCalculationRequest,
     ExchangeCalculationResponse,
-    
+
     # Transfer
     TransferTransactionCreate,
     TransferTransactionResponse,
     TransferReceiptRequest,
-    
+
     # Common
     TransactionCancelRequest,
     TransactionFilter,
     TransactionListResponse,
+    TransactionResponse,
     TransactionSummary,
 )
 from app.schemas.common import SuccessResponse, PaginationParams
@@ -998,8 +999,9 @@ async def list_all_transactions(
             limit=limit
         )
 
-        # Convert to TransactionListResponse
-        return TransactionListResponse(**result)
+        # Convert to TransactionListResponse with consistent serialization
+        serialized = [_serialize_transaction(txn) for txn in result["transactions"]]
+        return TransactionListResponse(total=result["total"], transactions=serialized)
 
     except Exception as e:
         logger.error(f"Error listing transactions: {str(e)}")
@@ -1011,12 +1013,7 @@ async def list_all_transactions(
 
 @router.get(
     "/{transaction_id}",
-    response_model=Union[
-        IncomeTransactionResponse,
-        ExpenseTransactionResponse,
-        ExchangeTransactionResponse,
-        TransferTransactionResponse
-    ],
+    response_model=TransactionResponse,
     summary="Get Transaction Details",
     description="Get detailed information about any transaction"
 )
