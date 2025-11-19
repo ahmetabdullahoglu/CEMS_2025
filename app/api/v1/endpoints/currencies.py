@@ -89,6 +89,41 @@ async def list_currencies(
 
 
 @router.get(
+    "/active",
+    response_model=List[CurrencyResponse],
+    summary="List active currencies",
+    description="Get list of active currencies without pagination"
+)
+async def list_active_currencies(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all active currencies.
+
+    **Permissions:**
+    - Any authenticated user can view currencies
+
+    **Returns:**
+    - List of active currencies
+    """
+    try:
+        service = CurrencyService(db)
+        currencies, _ = await service.list_currencies(
+            include_inactive=False,
+            skip=0,
+            limit=500
+        )
+        return currencies
+    except Exception as e:
+        logger.error(f"Error listing active currencies: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve active currencies"
+        )
+
+
+@router.get(
     "/{currency_id}",
     response_model=CurrencyResponse,
     summary="Get currency by ID",
