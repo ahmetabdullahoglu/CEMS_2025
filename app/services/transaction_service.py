@@ -516,10 +516,10 @@ class TransactionService:
             exchange_rate = Decimal(str(rate_info.rate))
 
             # Calculate amounts
-            to_amount = calculation.from_amount * exchange_rate
+            to_amount = (calculation.from_amount * exchange_rate).quantize(Decimal("0.01"))
 
-            # Calculate commission (default 1% or from request)
-            commission_percentage = calculation.commission_percentage or Decimal("1.0")
+            # Calculate commission (default 0% unless explicitly provided)
+            commission_percentage = calculation.commission_percentage if calculation.commission_percentage is not None else Decimal("0.00")
             commission_amount = (calculation.from_amount * commission_percentage / 100).quantize(Decimal("0.01"))
 
             # Total cost
@@ -669,23 +669,24 @@ class TransactionService:
                     # Access rate from Pydantic model object (not dictionary)
                     exchange_rate = Decimal(str(rate_info.rate))
 
-                    # Step 3: Calculate amounts
-                    to_amount = from_amount * exchange_rate
+                    # Step 3: Calculate amounts and commission using request value (can be 0)
+                    to_amount = (from_amount * exchange_rate).quantize(Decimal("0.01"))
 
-                    # Calculate commission (example: 1% of from_amount)
-                    commission_rate = Decimal("0.01")  # 1%
-                    commission_amount = from_amount * commission_rate
+                    commission_percentage = Decimal(str(transaction.commission_percentage)) if transaction.commission_percentage is not None else Decimal("0.00")
+                    commission_amount = (from_amount * commission_percentage / 100).quantize(Decimal("0.01"))
 
-                    # Step 4: Check balance
+                    total_cost = from_amount + commission_amount
+
+                    # Step 4: Check balance using the total cost in from currency
                     from_balance_info = await self.balance_service.get_balance(
                         branch_id, from_currency_id
                     )
                     available = Decimal(str(from_balance_info['available_balance']))
 
-                    if available < from_amount:
+                    if available < total_cost:
                         raise InsufficientBalanceError(
                             f"Insufficient {from_currency.code} balance. "
-                            f"Available: {available}, Required: {from_amount}"
+                            f"Available: {available}, Required: {total_cost}"
                         )
 
                     # Step 5: Generate transaction number
@@ -713,22 +714,25 @@ class TransactionService:
                         to_amount=to_amount,
                         exchange_rate_used=exchange_rate,
                         commission_amount=commission_amount,
-                        commission_percentage=commission_rate * 100,
+                        commission_percentage=commission_percentage,
                         transaction_date=datetime.utcnow()
                     )
 
                     self.db.add(exchange)
                     await self.db.flush()
 
-                    # Deduct from_currency from branch
+                    # Deduct from_currency from branch including commission (if any)
                     await self.balance_service.update_balance(
                         branch_id=branch_id,
                         currency_id=from_currency_id,
-                        amount=-from_amount,
+                        amount=-total_cost,
                         change_type=BalanceChangeType.TRANSACTION,
                         reference_id=exchange.id,
                         reference_type="transaction",
-                        notes=f"Exchange out: {from_amount} {from_currency.code} to {to_currency.code}"
+                        notes=(
+                            f"Exchange out: {from_amount} {from_currency.code} "
+                            f"to {to_currency.code} (commission {commission_amount})"
+                        )
                     )
 
                     # Add to_currency to branch
@@ -741,18 +745,6 @@ class TransactionService:
                         reference_type="transaction",
                         notes=f"Exchange in: {to_amount} {to_currency.code} from {from_currency.code}"
                     )
-
-                    # Record commission as income
-                    if commission_amount > 0:
-                        await self.balance_service.update_balance(
-                            branch_id=branch_id,
-                            currency_id=from_currency_id,
-                            amount=commission_amount,
-                            change_type=BalanceChangeType.TRANSACTION,
-                            reference_id=exchange.id,
-                            reference_type="transaction",
-                            notes=f"Exchange commission ({commission_rate * 100}%)"
-                        )
 
                     # Mark as completed
                     exchange.status = TransactionStatus.COMPLETED
