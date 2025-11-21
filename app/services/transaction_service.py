@@ -691,84 +691,83 @@ class TransactionService:
 
             # Steps 6-12: Atomic operation
             try:
-                # Create exchange transaction
-                description_value = description or notes
+                async with self.db.begin():
+                    # Create exchange transaction
+                    description_value = description or notes
 
-                exchange = ExchangeTransaction(
-                    transaction_number=transaction_number,
-                    status=TransactionStatus.PENDING,
-                    amount=from_amount,
-                    currency_id=from_currency_id,
-                    branch_id=branch_id,
-                    user_id=user_id,
-                    customer_id=customer_id,
-                    reference_number=reference_number,
-                    description=description_value,
-                    notes=notes,
-                    from_currency_id=from_currency_id,
-                    to_currency_id=to_currency_id,
-                    from_amount=from_amount,
-                    to_amount=to_amount,
-                    exchange_rate_used=exchange_rate,
-                    commission_amount=commission_amount,
-                    commission_percentage=commission_rate * 100,
-                    transaction_date=datetime.utcnow()
-                )
-                
-                self.db.add(exchange)
-                await self.db.flush()
-                
-                # Deduct from_currency from branch
-                await self.balance_service.update_balance(
-                    branch_id=branch_id,
-                    currency_id=from_currency_id,
-                    amount=-from_amount,
-                    change_type=BalanceChangeType.TRANSACTION,
-                    reference_id=exchange.id,
-                    reference_type="transaction",
-                    notes=f"Exchange out: {from_amount} {from_currency.code} to {to_currency.code}"
-                )
+                    exchange = ExchangeTransaction(
+                        transaction_number=transaction_number,
+                        status=TransactionStatus.PENDING,
+                        amount=from_amount,
+                        currency_id=from_currency_id,
+                        branch_id=branch_id,
+                        user_id=user_id,
+                        customer_id=customer_id,
+                        reference_number=reference_number,
+                        description=description_value,
+                        notes=notes,
+                        from_currency_id=from_currency_id,
+                        to_currency_id=to_currency_id,
+                        from_amount=from_amount,
+                        to_amount=to_amount,
+                        exchange_rate_used=exchange_rate,
+                        commission_amount=commission_amount,
+                        commission_percentage=commission_rate * 100,
+                        transaction_date=datetime.utcnow()
+                    )
 
-                # Add to_currency to branch
-                await self.balance_service.update_balance(
-                    branch_id=branch_id,
-                    currency_id=to_currency_id,
-                    amount=to_amount,
-                    change_type=BalanceChangeType.TRANSACTION,
-                    reference_id=exchange.id,
-                    reference_type="transaction",
-                    notes=f"Exchange in: {to_amount} {to_currency.code} from {from_currency.code}"
-                )
+                    self.db.add(exchange)
+                    await self.db.flush()
 
-                # Record commission as income
-                if commission_amount > 0:
+                    # Deduct from_currency from branch
                     await self.balance_service.update_balance(
                         branch_id=branch_id,
                         currency_id=from_currency_id,
-                        amount=commission_amount,
+                        amount=-from_amount,
                         change_type=BalanceChangeType.TRANSACTION,
                         reference_id=exchange.id,
                         reference_type="transaction",
-                        notes=f"Exchange commission ({commission_rate * 100}%)"
+                        notes=f"Exchange out: {from_amount} {from_currency.code} to {to_currency.code}"
                     )
-                
-                # Mark as completed
-                exchange.status = TransactionStatus.COMPLETED
-                exchange.completed_at = datetime.utcnow()
-                
-                await self.db.commit()
+
+                    # Add to_currency to branch
+                    await self.balance_service.update_balance(
+                        branch_id=branch_id,
+                        currency_id=to_currency_id,
+                        amount=to_amount,
+                        change_type=BalanceChangeType.TRANSACTION,
+                        reference_id=exchange.id,
+                        reference_type="transaction",
+                        notes=f"Exchange in: {to_amount} {to_currency.code} from {from_currency.code}"
+                    )
+
+                    # Record commission as income
+                    if commission_amount > 0:
+                        await self.balance_service.update_balance(
+                            branch_id=branch_id,
+                            currency_id=from_currency_id,
+                            amount=commission_amount,
+                            change_type=BalanceChangeType.TRANSACTION,
+                            reference_id=exchange.id,
+                            reference_type="transaction",
+                            notes=f"Exchange commission ({commission_rate * 100}%)"
+                        )
+
+                    # Mark as completed
+                    exchange.status = TransactionStatus.COMPLETED
+                    exchange.completed_at = datetime.utcnow()
+
                 await self.db.refresh(exchange)
-                
+
                 logger.info(
                     f"Exchange transaction created: {transaction_number}, "
                     f"Branch: {branch_id}, {from_amount} {from_currency.code} -> "
                     f"{to_amount} {to_currency.code}"
                 )
-                
+
                 return exchange
-                
+
             except Exception as e:
-                await self.db.rollback()
                 logger.error(f"Failed to create exchange transaction: {str(e)}")
                 raise DatabaseOperationError(
                     f"Failed to create exchange transaction: {str(e)}"
