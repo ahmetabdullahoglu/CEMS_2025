@@ -570,6 +570,7 @@ class TransactionService:
             from_currency_id=transaction.from_currency_id,
             to_currency_id=transaction.to_currency_id,
             from_amount=transaction.from_amount,
+            commission_percentage=transaction.commission_percentage,
             user_id=user_id,
             reference_number=transaction.reference_number,
             description=transaction.description,
@@ -583,6 +584,7 @@ class TransactionService:
         from_currency_id: UUID,
         to_currency_id: UUID,
         from_amount: Decimal,
+        commission_percentage: Optional[Decimal],
         user_id: UUID,
         reference_number: Optional[str] = None,
         description: Optional[str] = None,
@@ -672,7 +674,11 @@ class TransactionService:
                     # Step 3: Calculate amounts and commission using request value (can be 0)
                     to_amount = (from_amount * exchange_rate).quantize(Decimal("0.01"))
 
-                    commission_percentage = Decimal(str(transaction.commission_percentage)) if transaction.commission_percentage is not None else Decimal("0.00")
+                    commission_percentage = (
+                        Decimal(str(commission_percentage))
+                        if commission_percentage is not None
+                        else Decimal("0.00")
+                    )
                     commission_amount = (from_amount * commission_percentage / 100).quantize(Decimal("0.01"))
 
                     total_cost = from_amount + commission_amount
