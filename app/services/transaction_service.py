@@ -627,71 +627,72 @@ class TransactionService:
         try:
             # Validate inputs
             validate_positive_amount(from_amount)
-            await self._validate_branch_exists(branch_id)
-            await self._validate_currency_exists(from_currency_id)
-            await self._validate_currency_exists(to_currency_id)
-            if customer_id:
-                await self._validate_customer_exists(customer_id)
-            
+
             if from_currency_id == to_currency_id:
                 raise ValidationError("Cannot exchange between same currencies")
-            
-            # Check duplicate reference
-            if reference_number:
-                await self._check_duplicate_reference(reference_number)
 
-            # Step 1: Get currency objects to retrieve their codes
-            from app.repositories.currency_repo import CurrencyRepository
-            currency_repo = CurrencyRepository(self.db)
-
-            from_currency = await currency_repo.get_currency_by_id(from_currency_id)
-            to_currency = await currency_repo.get_currency_by_id(to_currency_id)
-
-            if not from_currency:
-                raise ValidationError(f"Source currency {from_currency_id} not found")
-            if not to_currency:
-                raise ValidationError(f"Target currency {to_currency_id} not found")
-
-            # Step 2: Get latest exchange rate using currency codes
-            rate_info = await self.currency_service.get_latest_rate(
-                from_currency.code, to_currency.code
-            )
-
-            if not rate_info:
-                raise ValidationError(
-                    f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
-                )
-
-            # Access rate from Pydantic model object (not dictionary)
-            exchange_rate = Decimal(str(rate_info.rate))
-
-            # Step 3: Calculate amounts
-            to_amount = from_amount * exchange_rate
-            
-            # Calculate commission (example: 1% of from_amount)
-            commission_rate = Decimal("0.01")  # 1%
-            commission_amount = from_amount * commission_rate
-
-            # Step 4: Check balance
-            from_balance_info = await self.balance_service.get_balance(
-                branch_id, from_currency_id
-            )
-            available = Decimal(str(from_balance_info['available_balance']))
-            
-            if available < from_amount:
-                raise InsufficientBalanceError(
-                    f"Insufficient {from_currency.code} balance. "
-                    f"Available: {available}, Required: {from_amount}"
-                )
-
-            # Step 5: Generate transaction number
-            transaction_number = await self.transaction_generator.generate(
-                self.db
-            )
-
-            # Steps 6-12: Atomic operation
+            # Steps 1-12: Atomic operation
             try:
                 async with self.db.begin():
+                    await self._validate_branch_exists(branch_id)
+                    await self._validate_currency_exists(from_currency_id)
+                    await self._validate_currency_exists(to_currency_id)
+                    if customer_id:
+                        await self._validate_customer_exists(customer_id)
+
+                    # Check duplicate reference
+                    if reference_number:
+                        await self._check_duplicate_reference(reference_number)
+
+                    # Step 1: Get currency objects to retrieve their codes
+                    from app.repositories.currency_repo import CurrencyRepository
+                    currency_repo = CurrencyRepository(self.db)
+
+                    from_currency = await currency_repo.get_currency_by_id(from_currency_id)
+                    to_currency = await currency_repo.get_currency_by_id(to_currency_id)
+
+                    if not from_currency:
+                        raise ValidationError(f"Source currency {from_currency_id} not found")
+                    if not to_currency:
+                        raise ValidationError(f"Target currency {to_currency_id} not found")
+
+                    # Step 2: Get latest exchange rate using currency codes
+                    rate_info = await self.currency_service.get_latest_rate(
+                        from_currency.code, to_currency.code
+                    )
+
+                    if not rate_info:
+                        raise ValidationError(
+                            f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
+                        )
+
+                    # Access rate from Pydantic model object (not dictionary)
+                    exchange_rate = Decimal(str(rate_info.rate))
+
+                    # Step 3: Calculate amounts
+                    to_amount = from_amount * exchange_rate
+
+                    # Calculate commission (example: 1% of from_amount)
+                    commission_rate = Decimal("0.01")  # 1%
+                    commission_amount = from_amount * commission_rate
+
+                    # Step 4: Check balance
+                    from_balance_info = await self.balance_service.get_balance(
+                        branch_id, from_currency_id
+                    )
+                    available = Decimal(str(from_balance_info['available_balance']))
+
+                    if available < from_amount:
+                        raise InsufficientBalanceError(
+                            f"Insufficient {from_currency.code} balance. "
+                            f"Available: {available}, Required: {from_amount}"
+                        )
+
+                    # Step 5: Generate transaction number
+                    transaction_number = await self.transaction_generator.generate(
+                        self.db
+                    )
+
                     # Create exchange transaction
                     description_value = description or notes
 
