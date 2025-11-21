@@ -758,7 +758,20 @@ class TransactionService:
                     exchange.status = TransactionStatus.COMPLETED
                     exchange.completed_at = datetime.utcnow()
 
-                await self.db.refresh(exchange)
+                # Reload exchange with required relationships to avoid lazy loads
+                # outside the greenlet/async context when serializing the response.
+                exchange = (
+                    await self.db.execute(
+                        select(ExchangeTransaction)
+                        .options(
+                            selectinload(ExchangeTransaction.branch),
+                            selectinload(ExchangeTransaction.currency),
+                            selectinload(ExchangeTransaction.from_currency),
+                            selectinload(ExchangeTransaction.to_currency),
+                        )
+                        .where(ExchangeTransaction.id == exchange.id)
+                    )
+                ).scalar_one()
 
                 logger.info(
                     f"Exchange transaction created: {transaction_number}, "
