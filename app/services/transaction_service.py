@@ -579,7 +579,7 @@ class TransactionService:
     async def create_exchange(
         self,
         branch_id: UUID,
-        customer_id: UUID,
+        customer_id: Optional[UUID],
         from_currency_id: UUID,
         to_currency_id: UUID,
         from_amount: Decimal,
@@ -607,7 +607,7 @@ class TransactionService:
         
         Args:
             branch_id: Branch executing exchange
-            customer_id: Customer (required for exchanges)
+            customer_id: Optional customer reference
             from_currency_id: Source currency
             to_currency_id: Target currency
             from_amount: Amount to exchange
@@ -630,7 +630,8 @@ class TransactionService:
             await self._validate_branch_exists(branch_id)
             await self._validate_currency_exists(from_currency_id)
             await self._validate_currency_exists(to_currency_id)
-            await self._validate_customer_exists(customer_id)
+            if customer_id:
+                await self._validate_customer_exists(customer_id)
             
             if from_currency_id == to_currency_id:
                 raise ValidationError("Cannot exchange between same currencies")
