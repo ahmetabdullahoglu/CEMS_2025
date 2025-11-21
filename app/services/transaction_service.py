@@ -191,11 +191,21 @@ class TransactionService:
                 # Mark transaction as completed
                 income.status = TransactionStatus.COMPLETED
                 income.completed_at = datetime.utcnow()
-                
+
                 # Commit everything
                 await self.db.commit()
-                await self.db.refresh(income)
-                
+
+                income = (
+                    await self.db.execute(
+                        select(IncomeTransaction)
+                        .options(
+                            selectinload(IncomeTransaction.branch),
+                            selectinload(IncomeTransaction.currency),
+                        )
+                        .where(IncomeTransaction.id == income.id)
+                    )
+                ).scalar_one()
+
                 logger.info(
                     f"Income transaction created: {transaction_number}, "
                     f"Branch: {branch_id}, Amount: {amount} {currency_id}"
