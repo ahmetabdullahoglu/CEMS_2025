@@ -63,6 +63,34 @@ class TransactionService:
         self.balance_service = BalanceService(db)
         self.currency_service = CurrencyService(db)
         self.transaction_generator = TransactionNumberGenerator()
+
+    # ==================== INTERNAL HELPERS ====================
+
+    def _transaction_relationship_options(self):
+        """Common relationship loading options to prevent async lazy loads."""
+        return (
+            selectin_polymorphic(Transaction, [TransferTransaction]),
+            selectinload(Transaction.branch),
+            selectinload(Transaction.currency),
+            selectinload(TransferTransaction.from_branch),
+            selectinload(TransferTransaction.to_branch),
+            selectinload(ExchangeTransaction.from_currency),
+            selectinload(ExchangeTransaction.to_currency),
+        )
+
+    async def _load_transaction_with_relationships(
+        self,
+        transaction_id: UUID,
+        model: type[Transaction] = Transaction,
+    ) -> Transaction:
+        """Reload a transaction with all relationships eagerly loaded."""
+        stmt = (
+            select(model)
+            .options(*self._transaction_relationship_options())
+            .where(model.id == transaction_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
     
     # ==================== INCOME TRANSACTIONS ====================
     @retry_on_deadlock(max_attempts=3)
@@ -191,11 +219,14 @@ class TransactionService:
                 # Mark transaction as completed
                 income.status = TransactionStatus.COMPLETED
                 income.completed_at = datetime.utcnow()
-                
+
                 # Commit everything
                 await self.db.commit()
-                await self.db.refresh(income)
-                
+
+                income = await self._load_transaction_with_relationships(
+                    income.id, IncomeTransaction
+                )
+
                 logger.info(
                     f"Income transaction created: {transaction_number}, "
                     f"Branch: {branch_id}, Amount: {amount} {currency_id}"
@@ -453,10 +484,13 @@ class TransactionService:
                 if not requires_approval:
                     expense.status = TransactionStatus.COMPLETED
                     expense.completed_at = datetime.utcnow()
-                
+
                 await self.db.commit()
-                await self.db.refresh(expense)
-                
+
+                expense = await self._load_transaction_with_relationships(
+                    expense.id, ExpenseTransaction
+                )
+
                 logger.info(
                     f"Expense transaction created: {transaction_number}, "
                     f"Branch: {branch_id}, Amount: {amount} {currency_id}"
@@ -516,10 +550,10 @@ class TransactionService:
             exchange_rate = Decimal(str(rate_info.rate))
 
             # Calculate amounts
-            to_amount = calculation.from_amount * exchange_rate
+            to_amount = (calculation.from_amount * exchange_rate).quantize(Decimal("0.01"))
 
-            # Calculate commission (default 1% or from request)
-            commission_percentage = calculation.commission_percentage or Decimal("1.0")
+            # Calculate commission (default 0% unless explicitly provided)
+            commission_percentage = calculation.commission_percentage if calculation.commission_percentage is not None else Decimal("0.00")
             commission_amount = (calculation.from_amount * commission_percentage / 100).quantize(Decimal("0.01"))
 
             # Total cost
@@ -570,6 +604,7 @@ class TransactionService:
             from_currency_id=transaction.from_currency_id,
             to_currency_id=transaction.to_currency_id,
             from_amount=transaction.from_amount,
+            commission_percentage=transaction.commission_percentage,
             user_id=user_id,
             reference_number=transaction.reference_number,
             description=transaction.description,
@@ -579,10 +614,11 @@ class TransactionService:
     async def create_exchange(
         self,
         branch_id: UUID,
-        customer_id: UUID,
+        customer_id: Optional[UUID],
         from_currency_id: UUID,
         to_currency_id: UUID,
         from_amount: Decimal,
+        commission_percentage: Optional[Decimal],
         user_id: UUID,
         reference_number: Optional[str] = None,
         description: Optional[str] = None,
@@ -607,7 +643,7 @@ class TransactionService:
         
         Args:
             branch_id: Branch executing exchange
-            customer_id: Customer (required for exchanges)
+            customer_id: Optional customer reference
             from_currency_id: Source currency
             to_currency_id: Target currency
             from_amount: Amount to exchange
@@ -627,147 +663,148 @@ class TransactionService:
         try:
             # Validate inputs
             validate_positive_amount(from_amount)
-            await self._validate_branch_exists(branch_id)
-            await self._validate_currency_exists(from_currency_id)
-            await self._validate_currency_exists(to_currency_id)
-            await self._validate_customer_exists(customer_id)
-            
+
             if from_currency_id == to_currency_id:
                 raise ValidationError("Cannot exchange between same currencies")
-            
-            # Check duplicate reference
-            if reference_number:
-                await self._check_duplicate_reference(reference_number)
 
-            # Step 1: Get currency objects to retrieve their codes
-            from app.repositories.currency_repo import CurrencyRepository
-            currency_repo = CurrencyRepository(self.db)
-
-            from_currency = await currency_repo.get_currency_by_id(from_currency_id)
-            to_currency = await currency_repo.get_currency_by_id(to_currency_id)
-
-            if not from_currency:
-                raise ValidationError(f"Source currency {from_currency_id} not found")
-            if not to_currency:
-                raise ValidationError(f"Target currency {to_currency_id} not found")
-
-            # Step 2: Get latest exchange rate using currency codes
-            rate_info = await self.currency_service.get_latest_rate(
-                from_currency.code, to_currency.code
-            )
-
-            if not rate_info:
-                raise ValidationError(
-                    f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
-                )
-
-            # Access rate from Pydantic model object (not dictionary)
-            exchange_rate = Decimal(str(rate_info.rate))
-
-            # Step 3: Calculate amounts
-            to_amount = from_amount * exchange_rate
-            
-            # Calculate commission (example: 1% of from_amount)
-            commission_rate = Decimal("0.01")  # 1%
-            commission_amount = from_amount * commission_rate
-
-            # Step 4: Check balance
-            from_balance_info = await self.balance_service.get_balance(
-                branch_id, from_currency_id
-            )
-            available = Decimal(str(from_balance_info['available_balance']))
-            
-            if available < from_amount:
-                raise InsufficientBalanceError(
-                    f"Insufficient {from_currency.code} balance. "
-                    f"Available: {available}, Required: {from_amount}"
-                )
-
-            # Step 5: Generate transaction number
-            transaction_number = await self.transaction_generator.generate(
-                self.db
-            )
-
-            # Steps 6-12: Atomic operation
+            # Steps 1-12: Atomic operation
             try:
-                # Create exchange transaction
-                description_value = description or notes
+                async with self.db.begin():
+                    await self._validate_branch_exists(branch_id)
+                    await self._validate_currency_exists(from_currency_id)
+                    await self._validate_currency_exists(to_currency_id)
+                    if customer_id:
+                        await self._validate_customer_exists(customer_id)
 
-                exchange = ExchangeTransaction(
-                    transaction_number=transaction_number,
-                    status=TransactionStatus.PENDING,
-                    amount=from_amount,
-                    currency_id=from_currency_id,
-                    branch_id=branch_id,
-                    user_id=user_id,
-                    customer_id=customer_id,
-                    reference_number=reference_number,
-                    description=description_value,
-                    notes=notes,
-                    from_currency_id=from_currency_id,
-                    to_currency_id=to_currency_id,
-                    from_amount=from_amount,
-                    to_amount=to_amount,
-                    exchange_rate_used=exchange_rate,
-                    commission_amount=commission_amount,
-                    commission_percentage=commission_rate * 100,
-                    transaction_date=datetime.utcnow()
-                )
-                
-                self.db.add(exchange)
-                await self.db.flush()
-                
-                # Deduct from_currency from branch
-                await self.balance_service.update_balance(
-                    branch_id=branch_id,
-                    currency_id=from_currency_id,
-                    amount=-from_amount,
-                    change_type=BalanceChangeType.TRANSACTION,
-                    reference_id=exchange.id,
-                    reference_type="transaction",
-                    notes=f"Exchange out: {from_amount} {from_currency.code} to {to_currency.code}"
-                )
+                    # Check duplicate reference
+                    if reference_number:
+                        await self._check_duplicate_reference(reference_number)
 
-                # Add to_currency to branch
-                await self.balance_service.update_balance(
-                    branch_id=branch_id,
-                    currency_id=to_currency_id,
-                    amount=to_amount,
-                    change_type=BalanceChangeType.TRANSACTION,
-                    reference_id=exchange.id,
-                    reference_type="transaction",
-                    notes=f"Exchange in: {to_amount} {to_currency.code} from {from_currency.code}"
-                )
+                    # Step 1: Get currency objects to retrieve their codes
+                    from app.repositories.currency_repo import CurrencyRepository
+                    currency_repo = CurrencyRepository(self.db)
 
-                # Record commission as income
-                if commission_amount > 0:
+                    from_currency = await currency_repo.get_currency_by_id(from_currency_id)
+                    to_currency = await currency_repo.get_currency_by_id(to_currency_id)
+
+                    if not from_currency:
+                        raise ValidationError(f"Source currency {from_currency_id} not found")
+                    if not to_currency:
+                        raise ValidationError(f"Target currency {to_currency_id} not found")
+
+                    # Step 2: Get latest exchange rate using currency codes
+                    rate_info = await self.currency_service.get_latest_rate(
+                        from_currency.code, to_currency.code
+                    )
+
+                    if not rate_info:
+                        raise ValidationError(
+                            f"No exchange rate found for {from_currency.code} -> {to_currency.code}"
+                        )
+
+                    # Access rate from Pydantic model object (not dictionary)
+                    exchange_rate = Decimal(str(rate_info.rate))
+
+                    # Step 3: Calculate amounts and commission using request value (can be 0)
+                    to_amount = (from_amount * exchange_rate).quantize(Decimal("0.01"))
+
+                    commission_percentage = (
+                        Decimal(str(commission_percentage))
+                        if commission_percentage is not None
+                        else Decimal("0.00")
+                    )
+                    commission_amount = (from_amount * commission_percentage / 100).quantize(Decimal("0.01"))
+
+                    total_cost = from_amount + commission_amount
+
+                    # Step 4: Check balance using the total cost in from currency
+                    from_balance_info = await self.balance_service.get_balance(
+                        branch_id, from_currency_id
+                    )
+                    available = Decimal(str(from_balance_info['available_balance']))
+
+                    if available < total_cost:
+                        raise InsufficientBalanceError(
+                            f"Insufficient {from_currency.code} balance. "
+                            f"Available: {available}, Required: {total_cost}"
+                        )
+
+                    # Step 5: Generate transaction number
+                    transaction_number = await self.transaction_generator.generate(
+                        self.db
+                    )
+
+                    # Create exchange transaction
+                    description_value = description or notes
+
+                    exchange = ExchangeTransaction(
+                        transaction_number=transaction_number,
+                        status=TransactionStatus.PENDING,
+                        amount=from_amount,
+                        currency_id=from_currency_id,
+                        branch_id=branch_id,
+                        user_id=user_id,
+                        customer_id=customer_id,
+                        reference_number=reference_number,
+                        description=description_value,
+                        notes=notes,
+                        from_currency_id=from_currency_id,
+                        to_currency_id=to_currency_id,
+                        from_amount=from_amount,
+                        to_amount=to_amount,
+                        exchange_rate_used=exchange_rate,
+                        commission_amount=commission_amount,
+                        commission_percentage=commission_percentage,
+                        transaction_date=datetime.utcnow()
+                    )
+
+                    self.db.add(exchange)
+                    await self.db.flush()
+
+                    # Deduct from_currency from branch including commission (if any)
                     await self.balance_service.update_balance(
                         branch_id=branch_id,
                         currency_id=from_currency_id,
-                        amount=commission_amount,
+                        amount=-total_cost,
                         change_type=BalanceChangeType.TRANSACTION,
                         reference_id=exchange.id,
                         reference_type="transaction",
-                        notes=f"Exchange commission ({commission_rate * 100}%)"
+                        notes=(
+                            f"Exchange out: {from_amount} {from_currency.code} "
+                            f"to {to_currency.code} (commission {commission_amount})"
+                        )
                     )
-                
-                # Mark as completed
-                exchange.status = TransactionStatus.COMPLETED
-                exchange.completed_at = datetime.utcnow()
-                
-                await self.db.commit()
-                await self.db.refresh(exchange)
-                
+
+                    # Add to_currency to branch
+                    await self.balance_service.update_balance(
+                        branch_id=branch_id,
+                        currency_id=to_currency_id,
+                        amount=to_amount,
+                        change_type=BalanceChangeType.TRANSACTION,
+                        reference_id=exchange.id,
+                        reference_type="transaction",
+                        notes=f"Exchange in: {to_amount} {to_currency.code} from {from_currency.code}"
+                    )
+
+                    # Mark as completed
+                    exchange.status = TransactionStatus.COMPLETED
+                    exchange.completed_at = datetime.utcnow()
+
+                # Reload exchange with required relationships to avoid lazy loads
+                # outside the greenlet/async context when serializing the response.
+                exchange = await self._load_transaction_with_relationships(
+                    exchange.id, ExchangeTransaction
+                )
+
                 logger.info(
                     f"Exchange transaction created: {transaction_number}, "
                     f"Branch: {branch_id}, {from_amount} {from_currency.code} -> "
                     f"{to_amount} {to_currency.code}"
                 )
-                
+
                 return exchange
-                
+
             except Exception as e:
-                await self.db.rollback()
                 logger.error(f"Failed to create exchange transaction: {str(e)}")
                 raise DatabaseOperationError(
                     f"Failed to create exchange transaction: {str(e)}"
@@ -916,16 +953,18 @@ class TransactionService:
                     reference_id=transfer.id,
                     reference_type="transaction"
                 )
-                
+
                 await self.db.commit()
-                await self.db.refresh(transfer)
-                
+                transfer = await self._load_transaction_with_relationships(
+                    transfer.id, TransferTransaction
+                )
+
                 logger.info(
                     f"Transfer initiated: {transaction_number}, "
                     f"From: {from_branch_id} -> To: {to_branch_id}, "
                     f"Amount: {amount} {currency_id}"
                 )
-                
+
                 return transfer
                 
             except Exception as e:
@@ -1040,12 +1079,14 @@ class TransactionService:
                 transfer.completed_at = datetime.utcnow()
                 transfer.received_by_id = received_by_user_id
                 transfer.received_at = datetime.utcnow()
-                
+
                 await self.db.commit()
-                await self.db.refresh(transfer)
-                
+                transfer = await self._load_transaction_with_relationships(
+                    transfer.id, TransferTransaction
+                )
+
                 logger.info(f"Transfer completed: {transfer.transaction_number}")
-                
+
                 return transfer
                 
             except Exception as e:
@@ -1103,12 +1144,18 @@ class TransactionService:
             # Approve the expense
             expense.approve(approver_id)
 
+            # Mark the transaction as completed now that it is approved
+            expense.complete(approver_id)
+
             # If there are approval notes, add them to the transaction notes
             if approval_notes:
                 expense.notes = f"{expense.notes or ''}\nApproval notes: {approval_notes}"
 
             await self.db.commit()
-            await self.db.refresh(expense)
+
+            expense = await self._load_transaction_with_relationships(
+                expense.id, ExpenseTransaction
+            )
 
             logger.info(
                 f"Expense transaction approved: {expense.transaction_number} by user {approver_id}"
@@ -1215,7 +1262,9 @@ class TransactionService:
                 transaction.cancellation_reason = reason.strip()
                 
                 await self.db.commit()
-                await self.db.refresh(transaction)
+                transaction = await self._load_transaction_with_relationships(
+                    transaction.id, type(transaction)
+                )
                 
                 logger.info(
                     f"Transaction cancelled: {transaction.transaction_number}, "
@@ -1243,28 +1292,19 @@ class TransactionService:
         """Get transaction by ID with branch relationships loaded"""
         from sqlalchemy.orm import selectinload
 
-        stmt = select(Transaction).where(Transaction.id == transaction_id)
-
-        # Load branch relationships (including transfer-specific ones)
-        stmt = stmt.options(
-            selectin_polymorphic(Transaction, [TransferTransaction]),
-            selectinload(Transaction.branch),
-            selectinload(Transaction.currency),
-            selectinload(TransferTransaction.from_branch),
-            selectinload(TransferTransaction.to_branch),
-            selectinload(ExchangeTransaction.from_currency),
-            selectinload(ExchangeTransaction.to_currency),
-        )
-
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        try:
+            return await self._load_transaction_with_relationships(transaction_id)
+        except Exception:
+            return None
     
     async def get_transaction_by_number(
         self, transaction_number: str
     ) -> Optional[Transaction]:
         """Get transaction by transaction number"""
-        stmt = select(Transaction).where(
-            Transaction.transaction_number == transaction_number
+        stmt = (
+            select(Transaction)
+            .options(*self._transaction_relationship_options())
+            .where(Transaction.transaction_number == transaction_number)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -1280,7 +1320,11 @@ class TransactionService:
         limit: int = 100
     ) -> List[Transaction]:
         """Get transactions for a branch with filters"""
-        stmt = select(Transaction).where(Transaction.branch_id == branch_id)
+        stmt = (
+            select(Transaction)
+            .options(*self._transaction_relationship_options())
+            .where(Transaction.branch_id == branch_id)
+        )
         
         if transaction_type:
             stmt = stmt.where(Transaction.transaction_type == transaction_type)

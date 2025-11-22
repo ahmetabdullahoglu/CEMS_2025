@@ -26,8 +26,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, get_async_db as get_db
 from app.db.models.user import User
 from app.db.models.transaction import TransactionStatus, TransactionType, Transaction
 from app.services.transaction_service import TransactionService
