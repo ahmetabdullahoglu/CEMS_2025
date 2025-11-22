@@ -463,10 +463,20 @@ class TransactionService:
                 if not requires_approval:
                     expense.status = TransactionStatus.COMPLETED
                     expense.completed_at = datetime.utcnow()
-                
+
                 await self.db.commit()
-                await self.db.refresh(expense)
-                
+
+                expense = (
+                    await self.db.execute(
+                        select(ExpenseTransaction)
+                        .options(
+                            selectinload(ExpenseTransaction.branch),
+                            selectinload(ExpenseTransaction.currency),
+                        )
+                        .where(ExpenseTransaction.id == expense.id)
+                    )
+                ).scalar_one()
+
                 logger.info(
                     f"Expense transaction created: {transaction_number}, "
                     f"Branch: {branch_id}, Amount: {amount} {currency_id}"
