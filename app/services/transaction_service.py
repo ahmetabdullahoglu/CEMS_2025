@@ -63,6 +63,34 @@ class TransactionService:
         self.balance_service = BalanceService(db)
         self.currency_service = CurrencyService(db)
         self.transaction_generator = TransactionNumberGenerator()
+
+    # ==================== INTERNAL HELPERS ====================
+
+    def _transaction_relationship_options(self):
+        """Common relationship loading options to prevent async lazy loads."""
+        return (
+            selectin_polymorphic(Transaction, [TransferTransaction]),
+            selectinload(Transaction.branch),
+            selectinload(Transaction.currency),
+            selectinload(TransferTransaction.from_branch),
+            selectinload(TransferTransaction.to_branch),
+            selectinload(ExchangeTransaction.from_currency),
+            selectinload(ExchangeTransaction.to_currency),
+        )
+
+    async def _load_transaction_with_relationships(
+        self,
+        transaction_id: UUID,
+        model: type[Transaction] = Transaction,
+    ) -> Transaction:
+        """Reload a transaction with all relationships eagerly loaded."""
+        stmt = (
+            select(model)
+            .options(*self._transaction_relationship_options())
+            .where(model.id == transaction_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
     
     # ==================== INCOME TRANSACTIONS ====================
     @retry_on_deadlock(max_attempts=3)
@@ -195,16 +223,9 @@ class TransactionService:
                 # Commit everything
                 await self.db.commit()
 
-                income = (
-                    await self.db.execute(
-                        select(IncomeTransaction)
-                        .options(
-                            selectinload(IncomeTransaction.branch),
-                            selectinload(IncomeTransaction.currency),
-                        )
-                        .where(IncomeTransaction.id == income.id)
-                    )
-                ).scalar_one()
+                income = await self._load_transaction_with_relationships(
+                    income.id, IncomeTransaction
+                )
 
                 logger.info(
                     f"Income transaction created: {transaction_number}, "
@@ -466,16 +487,9 @@ class TransactionService:
 
                 await self.db.commit()
 
-                expense = (
-                    await self.db.execute(
-                        select(ExpenseTransaction)
-                        .options(
-                            selectinload(ExpenseTransaction.branch),
-                            selectinload(ExpenseTransaction.currency),
-                        )
-                        .where(ExpenseTransaction.id == expense.id)
-                    )
-                ).scalar_one()
+                expense = await self._load_transaction_with_relationships(
+                    expense.id, ExpenseTransaction
+                )
 
                 logger.info(
                     f"Expense transaction created: {transaction_number}, "
@@ -778,18 +792,9 @@ class TransactionService:
 
                 # Reload exchange with required relationships to avoid lazy loads
                 # outside the greenlet/async context when serializing the response.
-                exchange = (
-                    await self.db.execute(
-                        select(ExchangeTransaction)
-                        .options(
-                            selectinload(ExchangeTransaction.branch),
-                            selectinload(ExchangeTransaction.currency),
-                            selectinload(ExchangeTransaction.from_currency),
-                            selectinload(ExchangeTransaction.to_currency),
-                        )
-                        .where(ExchangeTransaction.id == exchange.id)
-                    )
-                ).scalar_one()
+                exchange = await self._load_transaction_with_relationships(
+                    exchange.id, ExchangeTransaction
+                )
 
                 logger.info(
                     f"Exchange transaction created: {transaction_number}, "
@@ -950,18 +955,9 @@ class TransactionService:
                 )
 
                 await self.db.commit()
-                transfer = (
-                    await self.db.execute(
-                        select(TransferTransaction)
-                        .options(
-                            selectinload(TransferTransaction.branch),
-                            selectinload(TransferTransaction.currency),
-                            selectinload(TransferTransaction.from_branch),
-                            selectinload(TransferTransaction.to_branch),
-                        )
-                        .where(TransferTransaction.id == transfer.id)
-                    )
-                ).scalar_one()
+                transfer = await self._load_transaction_with_relationships(
+                    transfer.id, TransferTransaction
+                )
 
                 logger.info(
                     f"Transfer initiated: {transaction_number}, "
@@ -1085,18 +1081,9 @@ class TransactionService:
                 transfer.received_at = datetime.utcnow()
 
                 await self.db.commit()
-                transfer = (
-                    await self.db.execute(
-                        select(TransferTransaction)
-                        .options(
-                            selectinload(TransferTransaction.branch),
-                            selectinload(TransferTransaction.currency),
-                            selectinload(TransferTransaction.from_branch),
-                            selectinload(TransferTransaction.to_branch),
-                        )
-                        .where(TransferTransaction.id == transfer.id)
-                    )
-                ).scalar_one()
+                transfer = await self._load_transaction_with_relationships(
+                    transfer.id, TransferTransaction
+                )
 
                 logger.info(f"Transfer completed: {transfer.transaction_number}")
 
@@ -1269,7 +1256,9 @@ class TransactionService:
                 transaction.cancellation_reason = reason.strip()
                 
                 await self.db.commit()
-                await self.db.refresh(transaction)
+                transaction = await self._load_transaction_with_relationships(
+                    transaction.id, type(transaction)
+                )
                 
                 logger.info(
                     f"Transaction cancelled: {transaction.transaction_number}, "
@@ -1297,28 +1286,19 @@ class TransactionService:
         """Get transaction by ID with branch relationships loaded"""
         from sqlalchemy.orm import selectinload
 
-        stmt = select(Transaction).where(Transaction.id == transaction_id)
-
-        # Load branch relationships (including transfer-specific ones)
-        stmt = stmt.options(
-            selectin_polymorphic(Transaction, [TransferTransaction]),
-            selectinload(Transaction.branch),
-            selectinload(Transaction.currency),
-            selectinload(TransferTransaction.from_branch),
-            selectinload(TransferTransaction.to_branch),
-            selectinload(ExchangeTransaction.from_currency),
-            selectinload(ExchangeTransaction.to_currency),
-        )
-
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        try:
+            return await self._load_transaction_with_relationships(transaction_id)
+        except Exception:
+            return None
     
     async def get_transaction_by_number(
         self, transaction_number: str
     ) -> Optional[Transaction]:
         """Get transaction by transaction number"""
-        stmt = select(Transaction).where(
-            Transaction.transaction_number == transaction_number
+        stmt = (
+            select(Transaction)
+            .options(*self._transaction_relationship_options())
+            .where(Transaction.transaction_number == transaction_number)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -1334,7 +1314,11 @@ class TransactionService:
         limit: int = 100
     ) -> List[Transaction]:
         """Get transactions for a branch with filters"""
-        stmt = select(Transaction).where(Transaction.branch_id == branch_id)
+        stmt = (
+            select(Transaction)
+            .options(*self._transaction_relationship_options())
+            .where(Transaction.branch_id == branch_id)
+        )
         
         if transaction_type:
             stmt = stmt.where(Transaction.transaction_type == transaction_type)
