@@ -1144,12 +1144,18 @@ class TransactionService:
             # Approve the expense
             expense.approve(approver_id)
 
+            # Mark the transaction as completed now that it is approved
+            expense.complete(approver_id)
+
             # If there are approval notes, add them to the transaction notes
             if approval_notes:
                 expense.notes = f"{expense.notes or ''}\nApproval notes: {approval_notes}"
 
             await self.db.commit()
-            await self.db.refresh(expense)
+
+            expense = await self._load_transaction_with_relationships(
+                expense.id, ExpenseTransaction
+            )
 
             logger.info(
                 f"Expense transaction approved: {expense.transaction_number} by user {approver_id}"
