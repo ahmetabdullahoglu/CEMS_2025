@@ -948,16 +948,27 @@ class TransactionService:
                     reference_id=transfer.id,
                     reference_type="transaction"
                 )
-                
+
                 await self.db.commit()
-                await self.db.refresh(transfer)
-                
+                transfer = (
+                    await self.db.execute(
+                        select(TransferTransaction)
+                        .options(
+                            selectinload(TransferTransaction.branch),
+                            selectinload(TransferTransaction.currency),
+                            selectinload(TransferTransaction.from_branch),
+                            selectinload(TransferTransaction.to_branch),
+                        )
+                        .where(TransferTransaction.id == transfer.id)
+                    )
+                ).scalar_one()
+
                 logger.info(
                     f"Transfer initiated: {transaction_number}, "
                     f"From: {from_branch_id} -> To: {to_branch_id}, "
                     f"Amount: {amount} {currency_id}"
                 )
-                
+
                 return transfer
                 
             except Exception as e:
@@ -1072,12 +1083,23 @@ class TransactionService:
                 transfer.completed_at = datetime.utcnow()
                 transfer.received_by_id = received_by_user_id
                 transfer.received_at = datetime.utcnow()
-                
+
                 await self.db.commit()
-                await self.db.refresh(transfer)
-                
+                transfer = (
+                    await self.db.execute(
+                        select(TransferTransaction)
+                        .options(
+                            selectinload(TransferTransaction.branch),
+                            selectinload(TransferTransaction.currency),
+                            selectinload(TransferTransaction.from_branch),
+                            selectinload(TransferTransaction.to_branch),
+                        )
+                        .where(TransferTransaction.id == transfer.id)
+                    )
+                ).scalar_one()
+
                 logger.info(f"Transfer completed: {transfer.transaction_number}")
-                
+
                 return transfer
                 
             except Exception as e:
