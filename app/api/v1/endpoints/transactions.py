@@ -61,6 +61,7 @@ from app.schemas.transaction import (
 from app.schemas.common import SuccessResponse, PaginationParams
 from app.utils.logger import get_logger
 from app.schemas.common import PaginatedResponse, paginated
+from app.core.exceptions import ValidationError
 
 logger = get_logger(__name__)
 
@@ -230,21 +231,30 @@ async def create_income_transaction(
         f"Creating income transaction by user {current_user.id}",
         extra={"user_id": str(current_user.id), "amount": str(transaction.amount)}
     )
-    
+
     try:
         service = TransactionService(db)
         result = await service.create_income_transaction(
             transaction=transaction,
             user_id=current_user.id
         )
-        
+
         logger.info(
             f"Income transaction created: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
 
         return _serialize_transaction(result)
-        
+
+    except ValidationError as e:
+        logger.error(f"Validation error creating income transaction: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": str(e)
+            }
+        )
     except Exception as e:
         logger.error(f"Error creating income transaction: {str(e)}")
         raise HTTPException(
