@@ -299,6 +299,22 @@ class TransactionService:
                 )
                 conditions.append(branch_condition)
 
+            if filters.from_branch_id:
+                conditions.append(
+                    and_(
+                        Transaction.transaction_type == TransactionType.TRANSFER,
+                        TransferTransaction.from_branch_id == filters.from_branch_id,
+                    )
+                )
+
+            if filters.to_branch_id:
+                conditions.append(
+                    and_(
+                        Transaction.transaction_type == TransactionType.TRANSFER,
+                        TransferTransaction.to_branch_id == filters.to_branch_id,
+                    )
+                )
+
             if filters.customer_id:
                 conditions.append(Transaction.customer_id == filters.customer_id)
 
@@ -317,6 +333,22 @@ class TransactionService:
                     ),
                 )
                 conditions.append(currency_condition)
+
+            if filters.from_currency_id:
+                conditions.append(
+                    and_(
+                        Transaction.transaction_type == TransactionType.EXCHANGE,
+                        ExchangeTransaction.from_currency_id == filters.from_currency_id,
+                    )
+                )
+
+            if filters.to_currency_id:
+                conditions.append(
+                    and_(
+                        Transaction.transaction_type == TransactionType.EXCHANGE,
+                        ExchangeTransaction.to_currency_id == filters.to_currency_id,
+                    )
+                )
 
             if filters.date_from:
                 conditions.append(Transaction.transaction_date >= filters.date_from)
@@ -339,7 +371,14 @@ class TransactionService:
 
             # When branch or currency filters are present, build a projected history view
             # so transfers and exchanges produce both debit and credit entries.
-            needs_history_projection = bool(filters.branch_id or filters.currency_id)
+            needs_history_projection = bool(
+                filters.branch_id
+                or filters.currency_id
+                or filters.from_branch_id
+                or filters.to_branch_id
+                or filters.from_currency_id
+                or filters.to_currency_id
+            )
 
             if not needs_history_projection:
                 # Standard pagination path
@@ -358,6 +397,10 @@ class TransactionService:
                     base_transactions,
                     branch_id=filters.branch_id,
                     currency_id=filters.currency_id,
+                    from_branch_id=filters.from_branch_id,
+                    to_branch_id=filters.to_branch_id,
+                    from_currency_id=filters.from_currency_id,
+                    to_currency_id=filters.to_currency_id,
                 )
 
                 total = len(projected)
@@ -1350,6 +1393,10 @@ class TransactionService:
         transactions: List[Transaction],
         branch_id: Optional[UUID] = None,
         currency_id: Optional[UUID] = None,
+        from_branch_id: Optional[UUID] = None,
+        to_branch_id: Optional[UUID] = None,
+        from_currency_id: Optional[UUID] = None,
+        to_currency_id: Optional[UUID] = None,
     ) -> List[Transaction]:
         """Create per-branch/per-currency projections for transaction history.
 
@@ -1362,8 +1409,18 @@ class TransactionService:
         def _include(entry_branch: Optional[UUID], entry_currency: Optional[UUID]) -> bool:
             if branch_id and entry_branch != branch_id:
                 return False
+            if from_branch_id and entry_branch != from_branch_id:
+                return False
+            if to_branch_id and entry_branch != to_branch_id:
+                return False
+
             if currency_id and entry_currency != currency_id:
                 return False
+            if from_currency_id and entry_currency != from_currency_id:
+                return False
+            if to_currency_id and entry_currency != to_currency_id:
+                return False
+
             return True
 
         projected: List[Transaction] = []
