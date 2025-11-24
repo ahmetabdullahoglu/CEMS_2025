@@ -176,7 +176,7 @@ def get_balance_snapshot(
 
 @router.get("/balance-movement")
 def get_balance_movement(
-    branch_id: str = Query(...),
+    branch_id: Optional[str] = Query(None),
     currency_code: str = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
@@ -185,10 +185,12 @@ def get_balance_movement(
 ):
     """📊 Balance Movement Report"""
     check_permission(current_user, "view_balances")
-    
-    if current_user.role and current_user.role.name == "branch_manager" and branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this branch")
-    
+
+    if current_user.role and current_user.role.name == "branch_manager":
+        if branch_id and branch_id != current_user.branch_id:
+            raise HTTPException(status_code=403, detail="Access denied to this branch")
+        branch_id = branch_id or current_user.branch_id
+
     report_service = ReportService(db)
 
     try:
