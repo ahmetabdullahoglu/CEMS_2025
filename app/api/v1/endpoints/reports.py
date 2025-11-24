@@ -6,6 +6,7 @@ Phase 8.2: Complete Report API with Export & Dashboard
 
 from datetime import date, datetime, timedelta
 from typing import Optional, List
+from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -332,9 +333,16 @@ def export_report(
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
         
+        if isinstance(content, BytesIO):
+            content_bytes = content.getvalue()
+        elif isinstance(content, bytes):
+            content_bytes = content
+        else:
+            content_bytes = str(content).encode()
+
         # Return file
         return StreamingResponse(
-            io.BytesIO(content if isinstance(content, bytes) else content.encode()),
+            io.BytesIO(content_bytes),
             media_type=media_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
