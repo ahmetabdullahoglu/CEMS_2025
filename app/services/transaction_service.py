@@ -1469,12 +1469,16 @@ class TransactionService:
                     projected.append(credit)
                 continue
 
-            # Income/Expense/other standard entries keep single row with explicit balance change
+            # Income/Expense/other standard entries keep a single row aligned to ledger math
             standard = copy(txn)
+            base_amount = txn.amount or Decimal("0")
+
             if txn.transaction_type == TransactionType.EXPENSE:
-                standard.balance_change = -(txn.amount or Decimal("0"))
+                standard.amount = -base_amount
+                standard.balance_change = -base_amount
             else:
-                standard.balance_change = txn.amount or Decimal("0")
+                standard.amount = base_amount
+                standard.balance_change = base_amount
 
             if _include(standard.branch_id, standard.currency_id):
                 projected.append(standard)
