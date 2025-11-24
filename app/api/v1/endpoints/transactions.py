@@ -106,6 +106,9 @@ def _serialize_transaction(transaction: Transaction) -> dict:
         "cancellation_reason": getattr(transaction, "cancellation_reason", None),
     }
 
+    if hasattr(transaction, "balance_change"):
+        transaction_dict["balance_change"] = getattr(transaction, "balance_change")
+
     if transaction.transaction_type == TransactionType.INCOME:
         to_branch_id = transaction.branch_id
         to_branch_name = branch_name

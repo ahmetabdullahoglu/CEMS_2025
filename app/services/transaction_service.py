@@ -13,6 +13,7 @@ CRITICAL: All operations are atomic with proper rollback on failures
 
 from datetime import datetime
 from decimal import Decimal
+from copy import copy
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
@@ -282,53 +283,86 @@ class TransactionService:
             
             # Apply filters
             conditions = []
-            
+
             if filters.transaction_type:
                 conditions.append(Transaction.transaction_type == filters.transaction_type)
-            
+
             if filters.branch_id:
-                conditions.append(Transaction.branch_id == filters.branch_id)
-            
+                branch_condition = or_(
+                    Transaction.branch_id == filters.branch_id,
+                    and_(
+                        Transaction.transaction_type == TransactionType.TRANSFER,
+                        TransferTransaction.to_branch_id == filters.branch_id,
+                    ),
+                )
+                conditions.append(branch_condition)
+
             if filters.customer_id:
                 conditions.append(Transaction.customer_id == filters.customer_id)
-            
+
             if filters.status:
                 conditions.append(Transaction.status == filters.status)
-            
+
             if filters.currency_id:
-                conditions.append(Transaction.currency_id == filters.currency_id)
-            
+                currency_condition = or_(
+                    Transaction.currency_id == filters.currency_id,
+                    and_(
+                        Transaction.transaction_type == TransactionType.EXCHANGE,
+                        or_(
+                            ExchangeTransaction.from_currency_id == filters.currency_id,
+                            ExchangeTransaction.to_currency_id == filters.currency_id,
+                        ),
+                    ),
+                )
+                conditions.append(currency_condition)
+
             if filters.date_from:
                 conditions.append(Transaction.transaction_date >= filters.date_from)
-            
+
             if filters.date_to:
                 conditions.append(Transaction.transaction_date <= filters.date_to)
-            
+
             if filters.amount_min:
                 conditions.append(Transaction.amount >= filters.amount_min)
-            
+
             if filters.amount_max:
                 conditions.append(Transaction.amount <= filters.amount_max)
-            
+
             # Apply all conditions
             if conditions:
                 query = query.where(and_(*conditions))
-            
-            # Get total count
-            count_query = select(func.count()).select_from(query.subquery())
-            total_result = await self.db.execute(count_query)
-            total = total_result.scalar() or 0
-            
-            # Apply pagination and ordering
+
+            # Order newest first
             query = query.order_by(Transaction.transaction_date.desc())
-            query = query.offset(skip).limit(limit)
-            
-            # Execute query
-            result = await self.db.execute(query)
-            transactions = result.scalars().all()
-            
+
+            # When branch or currency filters are present, build a projected history view
+            # so transfers and exchanges produce both debit and credit entries.
+            needs_history_projection = bool(filters.branch_id or filters.currency_id)
+
+            if not needs_history_projection:
+                # Standard pagination path
+                count_query = select(func.count()).select_from(query.subquery())
+                total_result = await self.db.execute(count_query)
+                total = total_result.scalar() or 0
+
+                query = query.offset(skip).limit(limit)
+                result = await self.db.execute(query)
+                transactions = result.scalars().all()
+            else:
+                # Pull all matching transactions then project per-branch/per-currency entries
+                result = await self.db.execute(query)
+                base_transactions = list(result.scalars().all())
+                projected = self._project_transactions_for_history(
+                    base_transactions,
+                    branch_id=filters.branch_id,
+                    currency_id=filters.currency_id,
+                )
+
+                total = len(projected)
+                transactions = projected[skip: skip + limit] if limit else projected
+
             logger.info(f"Found {len(transactions)} transactions (total: {total})")
-            
+
             return {
                 "transactions": transactions,
                 "total": total
@@ -1308,6 +1342,85 @@ class TransactionService:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    def _project_transactions_for_history(
+        self,
+        transactions: List[Transaction],
+        branch_id: Optional[UUID] = None,
+        currency_id: Optional[UUID] = None,
+    ) -> List[Transaction]:
+        """Create per-branch/per-currency projections for transaction history.
+
+        Transfers emit one entry per branch (debit for source, credit for destination).
+        Exchanges emit one entry per currency (debit for source currency including
+        commission, credit for target currency). Other transactions carry a
+        balance_change attribute to keep ledger math explicit.
+        """
+
+        def _include(entry_branch: Optional[UUID], entry_currency: Optional[UUID]) -> bool:
+            if branch_id and entry_branch != branch_id:
+                return False
+            if currency_id and entry_currency != currency_id:
+                return False
+            return True
+
+        projected: List[Transaction] = []
+
+        for txn in transactions:
+            if txn.transaction_type == TransactionType.TRANSFER:
+                # Debit from source
+                debit = copy(txn)
+                debit.amount = -txn.amount
+                debit.balance_change = -txn.amount
+                debit.branch_id = txn.from_branch_id
+                debit.branch = getattr(txn, "from_branch", None)
+                if _include(debit.branch_id, debit.currency_id):
+                    projected.append(debit)
+
+                # Credit to destination
+                credit = copy(txn)
+                credit.amount = txn.amount
+                credit.balance_change = txn.amount
+                credit.branch_id = txn.to_branch_id
+                credit.branch = getattr(txn, "to_branch", None)
+                if _include(credit.branch_id, credit.currency_id):
+                    projected.append(credit)
+                continue
+
+            if txn.transaction_type == TransactionType.EXCHANGE:
+                commission_amt = txn.commission_amount or Decimal("0")
+                total_cost = (txn.from_amount or Decimal("0")) + commission_amt
+
+                # Outgoing side
+                debit = copy(txn)
+                debit.amount = -total_cost
+                debit.balance_change = -total_cost
+                debit.currency_id = txn.from_currency_id
+                debit.currency = getattr(txn, "from_currency", None)
+                if _include(debit.branch_id, debit.currency_id):
+                    projected.append(debit)
+
+                # Incoming side
+                credit = copy(txn)
+                credit.amount = txn.to_amount
+                credit.balance_change = txn.to_amount
+                credit.currency_id = txn.to_currency_id
+                credit.currency = getattr(txn, "to_currency", None)
+                if _include(credit.branch_id, credit.currency_id):
+                    projected.append(credit)
+                continue
+
+            # Income/Expense/other standard entries keep single row with explicit balance change
+            standard = copy(txn)
+            if txn.transaction_type == TransactionType.EXPENSE:
+                standard.balance_change = -(txn.amount or Decimal("0"))
+            else:
+                standard.balance_change = txn.amount or Decimal("0")
+
+            if _include(standard.branch_id, standard.currency_id):
+                projected.append(standard)
+
+        return projected
     
     async def get_branch_transactions(
         self,
