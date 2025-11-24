@@ -169,7 +169,9 @@ class TransactionService:
             validate_positive_amount(amount)
             await self._validate_branch_exists(branch_id)
             await self._validate_currency_exists(currency_id)
-            await self._validate_branch_has_currency(branch_id, currency_id)
+
+            # Ensure a balance record exists; create zeroed one if missing
+            await self.balance_service.ensure_branch_balance(branch_id, currency_id)
             
             if customer_id:
                 await self._validate_customer_exists(customer_id)
