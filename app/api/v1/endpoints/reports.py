@@ -153,20 +153,22 @@ def get_balance_snapshot(
 ):
     """💵 Branch Balance Snapshot"""
     check_permission(current_user, "view_balances")
-    
+
     if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
-    
-    if not branch_id:
-        raise HTTPException(status_code=400, detail="branch_id is required")
-    
+
     report_service = ReportService(db)
-    
+
     try:
-        snapshot = report_service.branch_balance_snapshot(
-            branch_id=branch_id,
-            snapshot_date=snapshot_date or date.today()
-        )
+        if branch_id:
+            snapshot = report_service.branch_balance_snapshot(
+                branch_id=branch_id,
+                snapshot_date=snapshot_date or date.today(),
+            )
+        else:
+            snapshot = report_service.vault_balance_summary(
+                snapshot_date=snapshot_date or date.today(),
+            )
         return snapshot
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
