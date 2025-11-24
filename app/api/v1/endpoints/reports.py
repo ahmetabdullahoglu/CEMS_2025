@@ -164,7 +164,7 @@ def get_balance_snapshot(
     try:
         snapshot = report_service.branch_balance_snapshot(
             branch_id=branch_id,
-            target_date=snapshot_date or date.today()
+            snapshot_date=snapshot_date or date.today()
         )
         return snapshot
     except Exception as e:
@@ -305,7 +305,8 @@ def export_report(
         elif report_type == "balance_snapshot":
             report_data = report_service.branch_balance_snapshot(
                 branch_id=filters.get("branch_id"),
-                target_date=filters.get("date")
+                snapshot_date=filters.get("date"),
+                target_date=filters.get("target_date")
             )
         else:
             raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")

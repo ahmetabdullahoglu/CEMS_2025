@@ -415,15 +415,16 @@ class ReportService:
     def branch_balance_snapshot(
         self,
         branch_id: str,
-        snapshot_date: Optional[date] = None
+        snapshot_date: Optional[date] = None,
+        target_date: Optional[date] = None,
     ) -> Dict[str, Any]:
         """
         لقطة رصيد الفرع
         Branch balance snapshot at a specific date
         """
         try:
-            if snapshot_date is None:
-                snapshot_date = date.today()
+            # Support both "snapshot_date" (current API) and legacy "target_date"
+            snapshot_date = snapshot_date or target_date or date.today()
             
             branch = self.db.query(Branch).filter(Branch.id == branch_id).first()
             if not branch:
