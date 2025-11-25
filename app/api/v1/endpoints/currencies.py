@@ -26,7 +26,8 @@ from app.schemas.currency import (
     CurrencyListResponse,
     ExchangeRateCreate,
     ExchangeRateResponse,
-    ExchangeRateListResponse
+    ExchangeRateListResponse,
+    ExchangeRateHistoryListResponse
 )
 from app.schemas.common import PaginatedResponse, paginated
 from app.db.models.user import User
@@ -516,7 +517,7 @@ async def get_exchange_rate(
 
 @router.get(
     "/rates/history/{from_currency}/{to_currency}",
-    response_model=ExchangeRateListResponse,
+    response_model=ExchangeRateHistoryListResponse,
     summary="Get exchange rate history",
     description="Get historical exchange rates between two currencies"
 )
@@ -549,7 +550,7 @@ async def get_exchange_rate_history(
             limit
         )
         
-        return ExchangeRateListResponse(
+        return ExchangeRateHistoryListResponse(
             success=True,
             data=rates,
             total=len(rates)

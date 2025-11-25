@@ -17,7 +17,8 @@ from app.schemas.currency import (
     CurrencyWithRates,
     ExchangeRateCreate,
     ExchangeRateUpdate,
-    ExchangeRateResponse
+    ExchangeRateResponse,
+    ExchangeRateHistoryResponse
 )
 from app.db.models.currency import Currency, ExchangeRate
 from app.core.config import settings
@@ -455,7 +456,7 @@ class CurrencyService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         limit: int = 100
-    ) -> List[ExchangeRateResponse]:
+    ) -> List[ExchangeRateHistoryResponse]:
         """Get exchange rate history"""
         from_currency_obj = await self._get_currency_by_identifier(from_currency)
         to_currency_obj = await self._get_currency_by_identifier(to_currency)
@@ -468,7 +469,7 @@ class CurrencyService:
             limit
         )
 
-        return [ExchangeRateResponse.model_validate(rate) for rate in rates]
+        return [ExchangeRateHistoryResponse.model_validate(rate) for rate in rates]
     
     async def get_all_current_rates(self) -> List[ExchangeRateResponse]:
         """Get all current exchange rates in the system"""
