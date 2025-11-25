@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models.rate_update_request import (
     RateUpdateRequest,
     UpdateRequestStatus,
-    _utc_now_naive,
+    _utc_now_aware,
 )
 
 
@@ -52,7 +52,7 @@ class RateUpdateRequestRepository:
             .where(
                 and_(
                     RateUpdateRequest.status == UpdateRequestStatus.PENDING,
-                    RateUpdateRequest.expires_at > _utc_now_naive()
+                    RateUpdateRequest.expires_at > _utc_now_aware()
                 )
             )
             .order_by(RateUpdateRequest.requested_at.desc())
@@ -75,7 +75,7 @@ class RateUpdateRequestRepository:
             raise ValueError(f"Request {request_id} not found")
 
         request.status = status
-        request.reviewed_at = _utc_now_naive()
+        request.reviewed_at = _utc_now_aware()
 
         if reviewed_by:
             request.reviewed_by = reviewed_by
@@ -96,7 +96,7 @@ class RateUpdateRequestRepository:
             select(RateUpdateRequest).where(
                 and_(
                     RateUpdateRequest.status == UpdateRequestStatus.PENDING,
-                    RateUpdateRequest.expires_at <= _utc_now_naive()
+                    RateUpdateRequest.expires_at <= _utc_now_aware()
                 )
             )
         )

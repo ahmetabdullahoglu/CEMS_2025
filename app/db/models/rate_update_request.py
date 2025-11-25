@@ -22,9 +22,9 @@ class UpdateRequestStatus(str, enum.Enum):
     FAILED = "failed"  # Failed to apply
 
 
-def _utc_now_naive() -> datetime:
-    """Return current UTC time without tzinfo for DB compatibility."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+def _utc_now_aware() -> datetime:
+    """Return current UTC time with timezone info for DB compatibility."""
+    return datetime.now(timezone.utc)
 
 
 class RateUpdateRequest(Base):
@@ -65,14 +65,14 @@ class RateUpdateRequest(Base):
 
     # Request details
     requested_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    requested_at = Column(DateTime, default=_utc_now_naive, nullable=False)
+    requested_at = Column(DateTime(timezone=True), default=_utc_now_aware, nullable=False)
 
     # Expiry (24 hours from creation)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
 
     # Approval/Rejection
     reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
     review_notes = Column(Text, nullable=True)
 
     # Applied rates count (after approval)
@@ -89,12 +89,18 @@ class RateUpdateRequest(Base):
         super().__init__(**kwargs)
         # Set expiry to 24 hours from now if not provided
         if not self.expires_at:
-            self.expires_at = _utc_now_naive() + timedelta(hours=24)
+            self.expires_at = _utc_now_aware() + timedelta(hours=24)
+        elif self.expires_at.tzinfo is None:
+            # Normalize provided timestamps to UTC-aware for consistent comparisons
+            self.expires_at = self.expires_at.replace(tzinfo=timezone.utc)
+
+        if self.requested_at and self.requested_at.tzinfo is None:
+            self.requested_at = self.requested_at.replace(tzinfo=timezone.utc)
 
     @property
     def is_expired(self) -> bool:
         """Check if request has expired"""
-        return _utc_now_naive() > self.expires_at
+        return _utc_now_aware() > self.expires_at
 
     @property
     def is_pending(self) -> bool:
