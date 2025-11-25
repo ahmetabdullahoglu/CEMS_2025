@@ -3,7 +3,7 @@ Currency Pydantic Schemas
 Request and response models for Currency endpoints
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List, Annotated
 from uuid import UUID
@@ -94,6 +94,13 @@ class ExchangeRateBase(BaseModel):
     sell_rate: Optional[ExchangeRateDecimal] = Field(None, description="Sell rate")
     effective_from: datetime = Field(default_factory=datetime.utcnow)
     notes: Optional[str] = Field(None, max_length=500)
+
+    @staticmethod
+    def _normalize_to_naive_utc(value: datetime) -> datetime:
+        """Ensure datetimes are stored as naive UTC for database consistency."""
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
     
     @field_validator('from_currency_id', 'to_currency_id')
     @classmethod
@@ -102,6 +109,12 @@ class ExchangeRateBase(BaseModel):
         if not v:
             raise ValueError('Currency ID cannot be empty')
         return v
+
+    @field_validator('effective_from')
+    @classmethod
+    def normalize_effective_from(cls, v: datetime) -> datetime:
+        """Accept timezone-aware values but persist as naive UTC."""
+        return cls._normalize_to_naive_utc(v)
 
 
 class ExchangeRateCreate(ExchangeRateBase):
@@ -117,6 +130,16 @@ class ExchangeRateUpdate(BaseModel):
     effective_from: Optional[datetime] = None
     effective_to: Optional[datetime] = None
     notes: Optional[str] = Field(None, max_length=500)
+
+    @field_validator('effective_from', 'effective_to')
+    @classmethod
+    def normalize_update_datetimes(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Normalize provided datetimes to naive UTC for comparisons and storage."""
+        if v is None:
+            return v
+        if v.tzinfo is None:
+            return v
+        return v.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 class ExchangeRateResponse(ExchangeRateBase):
