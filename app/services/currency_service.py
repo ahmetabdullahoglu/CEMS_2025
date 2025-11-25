@@ -453,7 +453,8 @@ class CurrencyService:
         from_currency: str,
         to_currency: str,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
+        limit: int = 100
     ) -> List[ExchangeRateResponse]:
         """Get exchange rate history"""
         from_currency_obj = await self._get_currency_by_identifier(from_currency)
@@ -463,7 +464,8 @@ class CurrencyService:
             from_currency_obj.id,
             to_currency_obj.id,
             start_date,
-            end_date
+            end_date,
+            limit
         )
 
         return [ExchangeRateResponse.model_validate(rate) for rate in rates]
