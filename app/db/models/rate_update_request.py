@@ -6,7 +6,7 @@ Stores pending exchange rate update requests for approval
 from sqlalchemy import Column, String, DateTime, Text, Enum as SQLEnum, JSON, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import enum
 
@@ -60,7 +60,7 @@ class RateUpdateRequest(Base):
 
     # Request details
     requested_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    requested_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Expiry (24 hours from creation)
     expires_at = Column(DateTime, nullable=False)
@@ -84,12 +84,12 @@ class RateUpdateRequest(Base):
         super().__init__(**kwargs)
         # Set expiry to 24 hours from now if not provided
         if not self.expires_at:
-            self.expires_at = datetime.utcnow() + timedelta(hours=24)
+            self.expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
     @property
     def is_expired(self) -> bool:
         """Check if request has expired"""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     @property
     def is_pending(self) -> bool:

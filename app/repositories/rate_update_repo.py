@@ -4,7 +4,7 @@ Rate Update Request Repository
 
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +49,7 @@ class RateUpdateRequestRepository:
             .where(
                 and_(
                     RateUpdateRequest.status == UpdateRequestStatus.PENDING,
-                    RateUpdateRequest.expires_at > datetime.utcnow()
+                    RateUpdateRequest.expires_at > datetime.now(timezone.utc)
                 )
             )
             .order_by(RateUpdateRequest.requested_at.desc())
@@ -72,7 +72,7 @@ class RateUpdateRequestRepository:
             raise ValueError(f"Request {request_id} not found")
 
         request.status = status
-        request.reviewed_at = datetime.utcnow()
+        request.reviewed_at = datetime.now(timezone.utc)
 
         if reviewed_by:
             request.reviewed_by = reviewed_by
@@ -93,7 +93,7 @@ class RateUpdateRequestRepository:
             select(RateUpdateRequest).where(
                 and_(
                     RateUpdateRequest.status == UpdateRequestStatus.PENDING,
-                    RateUpdateRequest.expires_at <= datetime.utcnow()
+                    RateUpdateRequest.expires_at <= datetime.now(timezone.utc)
                 )
             )
         )
