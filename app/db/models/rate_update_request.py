@@ -3,7 +3,7 @@ Rate Update Request Model
 Stores pending exchange rate update requests for approval
 """
 
-from sqlalchemy import Column, String, DateTime, Text, Enum as SQLEnum, JSON, ForeignKey
+from sqlalchemy import Column, String, DateTime, Text, Enum as SQLEnum, JSON, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
@@ -71,7 +71,7 @@ class RateUpdateRequest(Base):
     review_notes = Column(Text, nullable=True)
 
     # Applied rates count (after approval)
-    rates_applied_count = Column(String, default="0", nullable=True)
+    rates_applied_count = Column(Integer, default=0, nullable=True)
 
     # Error message if failed
     error_message = Column(Text, nullable=True)

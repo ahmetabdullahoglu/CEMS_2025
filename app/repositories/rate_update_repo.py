@@ -79,7 +79,7 @@ class RateUpdateRequestRepository:
         if review_notes:
             request.review_notes = review_notes
         if rates_applied_count is not None:
-            request.rates_applied_count = str(rates_applied_count)
+            request.rates_applied_count = rates_applied_count
         if error_message:
             request.error_message = error_message
 
