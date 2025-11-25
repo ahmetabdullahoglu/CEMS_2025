@@ -22,6 +22,11 @@ class UpdateRequestStatus(str, enum.Enum):
     FAILED = "failed"  # Failed to apply
 
 
+def _utc_now_naive() -> datetime:
+    """Return current UTC time without tzinfo for DB compatibility."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class RateUpdateRequest(Base):
     """
     Stores pending exchange rate update requests
@@ -60,7 +65,7 @@ class RateUpdateRequest(Base):
 
     # Request details
     requested_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    requested_at = Column(DateTime, default=_utc_now_naive, nullable=False)
 
     # Expiry (24 hours from creation)
     expires_at = Column(DateTime, nullable=False)
@@ -84,12 +89,12 @@ class RateUpdateRequest(Base):
         super().__init__(**kwargs)
         # Set expiry to 24 hours from now if not provided
         if not self.expires_at:
-            self.expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+            self.expires_at = _utc_now_naive() + timedelta(hours=24)
 
     @property
     def is_expired(self) -> bool:
         """Check if request has expired"""
-        return datetime.now(timezone.utc) > self.expires_at
+        return _utc_now_naive() > self.expires_at
 
     @property
     def is_pending(self) -> bool:
