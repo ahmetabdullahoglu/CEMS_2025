@@ -220,12 +220,21 @@ class CurrencyService:
         # Validate rates
         if rate_data.rate <= 0:
             raise ValidationError("Exchange rate must be greater than 0")
-        
-        if rate_data.buy_rate and rate_data.buy_rate <= 0:
-            raise ValidationError("Buy rate must be greater than 0")
-        
-        if rate_data.sell_rate and rate_data.sell_rate <= 0:
-            raise ValidationError("Sell rate must be greater than 0")
+
+        buy_rate = rate_data.buy_rate
+        sell_rate = rate_data.sell_rate
+
+        if buy_rate is not None:
+            if buy_rate < 0:
+                raise ValidationError("Buy rate must be greater than or equal to 0")
+            if buy_rate == 0:
+                buy_rate = None
+
+        if sell_rate is not None:
+            if sell_rate < 0:
+                raise ValidationError("Sell rate must be greater than or equal to 0")
+            if sell_rate == 0:
+                sell_rate = None
         
         # Get existing rate for history
         existing_rate = await self.repo.get_exchange_rate(
@@ -235,6 +244,8 @@ class CurrencyService:
         
         # Create rate dictionary
         rate_dict = rate_data.model_dump()
+        rate_dict["buy_rate"] = buy_rate
+        rate_dict["sell_rate"] = sell_rate
         rate_dict['set_by'] = UUID(current_user['id'])
         
         # Create new rate
@@ -281,41 +292,56 @@ class CurrencyService:
         )
         return ExchangeRateResponse.model_validate(new_rate)
     
+    async def _get_currency_by_identifier(self, identifier: str) -> Currency:
+        """Resolve a currency by UUID or code."""
+        try:
+            currency_id = UUID(identifier)
+            currency = await self.repo.get_currency_by_id(currency_id)
+        except (ValueError, AttributeError):
+            currency = await self.repo.get_currency_by_code(identifier.upper())
+
+        if not currency:
+            raise ResourceNotFoundError("Currency", identifier)
+
+        return currency
+
     async def get_latest_rate(
         self,
-        from_currency_code: str,
-        to_currency_code: str,
+        from_currency: str,
+        to_currency: str,
         use_intermediary: bool = True
     ) -> ExchangeRateResponse:
         """
         Get latest exchange rate between two currencies
 
         Args:
-            from_currency_code: Source currency code
-            to_currency_code: Target currency code
+            from_currency: Source currency ID or code
+            to_currency: Target currency ID or code
             use_intermediary: If True, try to find rate via USD if direct rate not found
 
         Returns:
             ExchangeRateResponse with the exchange rate
         """
-        logger.info(f"Getting latest rate for {from_currency_code}/{to_currency_code}, use_intermediary={use_intermediary}")
-        from_currency = await self.repo.get_currency_by_code(from_currency_code)
-        to_currency = await self.repo.get_currency_by_code(to_currency_code)
+        logger.info(
+            f"Getting latest rate for {from_currency}/{to_currency}, use_intermediary={use_intermediary}"
+        )
+        from_currency_obj = await self._get_currency_by_identifier(from_currency)
+        to_currency_obj = await self._get_currency_by_identifier(to_currency)
 
-        if not from_currency or not to_currency:
-            raise ResourceNotFoundError("Currency", from_currency_code if not from_currency else to_currency_code)
+        from_currency_code = from_currency_obj.code
+        to_currency_code = to_currency_obj.code
 
-        rate = await self.repo.get_exchange_rate(from_currency.id, to_currency.id)
+        rate = await self.repo.get_exchange_rate(from_currency_obj.id, to_currency_obj.id)
 
         if not rate:
             # Try inverse rate
-            inverse_rate = await self.repo.get_exchange_rate(to_currency.id, from_currency.id)
+            inverse_rate = await self.repo.get_exchange_rate(to_currency_obj.id, from_currency_obj.id)
             if inverse_rate:
                 # Create calculated rate from inverse
                 calculated_rate = ExchangeRate(
                     id=inverse_rate.id,
-                    from_currency_id=from_currency.id,
-                    to_currency_id=to_currency.id,
+                    from_currency_id=from_currency_obj.id,
+                    to_currency_id=to_currency_obj.id,
                     rate=Decimal('1') / inverse_rate.rate,
                     buy_rate=Decimal('1') / inverse_rate.sell_rate if inverse_rate.sell_rate else None,
                     sell_rate=Decimal('1') / inverse_rate.buy_rate if inverse_rate.buy_rate else None,
@@ -325,8 +351,8 @@ class CurrencyService:
                     notes=f"Calculated from inverse rate",
                     created_at=inverse_rate.created_at,
                     updated_at=inverse_rate.updated_at,
-                    from_currency=from_currency,
-                    to_currency=to_currency
+                    from_currency=from_currency_obj,
+                    to_currency=to_currency_obj
                 )
                 return ExchangeRateResponse.model_validate(calculated_rate)
 
@@ -336,8 +362,8 @@ class CurrencyService:
                     cross_rate = await self._get_cross_rate_via_usd(
                         from_currency_code,
                         to_currency_code,
-                        from_currency,
-                        to_currency
+                        from_currency_obj,
+                        to_currency_obj
                     )
                     if cross_rate:
                         return cross_rate
@@ -364,19 +390,22 @@ class CurrencyService:
         if amount <= 0:
             raise ValidationError("Amount must be greater than 0")
         
+        from_currency = await self._get_currency_by_identifier(from_currency_code)
+        to_currency = await self._get_currency_by_identifier(to_currency_code)
+
         # Same currency
-        if from_currency_code == to_currency_code:
+        if from_currency.id == to_currency.id:
             return {
-                'from_currency': from_currency_code,
-                'to_currency': to_currency_code,
+                'from_currency': from_currency.code,
+                'to_currency': to_currency.code,
                 'amount': amount,
                 'rate': Decimal('1'),
                 'result': amount,
                 'rate_type': 'same_currency'
             }
-        
+
         # Get rate
-        rate_response = await self.get_latest_rate(from_currency_code, to_currency_code)
+        rate_response = await self.get_latest_rate(from_currency.code, to_currency.code)
         
         # Determine which rate to use
         rate_used = rate_response.rate
@@ -396,8 +425,8 @@ class CurrencyService:
         )
         
         return {
-            'from_currency': from_currency_code,
-            'to_currency': to_currency_code,
+            'from_currency': from_currency.code,
+            'to_currency': to_currency.code,
             'amount': amount,
             'rate': rate_used,
             'result': result,
@@ -407,25 +436,22 @@ class CurrencyService:
     
     async def get_rate_history(
         self,
-        from_currency_code: str,
-        to_currency_code: str,
+        from_currency: str,
+        to_currency: str,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[ExchangeRateResponse]:
         """Get exchange rate history"""
-        from_currency = await self.repo.get_currency_by_code(from_currency_code)
-        to_currency = await self.repo.get_currency_by_code(to_currency_code)
-        
-        if not from_currency or not to_currency:
-            raise ResourceNotFoundError("Currency", from_currency_code if not from_currency else to_currency_code)
-        
+        from_currency_obj = await self._get_currency_by_identifier(from_currency)
+        to_currency_obj = await self._get_currency_by_identifier(to_currency)
+
         rates = await self.repo.get_rate_history(
-            from_currency.id,
-            to_currency.id,
+            from_currency_obj.id,
+            to_currency_obj.id,
             start_date,
             end_date
         )
-        
+
         return [ExchangeRateResponse.model_validate(rate) for rate in rates]
     
     async def get_all_current_rates(self) -> List[ExchangeRateResponse]:

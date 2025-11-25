@@ -76,8 +76,10 @@ class BranchResponse(BranchBase):
     opening_balance_date: Optional[datetime] = None  # ✅ FIX: Default to None
     created_at: datetime
     updated_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
+
+    # Forbid unknown fields so union responses prefer BranchWithBalances when balances
+    # are present, preventing balance data from being dropped during serialization.
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
 
 # ==================== Branch Balance Schemas ====================

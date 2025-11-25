@@ -79,6 +79,24 @@ class BalanceService:
             "last_updated": balance.last_updated
         }
 
+    async def ensure_branch_balance(
+        self, branch_id: UUID, currency_id: UUID
+    ) -> BranchBalance:
+        """Return an existing branch balance or create a zeroed record if missing."""
+
+        balance = await self.repo.get_branch_balance(branch_id, currency_id)
+        if balance:
+            return balance
+
+        return await self.repo.create_branch_balance({
+            "branch_id": branch_id,
+            "currency_id": currency_id,
+            "balance": Decimal("0"),
+            "reserved_balance": Decimal("0"),
+            "is_active": True,
+            "last_updated": datetime.utcnow()
+        })
+
     async def update_balance(
         self,
         branch_id: UUID,
@@ -117,12 +135,17 @@ class BalanceService:
         try:
             # Get current balance (with lock for update)
             balance = await self.repo.get_branch_balance(branch_id, currency_id)
-            
+
             if not balance:
-                raise ValidationError(
-                    f"Balance not found for branch {branch_id} "
-                    f"and currency {currency_id}"
-                )
+                # Create a zeroed balance record when none exists
+                balance = await self.repo.create_branch_balance({
+                    "branch_id": branch_id,
+                    "currency_id": currency_id,
+                    "balance": Decimal("0"),
+                    "reserved_balance": Decimal("0"),
+                    "is_active": True,
+                    "last_updated": datetime.utcnow()
+                })
             
             # Store balance before change
             balance_before = balance.balance

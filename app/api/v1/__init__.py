@@ -50,7 +50,7 @@ api_router.include_router(
     prefix="/transactions",
     tags=["transactions"]
 )
-api_router.include_router(vault.router, prefix="/vault", tags=["Vault"])
+api_router.include_router(vault.router, prefix="/vault")
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 

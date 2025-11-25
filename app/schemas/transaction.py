@@ -40,9 +40,16 @@ TransferTypeEnum = TransferType
 
 # ==================== Base Transaction Schemas ====================
 
+
+def _quantize_amount(value: Decimal) -> Decimal:
+    """Ensure decimal amounts are quantized to cents."""
+
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
 class TransactionBase(BaseModel):
-    """Base transaction schema with common fields"""
-    
+    """Base transaction schema for creation with common fields"""
+
     amount: Decimal = Field(
         ...,
         gt=0,
@@ -66,15 +73,49 @@ class TransactionBase(BaseModel):
         None,
         description="Transaction date (defaults to now)"
     )
-    
+
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, v):
-        """Validate amount precision"""
+        """Validate amount precision and positivity"""
         if v <= 0:
             raise ValueError("Amount must be positive")
-        # Ensure 2 decimal places
-        return Decimal(str(v)).quantize(Decimal("0.01"))
+        return _quantize_amount(v)
+
+
+class TransactionResponseBase(BaseModel):
+    """Shared response schema allowing signed amounts for projections"""
+
+    amount: Decimal = Field(
+        ...,
+        decimal_places=2,
+        description="Transaction amount (may be signed in projections)"
+    )
+    currency_id: UUID = Field(..., description="Currency ID")
+    branch_id: UUID = Field(..., description="Branch ID")
+    customer_id: Optional[UUID] = Field(None, description="Customer ID (optional)")
+    reference_number: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="External reference number"
+    )
+    description: Optional[str] = Field(
+        None,
+        description="Human-readable transaction summary"
+    )
+    notes: Optional[str] = Field(None, description="Transaction notes")
+    transaction_date: Optional[datetime] = Field(
+        None,
+        description="Transaction date (defaults to now)"
+    )
+
+    @field_validator("amount")
+    @classmethod
+    def quantize_amount(cls, v):
+        """Quantize amount without enforcing positivity"""
+        return _quantize_amount(v)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==================== Income Transaction Schemas ====================
@@ -108,7 +149,7 @@ class IncomeTransactionCreate(TransactionBase):
     )
 
 
-class IncomeTransactionResponse(TransactionBase):
+class IncomeTransactionResponse(TransactionResponseBase):
     """Schema for income transaction response"""
 
     id: UUID
@@ -181,7 +222,7 @@ class ExpenseTransactionCreate(TransactionBase):
     )
 
 
-class ExpenseTransactionResponse(TransactionBase):
+class ExpenseTransactionResponse(TransactionResponseBase):
     """Schema for expense transaction response"""
 
     id: UUID

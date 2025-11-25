@@ -6,6 +6,7 @@ Phase 8.2: Complete Report API with Export & Dashboard
 
 from datetime import date, datetime, timedelta
 from typing import Optional, List
+from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -152,20 +153,22 @@ def get_balance_snapshot(
 ):
     """💵 Branch Balance Snapshot"""
     check_permission(current_user, "view_balances")
-    
+
     if current_user.role and current_user.role.name == "branch_manager" and not branch_id:
         branch_id = current_user.branch_id
-    
-    if not branch_id:
-        raise HTTPException(status_code=400, detail="branch_id is required")
-    
+
     report_service = ReportService(db)
-    
+
     try:
-        snapshot = report_service.branch_balance_snapshot(
-            branch_id=branch_id,
-            target_date=snapshot_date or date.today()
-        )
+        if branch_id:
+            snapshot = report_service.branch_balance_snapshot(
+                branch_id=branch_id,
+                snapshot_date=snapshot_date or date.today(),
+            )
+        else:
+            snapshot = report_service.vault_balance_summary(
+                snapshot_date=snapshot_date or date.today(),
+            )
         return snapshot
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
@@ -173,7 +176,7 @@ def get_balance_snapshot(
 
 @router.get("/balance-movement")
 def get_balance_movement(
-    branch_id: str = Query(...),
+    branch_id: Optional[str] = Query(None),
     currency_code: str = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
@@ -182,10 +185,12 @@ def get_balance_movement(
 ):
     """📊 Balance Movement Report"""
     check_permission(current_user, "view_balances")
-    
-    if current_user.role and current_user.role.name == "branch_manager" and branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this branch")
-    
+
+    if current_user.role and current_user.role.name == "branch_manager":
+        if branch_id and branch_id != current_user.branch_id:
+            raise HTTPException(status_code=403, detail="Access denied to this branch")
+        branch_id = branch_id or current_user.branch_id
+
     report_service = ReportService(db)
 
     try:
@@ -305,7 +310,8 @@ def export_report(
         elif report_type == "balance_snapshot":
             report_data = report_service.branch_balance_snapshot(
                 branch_id=filters.get("branch_id"),
-                target_date=filters.get("date")
+                snapshot_date=filters.get("date"),
+                target_date=filters.get("target_date")
             )
         else:
             raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")
@@ -331,9 +337,16 @@ def export_report(
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
         
+        if isinstance(content, BytesIO):
+            content_bytes = content.getvalue()
+        elif isinstance(content, bytes):
+            content_bytes = content
+        else:
+            content_bytes = str(content).encode()
+
         # Return file
         return StreamingResponse(
-            io.BytesIO(content if isinstance(content, bytes) else content.encode()),
+            io.BytesIO(content_bytes),
             media_type=media_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
