@@ -220,12 +220,21 @@ class CurrencyService:
         # Validate rates
         if rate_data.rate <= 0:
             raise ValidationError("Exchange rate must be greater than 0")
-        
-        if rate_data.buy_rate and rate_data.buy_rate <= 0:
-            raise ValidationError("Buy rate must be greater than 0")
-        
-        if rate_data.sell_rate and rate_data.sell_rate <= 0:
-            raise ValidationError("Sell rate must be greater than 0")
+
+        buy_rate = rate_data.buy_rate
+        sell_rate = rate_data.sell_rate
+
+        if buy_rate is not None:
+            if buy_rate < 0:
+                raise ValidationError("Buy rate must be greater than or equal to 0")
+            if buy_rate == 0:
+                buy_rate = None
+
+        if sell_rate is not None:
+            if sell_rate < 0:
+                raise ValidationError("Sell rate must be greater than or equal to 0")
+            if sell_rate == 0:
+                sell_rate = None
         
         # Get existing rate for history
         existing_rate = await self.repo.get_exchange_rate(
@@ -235,6 +244,8 @@ class CurrencyService:
         
         # Create rate dictionary
         rate_dict = rate_data.model_dump()
+        rate_dict["buy_rate"] = buy_rate
+        rate_dict["sell_rate"] = sell_rate
         rate_dict['set_by'] = UUID(current_user['id'])
         
         # Create new rate

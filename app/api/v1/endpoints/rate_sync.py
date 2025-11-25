@@ -11,6 +11,7 @@ from uuid import UUID
 from app.api.deps import get_db, get_current_user
 from app.services.rate_sync_service import RateSyncService
 from app.services.external_rates_service import ExternalRateSource
+from app.db.models.user import User
 from app.schemas.rate_sync import (
     InitiateRateSyncRequest,
     RateSyncResponse,
@@ -33,7 +34,7 @@ router = APIRouter()
 async def initiate_rate_sync(
     request: InitiateRateSyncRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Initiate exchange rate synchronization from external source
@@ -66,7 +67,7 @@ async def initiate_rate_sync(
             }
 
         result = await service.initiate_rate_sync(
-            user_id=UUID(current_user["id"]),
+            user_id=current_user.id,
             base_currency=request.base_currency,
             target_currencies=request.target_currencies,
             source=source,
@@ -89,7 +90,7 @@ async def initiate_rate_sync(
 async def get_sync_request_details(
     request_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get details of a rate update request for review
@@ -123,7 +124,7 @@ async def approve_and_apply_rates(
     request_id: str,
     request: ApproveRatesRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Approve and apply rates from a pending request
@@ -142,7 +143,7 @@ async def approve_and_apply_rates(
 
         result = await service.approve_and_apply_rates(
             request_id=UUID(request_id),
-            user_id=UUID(current_user["id"]),
+            user_id=current_user.id,
             notes=request.notes,
             spread_percentage=request.spread_percentage
         )
@@ -169,7 +170,7 @@ async def reject_rates(
     request_id: str,
     request: RejectRatesRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Reject a pending rate update request
@@ -181,7 +182,7 @@ async def reject_rates(
 
         result = await service.reject_request(
             request_id=UUID(request_id),
-            user_id=UUID(current_user["id"]),
+            user_id=current_user.id,
             notes=request.notes
         )
 
@@ -205,7 +206,7 @@ async def reject_rates(
 @router.get("/sync-requests", response_model=PendingRequestsResponse)
 async def list_pending_requests(
     db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     List all pending rate update requests
@@ -249,7 +250,7 @@ async def list_pending_requests(
 @router.post("/sync-requests/cleanup-expired")
 async def cleanup_expired_requests(
     db: AsyncSession = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Cleanup expired pending requests
