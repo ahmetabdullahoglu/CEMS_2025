@@ -203,6 +203,16 @@ class CurrencyService:
         logger.info(
             f"Setting exchange rate by user {current_user['id']}"
         )
+
+        def _normalize_optional_rate(value: Optional[Decimal], label: str) -> Optional[Decimal]:
+            """Treat zero as missing while enforcing positive values when provided."""
+            if value is None:
+                return None
+            if value < 0:
+                raise ValidationError(f"{label} must be greater than 0")
+            if value == 0:
+                return None
+            return value
         
         # Validate currencies exist and are active
         from_currency = await self.repo.get_currency_by_id(rate_data.from_currency_id)
@@ -220,12 +230,13 @@ class CurrencyService:
         # Validate rates
         if rate_data.rate <= 0:
             raise ValidationError("Exchange rate must be greater than 0")
-        
-        if rate_data.buy_rate and rate_data.buy_rate <= 0:
-            raise ValidationError("Buy rate must be greater than 0")
-        
-        if rate_data.sell_rate and rate_data.sell_rate <= 0:
-            raise ValidationError("Sell rate must be greater than 0")
+
+        normalized_buy_rate = _normalize_optional_rate(
+            rate_data.buy_rate, "Buy rate"
+        )
+        normalized_sell_rate = _normalize_optional_rate(
+            rate_data.sell_rate, "Sell rate"
+        )
         
         # Get existing rate for history
         existing_rate = await self.repo.get_exchange_rate(
@@ -235,6 +246,8 @@ class CurrencyService:
         
         # Create rate dictionary
         rate_dict = rate_data.model_dump()
+        rate_dict['buy_rate'] = normalized_buy_rate
+        rate_dict['sell_rate'] = normalized_sell_rate
         rate_dict['set_by'] = UUID(current_user['id'])
         
         # Create new rate
