@@ -37,6 +37,16 @@ class CurrencyService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = CurrencyRepository(db)
+
+    @staticmethod
+    def _coerce_uuid(value: Any) -> UUID:
+        """Convert incoming identifiers to a standard UUID instance."""
+        if isinstance(value, UUID):
+            return value
+        try:
+            return UUID(str(value))
+        except Exception as exc:  # pragma: no cover - defensive conversion
+            raise ValidationError("Invalid user identifier") from exc
     
     # ==================== Currency Operations ====================
     
@@ -237,6 +247,8 @@ class CurrencyService:
         normalized_sell_rate = _normalize_optional_rate(
             rate_data.sell_rate, "Sell rate"
         )
+
+        user_id = self._coerce_uuid(current_user['id'])
         
         # Get existing rate for history
         existing_rate = await self.repo.get_exchange_rate(
@@ -248,7 +260,7 @@ class CurrencyService:
         rate_dict = rate_data.model_dump()
         rate_dict['buy_rate'] = normalized_buy_rate
         rate_dict['sell_rate'] = normalized_sell_rate
-        rate_dict['set_by'] = UUID(current_user['id'])
+        rate_dict['set_by'] = user_id
         
         # Create new rate
         new_rate = await self.repo.create_exchange_rate(rate_dict)
@@ -266,7 +278,7 @@ class CurrencyService:
                 'new_buy_rate': new_rate.buy_rate,
                 'new_sell_rate': new_rate.sell_rate,
                 'change_type': 'updated',
-                'changed_by': UUID(current_user['id']),
+                'changed_by': user_id,
                 'changed_at': datetime.utcnow(),
                 'reason': rate_data.notes
             }
@@ -282,7 +294,7 @@ class CurrencyService:
                 'new_buy_rate': new_rate.buy_rate,
                 'new_sell_rate': new_rate.sell_rate,
                 'change_type': 'created',
-                'changed_by': UUID(current_user['id']),
+                'changed_by': user_id,
                 'changed_at': datetime.utcnow(),
                 'reason': rate_data.notes
             }
