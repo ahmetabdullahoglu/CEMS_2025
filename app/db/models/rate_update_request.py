@@ -42,7 +42,7 @@ class RateUpdateRequest(Base):
 
     # Request metadata
     status = Column(
-        SQLEnum(UpdateRequestStatus, name='updaterequestatus'),
+        SQLEnum(UpdateRequestStatus, name='rateupdaterequeststatus'),
         default=UpdateRequestStatus.PENDING,
         nullable=False,
         index=True
