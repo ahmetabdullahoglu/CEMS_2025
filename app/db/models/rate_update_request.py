@@ -42,7 +42,11 @@ class RateUpdateRequest(Base):
 
     # Request metadata
     status = Column(
-        SQLEnum(UpdateRequestStatus, name='rateupdaterequeststatus'),
+        SQLEnum(
+            UpdateRequestStatus,
+            name='rateupdaterequeststatus',
+            values_callable=lambda enum_cls: [member.value for member in enum_cls]
+        ),
         default=UpdateRequestStatus.PENDING,
         nullable=False,
         index=True
