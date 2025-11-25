@@ -26,8 +26,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, get_async_db as get_db
 from app.db.models.user import User
 from app.db.models.transaction import TransactionStatus, TransactionType, Transaction
 from app.services.transaction_service import TransactionService
@@ -62,6 +61,7 @@ from app.schemas.transaction import (
 from app.schemas.common import SuccessResponse, PaginationParams
 from app.utils.logger import get_logger
 from app.schemas.common import PaginatedResponse, paginated
+from app.core.exceptions import ValidationError
 
 logger = get_logger(__name__)
 
@@ -106,6 +106,9 @@ def _serialize_transaction(transaction: Transaction) -> dict:
         "cancelled_by_id": getattr(transaction, "cancelled_by_id", None),
         "cancellation_reason": getattr(transaction, "cancellation_reason", None),
     }
+
+    if hasattr(transaction, "balance_change"):
+        transaction_dict["balance_change"] = getattr(transaction, "balance_change")
 
     if transaction.transaction_type == TransactionType.INCOME:
         to_branch_id = transaction.branch_id
@@ -228,21 +231,30 @@ async def create_income_transaction(
         f"Creating income transaction by user {current_user.id}",
         extra={"user_id": str(current_user.id), "amount": str(transaction.amount)}
     )
-    
+
     try:
         service = TransactionService(db)
         result = await service.create_income_transaction(
             transaction=transaction,
             user_id=current_user.id
         )
-        
+
         logger.info(
             f"Income transaction created: {result.transaction_number}",
             extra={"transaction_id": str(result.id)}
         )
 
         return _serialize_transaction(result)
-        
+
+    except ValidationError as e:
+        logger.error(f"Validation error creating income transaction: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": str(e)
+            }
+        )
     except Exception as e:
         logger.error(f"Error creating income transaction: {str(e)}")
         raise HTTPException(

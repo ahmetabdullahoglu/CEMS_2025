@@ -487,8 +487,8 @@ async def get_exchange_rate(
     Get current exchange rate
     
     **Parameters:**
-    - **from_currency**: Source currency code (e.g., USD)
-    - **to_currency**: Target currency code (e.g., EUR)
+    - **from_currency**: Source currency code or ID (e.g., USD or currency UUID)
+    - **to_currency**: Target currency code or ID (e.g., EUR or currency UUID)
     
     **Returns:**
     - Current exchange rate details
@@ -533,8 +533,8 @@ async def get_exchange_rate_history(
     Get exchange rate history
     
     **Parameters:**
-    - **from_currency**: Source currency code
-    - **to_currency**: Target currency code
+    - **from_currency**: Source currency code or ID
+    - **to_currency**: Target currency code or ID
     - **start_date**: Filter from date (optional)
     - **end_date**: Filter to date (optional)
     - **limit**: Maximum number of records (default: 50, max: 1000)
@@ -588,8 +588,8 @@ async def calculate_exchange(
     
     **Parameters:**
     - **amount**: Amount to exchange
-    - **from_currency**: Source currency code
-    - **to_currency**: Target currency code
+    - **from_currency**: Source currency code or ID
+    - **to_currency**: Target currency code or ID
     - **apply_commission**: Apply commission rate (default: false)
     
     **Returns:**

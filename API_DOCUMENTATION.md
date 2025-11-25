@@ -1456,8 +1456,14 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
 
 ### Base Path: `/vault`
 
-### 1. Get Main Vault
+This section now covers every vault-related endpoint with the same casing and paths used by the API. Currency identifiers accept either UUIDs or ISO currency codes where noted.
+
+### A) Vault management
+
+#### 1. Get Main Vault
 **GET** `/vault`
+
+Returns the primary vault with balances.
 
 **Response (200):**
 ```json
@@ -1478,59 +1484,19 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
       "last_updated": "2025-01-10T12:00:00Z"
     }
   ],
-  "created_at": "2025-01-01T00:00:00Z"
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-05T00:00:00Z"
 }
 ```
 
 ---
 
-### 2. List All Vaults
-**GET** `/vault/all`
-
-**Query Parameters:**
-- `skip`, `limit` - Pagination
-- `branch_id` (uuid) - Filter by branch
-- `is_active` (boolean, default: true)
-
-**Response (200):**
-```json
-{
-  "items": [
-    {
-      "id": "uuid",
-      "vault_code": "VAULT-MAIN",
-      "name": "Main Vault",
-      "vault_type": "main",
-      "is_active": true
-    },
-    {
-      "id": "uuid",
-      "vault_code": "VAULT-BR001",
-      "name": "Branch 001 Vault",
-      "vault_type": "branch",
-      "branch_id": "uuid",
-      "is_active": true
-    }
-  ],
-  "total": 5,
-  "skip": 0,
-  "limit": 100
-}
-```
-
----
-
-### 3. Get Vault by ID
-**GET** `/vault/{vault_id}`
-
----
-
-### 4. Create Vault
+#### 2. Create Vault
 **POST** `/vault`
 
 **Permission:** Admin only
 
-**Request Body:**
+**Request Body (VaultCreate):**
 ```json
 {
   "vault_code": "VAULT-BR002",
@@ -1542,312 +1508,165 @@ GET /transactions?transaction_type=exchange&status=completed&start_date=2025-01-
 }
 ```
 
-**Validation:**
-- Only one main vault allowed
-- Branch vault must have branch_id
+**Rules:** One main vault only. Branch vaults require `branch_id`; main vaults must not include it.
 
 ---
 
-### 5. Update Vault
+#### 3. List All Vaults
+**GET** `/vault/all`
+
+**Query:** `skip`, `limit`, `search`, `branch_id`, `vault_type`, `is_active`
+
+**Response (200):** Paginated `VaultResponse` list.
+
+---
+
+#### 4. Get Vault by ID
+**GET** `/vault/{vault_id}`
+
+Retrieves vault details plus balances.
+
+---
+
+#### 5. Update Vault
 **PUT** `/vault/{vault_id}`
 
+**Body (VaultUpdate):** name, description, location, is_active.
+
 ---
 
-### 6. Get Vault Balances
+### B) Vault balances
+
+#### 6. List Vault Balances
 **GET** `/vault/balances`
 
-**Query Parameters:**
-- `vault_id` (uuid) - Specific vault (default: main vault)
+**Query:** `vault_id` (optional; defaults to main vault)
+
+Returns `VaultBalanceResponse[]`.
 
 ---
 
-### 7. Get Vault Currency Balance
-**GET** `/vault/balances/{currency_id}`
+#### 7. Get Balance for Specific Currency
+**GET** `/vault/balances/{currency_identifier}`
 
-**Query Parameters:**
-- `vault_id` (uuid)
+`currency_identifier` accepts either a currency UUID or code (e.g., `USD`). Optional `vault_id` query selects a specific vault (default main).
 
 ---
 
-### 8. Adjust Vault Balance
+#### 8. Adjust Vault Balance (Admin only)
 **PUT** `/vault/balances/adjust`
 
-**Permission:** Admin only
-
-**Request Body:**
+**Body (VaultBalanceUpdate):**
 ```json
 {
   "vault_id": "uuid",
   "currency_id": "uuid",
-  "adjustment_amount": 1000.00,
-  "adjustment_type": "increase",
-  "reason": "Initial stock",
-  "notes": "Opening balance"
+  "new_balance": 100000.00,
+  "reason": "Correction after audit"
 }
 ```
 
-**Adjustment Types:**
-- `increase` - Add to balance
-- `decrease` - Subtract from balance
+For corrections only; not for operational transfers.
 
 ---
 
-### 9. Vault to Vault Transfer
+### C) Vault transfers
+
+Shared response shape: `VaultTransferResponse` with numbers, status, participants, currency, amount, and audit fields.
+
+#### 9. Vault to Vault Transfer
 **POST** `/vault/transfer/vault-to-vault`
 
-**Permission:** `vault:transfer`
-
-**Request Body:**
-```json
-{
-  "from_vault_id": "uuid",
-  "to_vault_id": "uuid",
-  "currency_id": "uuid",
-  "amount": 10000.00,
-  "transfer_reason": "Balance distribution",
-  "notes": "Transfer to branch vault"
-}
-```
-
-**Validation:**
-- From and to vaults must be different
-- From vault must have sufficient balance
-- Amount must be positive
-
-**Response (201):**
-```json
-{
-  "id": "uuid",
-  "transfer_number": "VT-20250110-00001",
-  "transfer_type": "vault_to_vault",
-  "status": "pending",
-  "from_vault_id": "uuid",
-  "to_vault_id": "uuid",
-  "currency_id": "uuid",
-  "amount": 10000.00,
-  "requires_approval": true,
-  "initiated_by": "uuid",
-  "created_at": "2025-01-10T12:00:00Z"
-}
-```
+Body: `VaultToVaultTransferCreate` (from_vault_id, to_vault_id, currency_id, amount, notes). Requires `vault:transfer`.
 
 ---
 
-### 10. Vault to Branch Transfer
+#### 10. Vault to Branch Transfer
 **POST** `/vault/transfer/to-branch`
 
-**Request Body:**
-```json
-{
-  "vault_id": "uuid",
-  "branch_id": "uuid",
-  "currency_id": "uuid",
-  "amount": 5000.00,
-  "transfer_reason": "Branch replenishment",
-  "notes": "Weekly cash delivery"
-}
-```
+Body: `VaultToBranchTransferCreate` (vault_id, branch_id, currency_id, amount, notes). Requires `vault:transfer`.
 
 ---
 
-### 11. Branch to Vault Transfer
+#### 11. Branch to Vault Transfer
 **POST** `/vault/transfer/from-branch`
 
-**Request Body:**
-```json
-{
-  "branch_id": "uuid",
-  "vault_id": "uuid",
-  "currency_id": "uuid",
-  "amount": 3000.00,
-  "transfer_reason": "Excess cash return",
-  "notes": "Daily collection"
-}
-```
+Body: `BranchToVaultTransferCreate` (branch_id, vault_id, currency_id, amount, notes). Requires `vault:transfer`.
 
 ---
 
-### 12. Approve Vault Transfer
+#### 12. Approve or Reject Transfer
 **PUT** `/vault/transfer/{transfer_id}/approve`
 
-**Permission:** `vault:approve_transfer`
-
-**Request Body:**
-```json
-{
-  "approval_notes": "Approved for transfer"
-}
-```
-
-**Response (200):**
-```json
-{
-  "id": "uuid",
-  "status": "approved",
-  "approved_by": "uuid",
-  "approved_at": "2025-01-10T13:00:00Z"
-}
-```
+Body: `TransferApproval` `{ "approved": true, "notes": "optional" }`. Requires `vault:approve`.
 
 ---
 
-### 13. Complete Vault Transfer
+#### 13. Mark Transfer as Completed
 **PUT** `/vault/transfer/{transfer_id}/complete`
 
-**Permission:** `vault:complete_transfer`
-
-**Request Body:**
-```json
-{
-  "completion_notes": "Transfer completed successfully"
-}
-```
-
-**Response (200):**
-```json
-{
-  "id": "uuid",
-  "status": "completed",
-  "completed_by": "uuid",
-  "completed_at": "2025-01-10T14:00:00Z"
-}
-```
-
-**Status Flow:**
-1. `pending` - Transfer created
-2. `approved` - Manager approved
-3. `completed` - Physical transfer done
+Marks an approved transfer as received (`vault:receive`). No body.
 
 ---
 
-### 14. Cancel Vault Transfer
+#### 14. Cancel Transfer
 **DELETE** `/vault/transfer/{transfer_id}`
 
-**Response (200):**
-```json
-{
-  "id": "uuid",
-  "status": "cancelled"
-}
-```
+Query: `reason` (minLength 10). Requires `vault:cancel`.
 
 ---
 
-### 15. Get Vault Transfers
+#### 15. Get Transfer History
 **GET** `/vault/transfers`
 
-**Query Parameters:**
-- `vault_id` (uuid)
-- `branch_id` (uuid)
-- `status` (enum) - pending, approved, completed, cancelled
-- `transfer_type` (enum) - vault_to_vault, vault_to_branch, branch_to_vault
-- `start_date`, `end_date` (date)
-- `skip`, `limit` - Pagination
+Filters: `vault_id`, `branch_id`, `status` (pending/approved/in_transit/completed/cancelled/rejected), `transfer_type` (vault_to_vault/vault_to_branch/branch_to_vault), `date_from`, `date_to`, `skip`, `limit`.
 
 ---
 
-### 16. Get Transfer by ID
+#### 16. Get Transfer Details
 **GET** `/vault/transfers/{transfer_id}`
 
+Returns a single `VaultTransferResponse` with related vault/branch info.
+
 ---
 
-### 17. Vault Reconciliation
+### D) Reconciliation
+
+#### 17. Perform Vault Reconciliation
 **POST** `/vault/reconciliation`
 
-**Permission:** Admin only
-
-**Request Body:**
-```json
-{
-  "vault_id": "uuid",
-  "reconciliation_date": "2025-01-10",
-  "balances": [
-    {
-      "currency_id": "uuid",
-      "counted_balance": 499500.00
-    }
-  ],
-  "notes": "Monthly reconciliation"
-}
-```
-
-**Response (200):**
-```json
-{
-  "vault_id": "uuid",
-  "reconciliation_date": "2025-01-10",
-  "discrepancies": [
-    {
-      "currency_code": "USD",
-      "system_balance": 500000.00,
-      "counted_balance": 499500.00,
-      "discrepancy": -500.00,
-      "adjustment_created": true
-    }
-  ],
-  "total_discrepancy_count": 1,
-  "reconciled_by": "uuid",
-  "reconciled_at": "2025-01-10T15:00:00Z"
-}
-```
+Body: `VaultReconciliationRequest` (vault_id, optional currency_id, notes, physical counts). Requires `vault:reconcile`.
 
 ---
 
-### 18. Get Vault Statistics
+#### 18. Get Latest Reconciliation
+**GET** `/vault/reconciliation`
+
+Query: optional `vault_id` (defaults to main vault). Returns latest `VaultReconciliationReport`.
+
+---
+
+#### 19. Get Latest Reconciliation Report by vault_id
+**GET** `/vault/reconciliation/report`
+
+Query: `vault_id` (required). Returns the same `VaultReconciliationReport` format.
+
+---
+
+### E) Vault statistics
+
+#### 20. Vault Statistics
 **GET** `/vault/statistics`
 
-**Query Parameters:**
-- `vault_id` (uuid)
-- `start_date`, `end_date` (date)
-
-**Response (200):**
-```json
-{
-  "vault_id": "uuid",
-  "total_balance_value": 1500000.00,
-  "balances_by_currency": {
-    "USD": 500000.00,
-    "EUR": 400000.00,
-    "TRY": 600000.00
-  },
-  "transfers_count": 50,
-  "transfers_volume": 250000.00,
-  "last_reconciliation": "2025-01-10T00:00:00Z"
-}
-```
+Query: optional `vault_id`. Returns `VaultStatistics` including USD-equivalent totals, pending transfers, and last reconciliation.
 
 ---
 
-### 19. Get Transfer Summary
+#### 21. Transfer Statistics
 **GET** `/vault/statistics/transfers`
 
-**Query Parameters:**
-- `start_date`, `end_date` (date)
+Query: optional `vault_id`, `period_days` (window). Returns `VaultTransferSummary` aggregating counts/volume by type and status.
 
-**Response (200):**
-```json
-{
-  "period": {
-    "start": "2025-01-01",
-    "end": "2025-01-10"
-  },
-  "total_transfers": 100,
-  "by_type": {
-    "vault_to_vault": 20,
-    "vault_to_branch": 50,
-    "branch_to_vault": 30
-  },
-  "by_status": {
-    "pending": 10,
-    "approved": 5,
-    "completed": 80,
-    "cancelled": 5
-  },
-  "total_volume": 500000.00
-}
-```
-
----
 
 ## Reports
 

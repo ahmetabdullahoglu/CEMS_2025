@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.transaction import Transaction, TransactionType, TransactionStatus
 from app.db.models.branch import Branch, BranchBalance
-from app.db.models.vault import Vault, VaultBalance, VaultTransfer
+from app.db.models.vault import Vault, VaultBalance, VaultTransfer, VaultTransferStatus
 from app.db.models.currency import Currency, ExchangeRate
 from app.db.models.customer import Customer
 from app.db.models.user import User
@@ -415,15 +415,16 @@ class ReportService:
     def branch_balance_snapshot(
         self,
         branch_id: str,
-        snapshot_date: Optional[date] = None
+        snapshot_date: Optional[date] = None,
+        target_date: Optional[date] = None,
     ) -> Dict[str, Any]:
         """
         لقطة رصيد الفرع
         Branch balance snapshot at a specific date
         """
         try:
-            if snapshot_date is None:
-                snapshot_date = date.today()
+            # Support both "snapshot_date" (current API) and legacy "target_date"
+            snapshot_date = snapshot_date or target_date or date.today()
             
             branch = self.db.query(Branch).filter(Branch.id == branch_id).first()
             if not branch:
@@ -555,7 +556,7 @@ class ReportService:
     
     def balance_movement_report(
         self,
-        branch_id: str,
+        branch_id: Optional[str],
         currency_code: str,
         start_date: date,
         end_date: date
@@ -565,44 +566,107 @@ class ReportService:
         Balance movement tracking for a specific currency
         """
         try:
-            # Get transactions affecting this balance
-            transactions = self.db.query(Transaction).join(
-                Currency, Transaction.currency_id == Currency.id
-            ).filter(
-                Transaction.branch_id == branch_id,
+            filters = [
                 Transaction.transaction_date >= start_date,
                 Transaction.transaction_date <= end_date,
                 Transaction.status == TransactionStatus.COMPLETED,
-                Currency.code == currency_code
-            ).order_by(Transaction.transaction_date).all()
-            
-            movements = []
-            running_balance = Decimal('0')  # Would need starting balance
-            
+                Currency.code == currency_code,
+            ]
+
+            if branch_id:
+                filters.append(Transaction.branch_id == branch_id)
+
+            transactions = (
+                self.db.query(Transaction)
+                .join(Currency, Transaction.currency_id == Currency.id)
+                .filter(*filters)
+                .order_by(Transaction.transaction_date)
+                .all()
+            )
+
+            events: List[Dict[str, Any]] = []
+
             for txn in transactions:
-                movement = {
-                    'date': txn.transaction_date.isoformat(),
+                amount = txn.source_amount or txn.amount or Decimal('0')
+                change = -amount if txn.transaction_type in [TransactionType.EXPENSE, TransactionType.EXCHANGE] else amount
+
+                events.append({
+                    'raw_date': txn.transaction_date,
                     'transaction_number': txn.transaction_number,
                     'type': txn.transaction_type.value,
-                    'amount': float(txn.source_amount or Decimal('0')),
-                    'description': txn.notes or ''
-                }
-                
-                # Determine if debit or credit
-                if txn.transaction_type in [TransactionType.EXPENSE, TransactionType.EXCHANGE]:
-                    movement['debit'] = float(txn.source_amount or Decimal('0'))
-                    movement['credit'] = 0
-                    running_balance -= txn.source_amount or Decimal('0')
-                else:
-                    movement['debit'] = 0
-                    movement['credit'] = float(txn.source_amount or Decimal('0'))
-                    running_balance += txn.source_amount or Decimal('0')
-                
-                movement['balance'] = float(running_balance)
-                movements.append(movement)
-            
+                    'description': txn.notes or '',
+                    'amount': amount,
+                    'debit': amount if change < 0 else Decimal('0'),
+                    'credit': amount if change > 0 else Decimal('0'),
+                    'change': change,
+                })
+
+            if branch_id is None:
+                main_vault = self.db.query(Vault).filter(
+                    Vault.vault_type == 'main',
+                    Vault.is_active == True
+                ).first()
+
+                if main_vault:
+                    vault_filters = [
+                        VaultTransfer.status == VaultTransferStatus.COMPLETED,
+                        VaultTransfer.initiated_at >= datetime.combine(start_date, datetime.min.time()),
+                        VaultTransfer.initiated_at <= datetime.combine(end_date, datetime.max.time()),
+                        Currency.code == currency_code,
+                    ]
+
+                    vault_transfers = (
+                        self.db.query(VaultTransfer)
+                        .join(Currency, VaultTransfer.currency_id == Currency.id)
+                        .filter(*vault_filters)
+                        .order_by(VaultTransfer.initiated_at)
+                        .all()
+                    )
+
+                    for transfer in vault_transfers:
+                        effective_date = transfer.completed_at or transfer.initiated_at
+                        amount = transfer.amount or Decimal('0')
+
+                        if transfer.from_vault_id == main_vault.id:
+                            change = -amount
+                            movement_type = 'vault_outflow'
+                        elif transfer.to_vault_id == main_vault.id:
+                            change = amount
+                            movement_type = 'vault_inflow'
+                        else:
+                            continue
+
+                        events.append({
+                            'raw_date': effective_date,
+                            'transaction_number': transfer.transfer_number,
+                            'type': movement_type,
+                            'description': transfer.notes or '',
+                            'amount': amount,
+                            'debit': amount if change < 0 else Decimal('0'),
+                            'credit': amount if change > 0 else Decimal('0'),
+                            'change': change,
+                        })
+
+            events.sort(key=lambda e: e['raw_date'])
+
+            movements = []
+            running_balance = Decimal('0')
+
+            for event in events:
+                running_balance += event['change']
+                movements.append({
+                    'date': event['raw_date'].isoformat(),
+                    'transaction_number': event['transaction_number'],
+                    'type': event['type'],
+                    'amount': float(abs(event['change'])),
+                    'description': event['description'],
+                    'debit': float(event['debit']),
+                    'credit': float(event['credit']),
+                    'balance': float(running_balance),
+                })
+
             return {
-                'branch_id': branch_id,
+                'branch_id': branch_id or 'all',
                 'currency': currency_code,
                 'date_range': {
                     'start': start_date.isoformat(),
