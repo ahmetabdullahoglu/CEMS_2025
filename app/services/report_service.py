@@ -557,7 +557,7 @@ class ReportService:
     def balance_movement_report(
         self,
         branch_id: Optional[str],
-        currency_code: str,
+        currency_code: Optional[str],
         start_date: date,
         end_date: date
     ) -> Dict[str, Any]:
@@ -570,15 +570,19 @@ class ReportService:
                 Transaction.transaction_date >= start_date,
                 Transaction.transaction_date <= end_date,
                 Transaction.status == TransactionStatus.COMPLETED,
-                Currency.code == currency_code,
             ]
 
             if branch_id:
                 filters.append(Transaction.branch_id == branch_id)
 
+            transaction_query = self.db.query(Transaction)
+
+            if currency_code:
+                filters.append(Currency.code == currency_code)
+                transaction_query = transaction_query.join(Currency, Transaction.currency_id == Currency.id)
+
             transactions = (
-                self.db.query(Transaction)
-                .join(Currency, Transaction.currency_id == Currency.id)
+                transaction_query
                 .filter(*filters)
                 .order_by(Transaction.transaction_date)
                 .all()
@@ -599,6 +603,7 @@ class ReportService:
                     'debit': amount if change < 0 else Decimal('0'),
                     'credit': amount if change > 0 else Decimal('0'),
                     'change': change,
+                    'currency': txn.currency.code if txn.currency else currency_code or 'unknown',
                 })
 
             if branch_id is None:
@@ -612,12 +617,16 @@ class ReportService:
                         VaultTransfer.status == VaultTransferStatus.COMPLETED,
                         VaultTransfer.initiated_at >= datetime.combine(start_date, datetime.min.time()),
                         VaultTransfer.initiated_at <= datetime.combine(end_date, datetime.max.time()),
-                        Currency.code == currency_code,
                     ]
 
+                    vault_query = self.db.query(VaultTransfer)
+
+                    if currency_code:
+                        vault_filters.append(Currency.code == currency_code)
+                        vault_query = vault_query.join(Currency, VaultTransfer.currency_id == Currency.id)
+
                     vault_transfers = (
-                        self.db.query(VaultTransfer)
-                        .join(Currency, VaultTransfer.currency_id == Currency.id)
+                        vault_query
                         .filter(*vault_filters)
                         .order_by(VaultTransfer.initiated_at)
                         .all()
@@ -645,6 +654,7 @@ class ReportService:
                             'debit': amount if change < 0 else Decimal('0'),
                             'credit': amount if change > 0 else Decimal('0'),
                             'change': change,
+                            'currency': transfer.currency.code if transfer.currency else currency_code or 'unknown',
                         })
 
             events.sort(key=lambda e: e['raw_date'])
@@ -663,11 +673,12 @@ class ReportService:
                     'debit': float(event['debit']),
                     'credit': float(event['credit']),
                     'balance': float(running_balance),
+                    'currency': event.get('currency'),
                 })
 
             return {
                 'branch_id': branch_id or 'all',
-                'currency': currency_code,
+                'currency': currency_code or 'all',
                 'date_range': {
                     'start': start_date.isoformat(),
                     'end': end_date.isoformat()
