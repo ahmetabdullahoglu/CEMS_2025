@@ -103,7 +103,7 @@ class RequestDetailsResponse(BaseModel):
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None
     review_notes: Optional[str] = None
-    rates_applied_count: Optional[str] = None
+    rates_applied_count: Optional[int] = None
 
 
 class ApproveRatesRequest(BaseModel):

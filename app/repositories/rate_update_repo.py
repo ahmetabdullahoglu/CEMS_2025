@@ -4,13 +4,16 @@ Rate Update Request Repository
 
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models.rate_update_request import RateUpdateRequest, UpdateRequestStatus
+from app.db.models.rate_update_request import (
+    RateUpdateRequest,
+    UpdateRequestStatus,
+    _utc_now_aware,
+)
 
 
 class RateUpdateRequestRepository:
@@ -49,7 +52,7 @@ class RateUpdateRequestRepository:
             .where(
                 and_(
                     RateUpdateRequest.status == UpdateRequestStatus.PENDING,
-                    RateUpdateRequest.expires_at > datetime.utcnow()
+                    RateUpdateRequest.expires_at > _utc_now_aware()
                 )
             )
             .order_by(RateUpdateRequest.requested_at.desc())
@@ -72,14 +75,14 @@ class RateUpdateRequestRepository:
             raise ValueError(f"Request {request_id} not found")
 
         request.status = status
-        request.reviewed_at = datetime.utcnow()
+        request.reviewed_at = _utc_now_aware()
 
         if reviewed_by:
             request.reviewed_by = reviewed_by
         if review_notes:
             request.review_notes = review_notes
         if rates_applied_count is not None:
-            request.rates_applied_count = str(rates_applied_count)
+            request.rates_applied_count = rates_applied_count
         if error_message:
             request.error_message = error_message
 
@@ -93,7 +96,7 @@ class RateUpdateRequestRepository:
             select(RateUpdateRequest).where(
                 and_(
                     RateUpdateRequest.status == UpdateRequestStatus.PENDING,
-                    RateUpdateRequest.expires_at <= datetime.utcnow()
+                    RateUpdateRequest.expires_at <= _utc_now_aware()
                 )
             )
         )

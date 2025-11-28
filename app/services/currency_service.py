@@ -17,7 +17,8 @@ from app.schemas.currency import (
     CurrencyWithRates,
     ExchangeRateCreate,
     ExchangeRateUpdate,
-    ExchangeRateResponse
+    ExchangeRateResponse,
+    ExchangeRateHistoryResponse
 )
 from app.db.models.currency import Currency, ExchangeRate
 from app.core.config import settings
@@ -37,6 +38,16 @@ class CurrencyService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = CurrencyRepository(db)
+
+    @staticmethod
+    def _coerce_uuid(value: Any) -> UUID:
+        """Convert incoming identifiers to a standard UUID instance."""
+        if isinstance(value, UUID):
+            return value
+        try:
+            return UUID(str(value))
+        except Exception as exc:  # pragma: no cover - defensive conversion
+            raise ValidationError("Invalid user identifier") from exc
     
     # ==================== Currency Operations ====================
     
@@ -203,6 +214,16 @@ class CurrencyService:
         logger.info(
             f"Setting exchange rate by user {current_user['id']}"
         )
+
+        def _normalize_optional_rate(value: Optional[Decimal], label: str) -> Optional[Decimal]:
+            """Treat zero as missing while enforcing positive values when provided."""
+            if value is None:
+                return None
+            if value < 0:
+                raise ValidationError(f"{label} must be greater than 0")
+            if value == 0:
+                return None
+            return value
         
         # Validate currencies exist and are active
         from_currency = await self.repo.get_currency_by_id(rate_data.from_currency_id)
@@ -220,12 +241,15 @@ class CurrencyService:
         # Validate rates
         if rate_data.rate <= 0:
             raise ValidationError("Exchange rate must be greater than 0")
-        
-        if rate_data.buy_rate and rate_data.buy_rate <= 0:
-            raise ValidationError("Buy rate must be greater than 0")
-        
-        if rate_data.sell_rate and rate_data.sell_rate <= 0:
-            raise ValidationError("Sell rate must be greater than 0")
+
+        normalized_buy_rate = _normalize_optional_rate(
+            rate_data.buy_rate, "Buy rate"
+        )
+        normalized_sell_rate = _normalize_optional_rate(
+            rate_data.sell_rate, "Sell rate"
+        )
+
+        user_id = self._coerce_uuid(current_user['id'])
         
         # Get existing rate for history
         existing_rate = await self.repo.get_exchange_rate(
@@ -235,7 +259,9 @@ class CurrencyService:
         
         # Create rate dictionary
         rate_dict = rate_data.model_dump()
-        rate_dict['set_by'] = UUID(current_user['id'])
+        rate_dict['buy_rate'] = normalized_buy_rate
+        rate_dict['sell_rate'] = normalized_sell_rate
+        rate_dict['set_by'] = user_id
         
         # Create new rate
         new_rate = await self.repo.create_exchange_rate(rate_dict)
@@ -253,7 +279,7 @@ class CurrencyService:
                 'new_buy_rate': new_rate.buy_rate,
                 'new_sell_rate': new_rate.sell_rate,
                 'change_type': 'updated',
-                'changed_by': UUID(current_user['id']),
+                'changed_by': user_id,
                 'changed_at': datetime.utcnow(),
                 'reason': rate_data.notes
             }
@@ -269,7 +295,7 @@ class CurrencyService:
                 'new_buy_rate': new_rate.buy_rate,
                 'new_sell_rate': new_rate.sell_rate,
                 'change_type': 'created',
-                'changed_by': UUID(current_user['id']),
+                'changed_by': user_id,
                 'changed_at': datetime.utcnow(),
                 'reason': rate_data.notes
             }
@@ -428,8 +454,9 @@ class CurrencyService:
         from_currency: str,
         to_currency: str,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
-    ) -> List[ExchangeRateResponse]:
+        end_date: Optional[datetime] = None,
+        limit: int = 100
+    ) -> List[ExchangeRateHistoryResponse]:
         """Get exchange rate history"""
         from_currency_obj = await self._get_currency_by_identifier(from_currency)
         to_currency_obj = await self._get_currency_by_identifier(to_currency)
@@ -438,10 +465,11 @@ class CurrencyService:
             from_currency_obj.id,
             to_currency_obj.id,
             start_date,
-            end_date
+            end_date,
+            limit
         )
 
-        return [ExchangeRateResponse.model_validate(rate) for rate in rates]
+        return [ExchangeRateHistoryResponse.model_validate(rate) for rate in rates]
     
     async def get_all_current_rates(self) -> List[ExchangeRateResponse]:
         """Get all current exchange rates in the system"""

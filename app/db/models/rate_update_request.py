@@ -3,10 +3,10 @@ Rate Update Request Model
 Stores pending exchange rate update requests for approval
 """
 
-from sqlalchemy import Column, String, DateTime, Text, Enum as SQLEnum, JSON, ForeignKey
+from sqlalchemy import Column, String, DateTime, Text, Enum as SQLEnum, JSON, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import enum
 
@@ -20,6 +20,11 @@ class UpdateRequestStatus(str, enum.Enum):
     REJECTED = "rejected"  # Rejected by user
     EXPIRED = "expired"  # Expired (not approved in time)
     FAILED = "failed"  # Failed to apply
+
+
+def _utc_now_aware() -> datetime:
+    """Return current UTC time with timezone info for DB compatibility."""
+    return datetime.now(timezone.utc)
 
 
 class RateUpdateRequest(Base):
@@ -42,7 +47,11 @@ class RateUpdateRequest(Base):
 
     # Request metadata
     status = Column(
-        SQLEnum(UpdateRequestStatus, name='updaterequestatus'),
+        SQLEnum(
+            UpdateRequestStatus,
+            name='rateupdaterequeststatus',
+            values_callable=lambda enum_cls: [member.value for member in enum_cls]
+        ),
         default=UpdateRequestStatus.PENDING,
         nullable=False,
         index=True
@@ -56,18 +65,18 @@ class RateUpdateRequest(Base):
 
     # Request details
     requested_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    requested_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    requested_at = Column(DateTime(timezone=True), default=_utc_now_aware, nullable=False)
 
     # Expiry (24 hours from creation)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
 
     # Approval/Rejection
     reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
     review_notes = Column(Text, nullable=True)
 
     # Applied rates count (after approval)
-    rates_applied_count = Column(String, default="0", nullable=True)
+    rates_applied_count = Column(Integer, default=0, nullable=True)
 
     # Error message if failed
     error_message = Column(Text, nullable=True)
@@ -80,12 +89,18 @@ class RateUpdateRequest(Base):
         super().__init__(**kwargs)
         # Set expiry to 24 hours from now if not provided
         if not self.expires_at:
-            self.expires_at = datetime.utcnow() + timedelta(hours=24)
+            self.expires_at = _utc_now_aware() + timedelta(hours=24)
+        elif self.expires_at.tzinfo is None:
+            # Normalize provided timestamps to UTC-aware for consistent comparisons
+            self.expires_at = self.expires_at.replace(tzinfo=timezone.utc)
+
+        if self.requested_at and self.requested_at.tzinfo is None:
+            self.requested_at = self.requested_at.replace(tzinfo=timezone.utc)
 
     @property
     def is_expired(self) -> bool:
         """Check if request has expired"""
-        return datetime.utcnow() > self.expires_at
+        return _utc_now_aware() > self.expires_at
 
     @property
     def is_pending(self) -> bool:

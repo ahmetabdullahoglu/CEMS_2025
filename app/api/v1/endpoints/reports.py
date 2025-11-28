@@ -176,8 +176,8 @@ def get_balance_snapshot(
 
 @router.get("/balance-movement")
 def get_balance_movement(
-    branch_id: Optional[str] = Query(None),
-    currency_code: str = Query(...),
+    branch_id: Optional[str] = Query(None, description="Branch ID (optional, fetches all when omitted)"),
+    currency_code: Optional[str] = Query(None, description="Currency code (optional, fetches all when omitted)"),
     start_date: date = Query(...),
     end_date: date = Query(...),
     current_user: User = Depends(get_current_user),
