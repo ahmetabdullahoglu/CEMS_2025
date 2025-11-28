@@ -566,6 +566,25 @@ class ReportService:
         Balance movement tracking for a specific currency
         """
         try:
+            def branch_summary(branch_obj):
+                if not branch_obj:
+                    return None
+                return {
+                    'id': str(branch_obj.id),
+                    'code': branch_obj.code,
+                    'name': branch_obj.name_en,
+                }
+
+            def vault_summary(vault_obj):
+                if not vault_obj:
+                    return None
+                return {
+                    'id': str(vault_obj.id),
+                    'code': vault_obj.vault_code,
+                    'type': vault_obj.vault_type,
+                    'branch_id': str(vault_obj.branch_id) if vault_obj.branch_id else None,
+                }
+
             filters = [
                 Transaction.transaction_date >= start_date,
                 Transaction.transaction_date <= end_date,
@@ -594,6 +613,8 @@ class ReportService:
                 amount = txn.source_amount or txn.amount or Decimal('0')
                 change = -amount if txn.transaction_type in [TransactionType.EXPENSE, TransactionType.EXCHANGE] else amount
 
+                branch_details = branch_summary(txn.branch) if branch_id is None else None
+
                 events.append({
                     'raw_date': txn.transaction_date,
                     'transaction_number': txn.transaction_number,
@@ -604,6 +625,7 @@ class ReportService:
                     'credit': amount if change > 0 else Decimal('0'),
                     'change': change,
                     'currency': txn.currency.code if txn.currency else currency_code or 'unknown',
+                    'branch': branch_details,
                 })
 
             if branch_id is None:
@@ -645,6 +667,20 @@ class ReportService:
                         else:
                             continue
 
+                        from_branch_details = branch_summary(
+                            transfer.from_branch or (
+                                transfer.from_vault.branch if transfer.from_vault else None
+                            )
+                        )
+                        to_branch_details = branch_summary(
+                            transfer.to_branch or (
+                                transfer.to_vault.branch if transfer.to_vault else None
+                            )
+                        )
+
+                        from_vault_details = vault_summary(transfer.from_vault)
+                        to_vault_details = vault_summary(transfer.to_vault)
+
                         events.append({
                             'raw_date': effective_date,
                             'transaction_number': transfer.transfer_number,
@@ -655,6 +691,10 @@ class ReportService:
                             'credit': amount if change > 0 else Decimal('0'),
                             'change': change,
                             'currency': transfer.currency.code if transfer.currency else currency_code or 'unknown',
+                            'from_branch': from_branch_details,
+                            'to_branch': to_branch_details,
+                            'from_vault': from_vault_details,
+                            'to_vault': to_vault_details,
                         })
 
             events.sort(key=lambda e: e['raw_date'])
@@ -674,6 +714,11 @@ class ReportService:
                     'credit': float(event['credit']),
                     'balance': float(running_balance),
                     'currency': event.get('currency'),
+                    'branch': event.get('branch'),
+                    'from_branch': event.get('from_branch'),
+                    'to_branch': event.get('to_branch'),
+                    'from_vault': event.get('from_vault'),
+                    'to_vault': event.get('to_vault'),
                 })
 
             return {
